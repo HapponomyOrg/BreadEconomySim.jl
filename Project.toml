@@ -1,0 +1,18 @@
+name = "BreadEconomySim"
+uuid = "7f0f7a1e-4d2c-4b5a-9c1e-b2ead0000001"
+authors = ["Stef Kuypers <stef@happonomy.org>"]
+version = "0.1.0"
+
+[deps]
+EconoSim = "cc8cb6e0-4c11-4d04-b964-59e7aacda730"
+Agents = "46ada45e-f475-11e8-01d0-f70cc89e6671"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]

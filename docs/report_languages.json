@@ -1,0 +1,56 @@
+{
+ "en": {
+  "name": "English",
+  "title": "The Bread Economy",
+  "subtitle": "A plain-language report on a simulated village, its two kinds of money, and what it takes to keep everyone alive",
+  "disclaimer": "This is an AI-generated report. It was written by Claude (Anthropic) in an interactive session with a human researcher, who set the questions, the design of the village and the rules of engagement, and it is supported throughout by the results of the simulations described. The source code of the simulation is public at <a href=\"https://github.com/HapponomyOrg/BreadEconomySim.jl\">https://github.com/HapponomyOrg/BreadEconomySim.jl</a>. Read it as a working document: every number in it comes from a run that can be repeated, and every judgement in it is open to challenge.",
+  "pending": "This section has not yet been translated; the English text follows.",
+  "footer_role1": "PhD researcher at VUB",
+  "footer_role2": "Researcher and board member of Happonomy"
+ },
+ "nl": {
+  "name": "Nederlands",
+  "title": "De broodeconomie",
+  "subtitle": "Een verslag in gewone taal over een gesimuleerd dorp, zijn twee soorten geld, en wat er nodig is om iedereen in leven te houden",
+  "disclaimer": "Dit is een door AI gegenereerd verslag. Het werd geschreven door Claude (Anthropic) in een interactieve sessie met een menselijke onderzoeker, die de vragen, het ontwerp van het dorp en de spelregels bepaalde, en het wordt overal ondersteund door de resultaten van de beschreven simulaties. De broncode van de simulatie is openbaar op <a href=\"https://github.com/HapponomyOrg/BreadEconomySim.jl\">https://github.com/HapponomyOrg/BreadEconomySim.jl</a>. Lees het als een werkdocument: elk getal komt uit een run die herhaald kan worden, en elk oordeel staat open voor tegenspraak.",
+  "pending": "Deze sectie is nog niet vertaald; hieronder volgt de Engelse tekst.",
+  "footer_role1": "Doctoraatsonderzoeker aan de VUB",
+  "footer_role2": "Onderzoeker en bestuurslid van Happonomy"
+ },
+ "fr": {
+  "name": "Français",
+  "title": "L'économie du pain",
+  "subtitle": "Un rapport en langage clair sur un village simulé, ses deux sortes de monnaie, et ce qu'il faut pour garder tout le monde en vie",
+  "disclaimer": "Ce rapport a été généré par une IA. Il a été rédigé par Claude (Anthropic) au cours d'une session interactive avec un chercheur humain, qui a fixé les questions, la conception du village et les règles du jeu, et il s'appuie de bout en bout sur les résultats des simulations décrites. Le code source de la simulation est public sur <a href=\"https://github.com/HapponomyOrg/BreadEconomySim.jl\">https://github.com/HapponomyOrg/BreadEconomySim.jl</a>. À lire comme un document de travail : chaque chiffre provient d'une exécution reproductible, et chaque jugement peut être contesté.",
+  "pending": "Cette section n'est pas encore traduite ; le texte anglais suit.",
+  "footer_role1": "Chercheur doctorant à la VUB",
+  "footer_role2": "Chercheur et membre du conseil d'administration de Happonomy"
+ },
+ "es": {
+  "name": "Español",
+  "title": "La economía del pan",
+  "subtitle": "Un informe en lenguaje llano sobre un pueblo simulado, sus dos clases de dinero y lo que hace falta para mantener a todos con vida",
+  "disclaimer": "Este informe ha sido generado por una IA. Lo escribió Claude (Anthropic) en una sesión interactiva con un investigador humano, que fijó las preguntas, el diseño del pueblo y las reglas del trabajo, y se apoya en todo momento en los resultados de las simulaciones descritas. El código fuente de la simulación es público en <a href=\"https://github.com/HapponomyOrg/BreadEconomySim.jl\">https://github.com/HapponomyOrg/BreadEconomySim.jl</a>. Léase como un documento de trabajo: cada cifra procede de una ejecución que puede repetirse, y cada juicio queda abierto a discusión.",
+  "pending": "Esta sección aún no está traducida; sigue el texto en inglés.",
+  "footer_role1": "Investigador doctoral en la VUB",
+  "footer_role2": "Investigador y miembro de la junta de Happonomy"
+ },
+ "de": {
+  "name": "Deutsch",
+  "title": "Die Brotwirtschaft",
+  "subtitle": "Ein Bericht in einfacher Sprache über ein simuliertes Dorf, seine zwei Arten von Geld und das, was nötig ist, um alle am Leben zu halten",
+  "disclaimer": "Dieser Bericht wurde von einer KI erstellt. Er wurde von Claude (Anthropic) in einer interaktiven Sitzung mit einem menschlichen Forscher geschrieben, der die Fragen, den Entwurf des Dorfes und die Regeln der Zusammenarbeit vorgab, und er stützt sich durchgehend auf die Ergebnisse der beschriebenen Simulationen. Der Quellcode der Simulation ist öffentlich unter <a href=\"https://github.com/HapponomyOrg/BreadEconomySim.jl\">https://github.com/HapponomyOrg/BreadEconomySim.jl</a>. Zu lesen als Arbeitsdokument: jede Zahl stammt aus einem wiederholbaren Lauf, und jedes Urteil kann angefochten werden.",
+  "pending": "Dieser Abschnitt ist noch nicht übersetzt; es folgt der englische Text.",
+  "footer_role1": "Doktorand an der VUB",
+  "footer_role2": "Forscher und Vorstandsmitglied von Happonomy"
+ },
+ "zh": {
+  "name": "中文",
+  "title": "面包经济",
+  "subtitle": "一份用平实语言写成的报告：一个模拟村庄、它的两种货币，以及让每个人活下去需要什么",
+  "disclaimer": "本报告由人工智能生成。它由 Claude（Anthropic）在与一位人类研究者的交互式会话中撰写，研究者设定了问题、村庄的设计和合作规则；报告通篇以所述模拟的结果为依据。模拟的源代码已公开于 <a href=\"https://github.com/HapponomyOrg/BreadEconomySim.jl\">https://github.com/HapponomyOrg/BreadEconomySim.jl</a>。请把它当作工作文件来读：其中每一个数字都来自可以重复的运行，每一个判断都可以被质疑。",
+  "pending": "本节尚未翻译；下面是英文原文。",
+  "footer_role1": "布鲁塞尔自由大学（VUB）博士研究员",
+  "footer_role2": "Happonomy 研究员及董事会成员"
+ }
+}
