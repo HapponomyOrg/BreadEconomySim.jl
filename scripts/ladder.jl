@@ -31,8 +31,8 @@ rungs = [
     ("5 + government bonds",     (; planning_margin = 0.1, GOV_DEBT..., DEP..., entertainment = true, government_bonds = true), (; planning_margin = 0.1, GOV_SUMSY..., entertainment = true)),
     ("6 + charge on balances",   (; planning_margin = 0.1, GOV_DEBT..., DEP..., entertainment = true, government_bonds = true, enterprise_tax = :reserves, enterprise_reserve_tax_rate = 0.05, reserve_tax_exempts_standard_reserve = true), (; planning_margin = 0.1, GOV_SUMSY..., entertainment = true)),
     ("7 + second theatre",       (; planning_margin = 0.1, GOV_DEBT..., DEP..., entertainment = true, government_bonds = true, number_of_theatres = 2), (; planning_margin = 0.1, GOV_SUMSY..., entertainment = true, number_of_theatres = 2)),
-    ("8 + shareholders & share market", (; planning_margin = 0.1, GOV_DEBT..., DEP..., entertainment = true, government_bonds = true, number_of_theatres = 2, ownership = :shareholders, share_market = true), (; planning_margin = 0.1, GOV_SUMSY..., entertainment = true, number_of_theatres = 2, ownership = :shareholders, share_market = true)),
-    ("9 co-ops vs for-profit",   (; planning_margin = 0.1, GOV_DEBT..., DEP..., entertainment = true, government_bonds = true, number_of_theatres = 2, number_of_farms = 4, number_of_bakeries = 4, ownership = :mixed, share_market = true), (; planning_margin = 0.1, GOV_SUMSY..., entertainment = true, number_of_theatres = 2, number_of_farms = 4, number_of_bakeries = 4, ownership = :mixed, share_market = true)),
+    ("8 + shareholders & share market", (; planning_margin = 0.1, GOV_DEBT..., DEP..., entertainment = true, government_bonds = true, number_of_theatres = 2, ownership = :shareholders, share_market = true, forward_valuation = true, required_yield_dispersion = 0.002), (; planning_margin = 0.1, GOV_SUMSY..., entertainment = true, number_of_theatres = 2, ownership = :shareholders, share_market = true, forward_valuation = true, required_yield_dispersion = 0.002)),
+    ("9 co-ops vs for-profit",   (; planning_margin = 0.1, GOV_DEBT..., DEP..., entertainment = true, government_bonds = true, number_of_theatres = 2, number_of_farms = 4, number_of_bakeries = 4, ownership = :mixed, share_market = true, forward_valuation = true, required_yield_dispersion = 0.002), (; planning_margin = 0.1, GOV_SUMSY..., entertainment = true, number_of_theatres = 2, number_of_farms = 4, number_of_bakeries = 4, ownership = :mixed, share_market = true, forward_valuation = true, required_yield_dispersion = 0.002)),
     ("10 clearing off (rung 7)", (; planning_margin = 0.1, GOV_DEBT..., DEP..., entertainment = true, government_bonds = true, number_of_theatres = 2, clearing = false), (; planning_margin = 0.1, GOV_SUMSY..., entertainment = true, number_of_theatres = 2, clearing = false)),
 ]
 
@@ -42,6 +42,8 @@ out = DataFrame[]; rows = NamedTuple[]
 SAT_UP = (; start_at_saturation = :upper, initial_price_multiplier = 0.63)
 SAT_LO = (; start_at_saturation = :lower, initial_price_multiplier = 0.63)
 only_sumsy = length(ARGS) >= 3 && ARGS[3] == "saturation"
+only_rung = length(ARGS) >= 5 ? ARGS[5] : ""
+only_rung != "" && filter!(r -> startswith(r[1], only_rung), rungs)
 systems(kd, ks) = only_sumsy ? (("sumsy_sat_upper", BARE_SUMSY, (; ks..., SAT_UP...)), ("sumsy_sat_lower", BARE_SUMSY, (; ks..., SAT_LO...))) : (("debt", BARE_DEBT, kd), ("debt_inherited", BARE_DEBT, (; kd..., inherited_money = true)), ("sumsy", BARE_SUMSY, ks))
 N != 16 && filter!(r -> !startswith(r[1], "10"), rungs)      # immediate settlement at scale is not part of the comparison
 for (name, kd, ks) in rungs, (system, base, kw) in systems(kd, ks), s in 1:nseeds
@@ -62,5 +64,5 @@ for (name, kd, ks) in rungs, (system, base, kw) in systems(kd, ks), s in 1:nseed
                  arrears = round(d.trade_arrears[end], digits = 1), refusals = d.cumulative_credit_refusals[end], identity = round(money_identity_gap(m), digits = 8)))
     println(name, " ", system, " seed ", s, " alive ", d.persons_alive[end]); flush(stdout)
 end
-CSV.write(joinpath(@__DIR__, "..", "results", only_sumsy ? "ladder_sat_rounds.csv" : (N == 16 ? "ladder_rounds.csv" : "ladder$(N)_rounds.csv")), vcat(out...; cols = :union))
-CSV.write(joinpath(@__DIR__, "..", "results", only_sumsy ? "ladder_sat_summary.csv" : (N == 16 ? "ladder_summary.csv" : "ladder$(N)_summary.csv")), DataFrame(rows))
+CSV.write(joinpath(@__DIR__, "..", "results", only_sumsy ? "ladder_sat_rounds.csv" : (N == 16 ? "ladder_rounds.csv" : (only_rung == "" ? "ladder$(N)_rounds.csv" : "ladder$(N)_$(replace(only_rung, " " => "_"))_rounds.csv"))), vcat(out...; cols = :union))
+CSV.write(joinpath(@__DIR__, "..", "results", only_sumsy ? "ladder_sat_summary.csv" : (N == 16 ? "ladder_summary.csv" : (only_rung == "" ? "ladder$(N)_summary.csv" : "ladder$(N)_$(replace(only_rung, " " => "_"))_summary.csv"))), DataFrame(rows))
