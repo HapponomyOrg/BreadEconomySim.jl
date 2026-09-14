@@ -98,7 +98,7 @@ end
 function borrowing_rate(model, lender::Enterprise, borrower::Agent)
     p = parameters(model)
     is_bank(borrower) && return lender.interest_rate * p.interbank_rate_discount
-    is_government(borrower) && return lender.interest_rate * p.government_rate_discount
+    is_government(borrower) && return isnan(p.government_rate) ? lender.interest_rate * p.government_rate_discount : p.government_rate
     return lender.interest_rate
 end
 
@@ -251,6 +251,15 @@ end
 obligations(model, a::Agent) = [pr for pr in model.promises if pr.from_id == a.id]
 receipts(model, a::Agent) = [pr for pr in model.promises if pr.to_id == a.id]
 
+"""Instalments, interest and bond service the government owes this round."""
+function government_service_due(model)
+    gov = government(model); due = 0.0
+    for l in debtor_loans(model, gov); l.created == current_round(model) && continue; due += next_payment(l); end
+    for b in model.bonds; b.settled && continue; due += b.rate * b.principal + (current_round(model) >= b.maturity ? b.principal : 0.0); end
+    return round(due, digits = 4)
+end
+
+
 """
     clear!(model)
 
@@ -281,6 +290,11 @@ function clear!(model)
     for a in shuffle(rng, alive_agents(model))
         O = get(model.clearing_obligations, a.id, 0.0)
         R = get(model.clearing_receipts, a.id, 0.0)
+        if is_government(a)
+            # the government holds no cash of its own: it borrows at clearing for this round's debt service and bond coupons and
+            # maturities as well as for its spending — an explicit roll-over, so interest is paid and the debt figure is honest
+            O += government_service_due(model)
+        end
         O <= 0 && continue
         net_after = cash(a) + R - O
         if is_bank(a)
@@ -542,7 +556,7 @@ function set_interest_rates!(model)
         base <= 0 && continue
         deposits = sum(cash(a) for a in alive_agents(model) if (a isa Person || (p.deposit_interest_to_enterprises && is_producer(a))) && bank_of(model, a) === bank; init = 0.0)
         deposit_cost = (p.deposit_interest_rate + p.loyalty_bonus_rate) * deposits / max(p.deposit_interest_period, 1)
-        bank.interest_rate = (bank.bid[:wage] + deposit_cost) / (p.affordability_ratio * base)
+        bank.interest_rate = min((bank.bid[:wage] + deposit_cost) / (p.affordability_ratio * base), p.maximum_interest_rate)
     end
     return nothing
 end
@@ -724,7 +738,7 @@ bond_holdings(model, a::Agent) = sum(b.principal for b in model.bonds if !b.sett
 function bond_coupon_rate(model)
     p = parameters(model)
     banks = enterprises(model, :bank)
-    bank_rate = isempty(banks) ? p.initial_interest_rate : minimum(b.interest_rate for b in banks) * p.government_rate_discount
+    bank_rate = isnan(p.government_rate) ? (isempty(banks) ? p.initial_interest_rate : minimum(b.interest_rate for b in banks) * p.government_rate_discount) : p.government_rate
     deposit_rate = (p.deposit_interest_rate + p.loyalty_bonus_rate) / max(p.deposit_interest_period, 1)
     return round((deposit_rate + bank_rate) / 2, digits = 6)
 end

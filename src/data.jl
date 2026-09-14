@@ -64,7 +64,7 @@ function record!(model)
         money_in_dead_balances = sum(cash(a) for a in allagents(model) if !a.alive; init = 0.0),
         outstanding_debt = sum(debt_of(a) + peer_debt_of(model, a) for a in alive; init = 0.0),
         peer_lent = model.peer_lent_this_round,
-        government_debt = debt_of(gov) + bonds_outstanding(model), government_bank_debt = debt_of(gov), bonds_outstanding = bonds_outstanding(model),
+        government_debt = debt_of(gov) + government_rest_interest(model) + bonds_outstanding(model) + government_trade_arrears(model), government_bank_debt = debt_of(gov) + government_rest_interest(model), bonds_outstanding = bonds_outstanding(model), government_arrears = government_trade_arrears(model),
         bonds_issued = model.bonds_issued_this_round, coupons = model.coupons_this_round, bond_rate = bond_coupon_rate(model),
         government_cash = cash(gov),
         bank_retained_interest = sum(b.retained_interest for b in banks; init = 0.0),
@@ -234,6 +234,9 @@ function agent_end_state(model)
             for a in sort(collect(allagents(model)); by = a -> a.id)]
     return DataFrame(rows)
 end
+
+government_rest_interest(model) = sum(Float64(l.debt.rest_interest) for l in debtor_loans(model, government(model)); init = 0.0)
+government_trade_arrears(model) = sum(pr.amount for pr in model.promises if pr.from_id == government(model).id && pr.priority == 0; init = 0.0)
 
 """Σ deposit assets − Σ bank deposit liabilities + money lost (should be 0)."""
 function money_identity_gap(model)

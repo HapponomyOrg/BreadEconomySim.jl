@@ -57,6 +57,8 @@ Base.@kwdef struct SimulationParameters
     initial_interest_rate::Float64 = 0.05
     interbank_rate_discount::Float64 = 0.5             # bank-to-bank loans at discount × lender's rate
     government_rate_discount::Float64 = 0.5
+    government_rate::Float64 = 0.005                  # per round; the government's borrowing rate (a policy rate, about 6 % a year); NaN = the bank's marginal rate × government_rate_discount (a bank with a small loan book then charges a great deal)
+    maximum_interest_rate::Float64 = 0.05             # per round; a ceiling on the rate a bank may set
     arrears_rounds_until_seizure::Int = 2
     garnishment_rate::Float64 = 0.25
 

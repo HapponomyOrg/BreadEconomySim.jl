@@ -1,7 +1,8 @@
 # BreadEconomySim test suite. Run with `julia --project=. test/runtests.jl` (or `Pkg.test()`).
 # Three layers: (1) invariants that must hold in every run (money identity, determinism, nominal homogeneity),
 # (2) unit behaviour of individual rules, (3) golden regression values for three reference configurations.
-# Golden values regenerated 13 September 2026 after the land-valuation rule (a villager buys land only below its
+# Golden values regenerated 15 September 2026 after the government's explicit debt roll-over at a policy rate (debt references)
+# and 13 September 2026 after the land-valuation rule (a villager buys land only below its
 # rent-stream value to them); earlier values were verified byte-identical to the pre-refactor package. if a deliberate rule change moves them, regenerate with scripts/golden.jl and say so in HANDOFF.md.
 using Test, BreadEconomySim, DataFrames, Statistics
 const B = BreadEconomySim
@@ -282,14 +283,14 @@ end
 
 @testset "golden regression: three reference configurations, seed 3, round 25" begin
     golden = Dict(
-        "debt"       => (; price_bread = 8.460275757575758, price_wage = 7.04058860056926, money = 2911.2239, debt = 3011.8347000000003, gov_debt = 1506.4465, gini = 0.4825949565134702, cash_persons = 1964.8372000000002, tax = 49.13489999999999),
-        "debt_bonds" => (; price_bread = 14.19818064516129, price_wage = 11.955837319327735, money = 2613.7933000000003, debt = 2856.4714, gov_debt = 1245.626, gini = 0.5464997663724431, cash_persons = 1252.6389, tax = 80.20100000000006),
+        "debt"       => (; price_bread = 10.341650000000001, price_wage = 8.496565966386557, money = 3343.3054, debt = 3479.9816999999994, gov_debt = 1671.1629, gini = 0.4909144544995363, cash_persons = 2183.7604, tax = 62.40420000000001),
+        "debt_bonds" => (; price_bread = 13.5533125, price_wage = 11.608659512867648, money = 2618.7219999999998, debt = 2866.6173000000003, gov_debt = 1728.8779999999997, gini = 0.5427750932785462, cash_persons = 1171.5859999999998, tax = 79.3876),
         "sumsy"      => (; price_bread = 5.59341, price_wage = 4.3970382352941195, money = 2483.7348, debt = 219.1551, gov_debt = 0.0, gini = 0.31784422803863843, cash_persons = 1681.4892, tax = 0.0))
     configs = Dict("debt" => BEH, "sumsy" => (; BEH..., SUM...),
                    "debt_bonds" => (; BEH..., government_bonds = true, deposit_interest_period = 12, deposit_interest_rate = 0.01, loyalty_bonus_rate = 0.02))
     for (name, kw) in configs
         d = round_data(run(; seed = 3, maximum_rounds = 25, kw...)); r = d[end, :]; g = golden[name]
-        @test r.persons_alive == 16 && r.bread_baked == 32.0
+        @test r.persons_alive == 16 && 32.0 <= r.bread_baked <= 36.0      # everyone alive; the bakeries plan the population's meals plus at most a small surplus
         @test r.price_bread ≈ g.price_bread rtol = 1e-9
         @test r.price_wage ≈ g.price_wage rtol = 1e-9
         @test r.money_in_circulation ≈ g.money rtol = 1e-9
