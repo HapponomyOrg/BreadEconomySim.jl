@@ -1,0 +1,13 @@
+import pandas as pd, numpy as np, sys
+pd.set_option('display.width', 320); pd.set_option('display.max_columns', 40)
+def summarise(fn, keys=('variant','system')):
+    df = pd.read_csv(fn)
+    df['lpc'] = df['greedy_loaves'] / df['n_consumers'].replace(0, np.nan); df['tpc'] = df['greedy_tickets'] / df['n_consumers'].replace(0, np.nan)
+    last = df.sort_values('round').groupby(list(keys)+['seed'], sort=False).tail(1).set_index(list(keys)+['seed'])
+    tot = df.groupby(list(keys)+['seed'], sort=False).agg(hungry=('hungry','sum'), lpc=('lpc','mean'), tpc=('tpc','mean'), trades=('share_trades','sum'), deferred=('share_trades_deferred','sum'), seizures=('share_seizures','sum'), div=('dividends','sum'), gshares=('greedy_shares','sum'))
+    L = last[['persons_alive','round','tickets_sold','bread_baked','price_bread','price_wage','unemployed','money_in_circulation','gini_cash_persons','gini_net_wealth_persons','share_price_mean','forward_value_mean','founders_stake_pct','outside_holders','founder_debt','coop_members','coop_open','forprofit_open','land_hoarders','shares_hoarders','government_debt','identity']].join(tot)
+    L['all_dead'] = (L.persons_alive == 0).astype(int)
+    T = L.groupby(list(keys), sort=False).agg(alive=('persons_alive','mean'), all_dead=('all_dead','sum'), rounds=('round','mean'), hungry=('hungry','mean'), unempl=('unemployed','mean'), tickets=('tickets_sold','mean'), bread=('bread_baked','mean'), p_bread=('price_bread','mean'), p_wage=('price_wage','mean'), money=('money_in_circulation','mean'), gini_c=('gini_cash_persons','mean'), gini_w=('gini_net_wealth_persons','mean'), lpc=('lpc','mean'), tpc=('tpc','mean'), gshares=('gshares','mean'), land_g=('land_hoarders','mean'), shares_g=('shares_hoarders','mean'), trades=('trades','mean'), deferred=('deferred','mean'), seizures=('seizures','mean'), price=('share_price_mean','mean'), fwd=('forward_value_mean','mean'), founders=('founders_stake_pct','mean'), holders=('outside_holders','mean'), fdebt=('founder_debt','mean'), members=('coop_members','mean'), coops=('coop_open','mean'), fps=('forprofit_open','mean'), div=('div','mean'), gov_debt=('government_debt','mean'), identity=('identity', lambda x: x.abs().max())).round(2)
+    return T
+if __name__ == '__main__':
+    T = summarise(sys.argv[1]); print(T[[c for c in T.columns if c in sys.argv[2].split(',')]].to_string()); T.to_csv(sys.argv[1].replace('_rounds.csv','_summary.csv'))
