@@ -23,11 +23,11 @@ net_wage(model) = expected_price(model, :wage) * (1 - effective_wage_tax_rate(mo
 function wage_tax_amount(model, gross::Float64)
     p = parameters(model)
     gross <= 0 && return 0.0
-    p.income_tax_schedule == :flat && return gross * p.wage_tax_rate
+    p.income_tax_schedule == :flat && return gross * p.wage_tax_rate * model.tax_scale
     ref = p.maximum_capacity * expected_price(model, :wage)          # full-time gross wage per round
     ssc = p.social_contribution_rate * gross
     taxable = gross - ssc
-    edges = p.tax_bracket_edges .* ref; rates = p.tax_bracket_rates
+    edges = p.tax_bracket_edges .* ref; rates = model.bracket_rates          # the live rates: the fiscal policy moves them
     tax = 0.0; lower = 0.0
     for (i, rate) in enumerate(rates)
         upper = i <= length(edges) ? edges[i] : Inf
@@ -35,14 +35,15 @@ function wage_tax_amount(model, gross::Float64)
         lower = upper
     end
     tax = max(tax - rates[1] * min(p.tax_free_share * ref, taxable), 0.0)
-    return ssc + tax * (1 + p.municipal_surcharge)
+    scale = p.tax_policy == :brackets ? 1.0 : model.tax_scale                 # under :brackets the bracket rates carry the policy
+    return (ssc + tax * (1 + p.municipal_surcharge)) * scale
 end
 """Effective (average) wage tax rate of a full-time worker under the schedule; the flat rate under :flat."""
 function effective_wage_tax_rate(model)
     p = parameters(model)
-    p.income_tax_schedule == :flat && return p.wage_tax_rate
+    p.income_tax_schedule == :flat && return p.wage_tax_rate * model.tax_scale
     ref = p.maximum_capacity * expected_price(model, :wage)
-    return ref > 0 ? wage_tax_amount(model, ref) / ref : p.wage_tax_rate
+    return ref > 0 ? wage_tax_amount(model, ref) / ref : p.wage_tax_rate * model.tax_scale
 end
 
 function expected_income(model, a::Agent)
@@ -91,7 +92,7 @@ function choose_lender(model, borrower::Agent)
     candidates = [b for b in enterprises(model, :bank) if b.id != borrower.id]
     isempty(candidates) && return nothing
     lowest = minimum(b.interest_rate for b in candidates)
-    return rand(abmrng(model), [b for b in candidates if b.interest_rate == lowest])
+    return rand(stream(model, :credit), [b for b in candidates if b.interest_rate == lowest])
 end
 
 """Rate a borrower pays: banks and the government borrow at a discount, everyone else at the posted rate."""
@@ -111,6 +112,9 @@ Banks and the government skip the affordability test (interbank lending; the sta
 function request_loan!(model, borrower::Agent, amount::Float64, purpose::Symbol)
     amount = ceil(amount * 1e4) / 1e4
     amount <= 0 && return true
+    if parameters(model).cooperative_founding == :symmetric && borrower isa Enterprise && borrower.ownership == :cooperative && !isempty(borrower.members)
+        return cooperative_capital_call!(model, borrower, amount)   # members are called on, as a shareholder firm's founders are
+    end
     if parameters(model).startup_financing == :paid_in_capital && borrower isa Enterprise && borrower.ownership == :shareholders && !isempty(borrower.shares)
         # the founders borrow personally (largest holder first) and pay the money in as capital
         holders = sort([(model[h], u) for (h, u) in borrower.shares if model[h] isa Person && model[h].alive]; by = x -> -x[2])
@@ -190,6 +194,11 @@ function promise!(model, from::Agent, to::Agent, amount::Float64, purpose::Symbo
     end
     paid = round(min(amount, cash(from)), digits = 4)
     paid > 0 && transfer!(model, from, to, paid, purpose)
+    # operating result: with clearing on this is netted once at clearing; here it is accumulated payment by payment.
+    # (Until 20 September 2026 it was never set on this path, so `net_history` stayed at zero, every forward valuation
+    # was zero and the share market could not trade at all with clearing off — see HANDOFF_2026-09-18.)
+    from isa Enterprise && (from.operating_net -= paid)
+    to isa Enterprise && (to.operating_net += paid)
     if to isa Person
         income_kind == :wage && (to.labour_income += paid)
         income_kind == :rent && (to.rent_income += paid)
@@ -216,6 +225,29 @@ end
 """Payment for goods or land: a priority-3 promise."""
 pay!(model, from::Agent, to::Agent, amount::Float64, purpose::Symbol) = (promise!(model, from, to, amount, purpose, 3); amount)
 
+"""The consumption tax rate in force: the statutory rate times its scale (the fiscal policy moves the scale)."""
+consumption_tax_rate(model) = parameters(model).consumption_tax_rate * model.consumption_tax_scale
+
+"""What a person pays for a consumption good priced at `price`: the price plus the consumption tax."""
+gross_price(model, buyer::Agent, price::Float64) = buyer isa Person ? round(price * (1 + consumption_tax_rate(model)), digits = 4) : price
+
+"""
+    pay_consumption!(model, buyer, seller, price, purpose)
+
+A person buys bread or a ticket: the negotiated price goes to the seller, the consumption tax on it to the government
+(priority 3, booked as tax at settlement). Enterprises buying bread (none do) or grain are not taxed.
+"""
+function pay_consumption!(model, buyer::Agent, seller::Agent, price::Float64, purpose::Symbol)
+    pay!(model, buyer, seller, price, purpose)
+    buyer isa Person || return price
+    tax = round(price * consumption_tax_rate(model), digits = 4)
+    if tax > 1e-6
+        promise!(model, buyer, government(model), tax, :consumption_tax, 3, :tax)
+        model.consumption_tax_this_round += tax
+    end
+    return price + tax
+end
+
 """
     pay_income!(model, payer, person, gross, kind)
 
@@ -227,23 +259,25 @@ function pay_income!(model, payer::Agent, person::Person, gross::Float64, kind::
     if kind == :dividend
         tax = round(gross * p.dividend_tax_rate, digits = 4)
     elseif kind == :wage && p.income_tax_schedule == :flat
-        tax = round(gross * p.wage_tax_rate, digits = 4)
+        tax = round(gross * p.wage_tax_rate * model.tax_scale, digits = 4)      # the fiscal policy's multiplier applies here too
         person.gross_wage_this_round += gross
     elseif kind == :wage
         tax = round(wage_tax_amount(model, person.gross_wage_this_round + gross) - wage_tax_amount(model, person.gross_wage_this_round), digits = 4)
         person.gross_wage_this_round += gross
     else
-        tax = round(gross * p.capital_tax_rate, digits = 4)
+        tax = round(gross * p.capital_tax_rate * model.tax_scale, digits = 4)
     end
     net = round(gross - tax, digits = 4)
     gov = government(model)
     if tax > 0
         if payer === gov
             gov.tax_collected += tax; model.tax_this_round += tax
+            model.government_outlay_this_round += tax          # the imputed tax on its own wages is an outlay it books as revenue
         else
             promise!(model, payer, gov, tax, Symbol(kind, :_tax), 1, :tax)
         end
     end
+    payer === gov && (model.government_outlay_this_round += net)
     promise!(model, payer, person, net, kind, 2, kind)
     return net
 end
@@ -271,7 +305,7 @@ income is recorded, unpaid tails become priority-0 trade arrears carried to the 
 landless persons in loan arrears are garnished.
 """
 function clear!(model)
-    p = parameters(model); rng = abmrng(model)
+    p = parameters(model); rng = stream(model, :credit)
     promises = model.promises
     isempty(promises) && return nothing
     agents = Dict(a.id => a for a in allagents(model))
@@ -449,7 +483,7 @@ when that does not cover the debt.
 """
 function service_debt!(model)
     p = parameters(model)
-    for debtor in shuffle(abmrng(model), alive_agents(model))
+    for debtor in shuffle(stream(model, :credit), alive_agents(model))
         for loan in sort(debtor_loans(model, debtor); by = l -> l.created)
             loan.created == current_round(model) && continue      # first payment falls in the round after issuance
             creditor = model[loan.creditor_id]
@@ -613,10 +647,32 @@ function settle_estate!(model, dead::Agent)
             l.outstanding = 0.0; l.settled = true
         end
     end
+    dead isa Enterprise && dead.ownership == :cooperative && release_all_pledges!(model, dead)
+    if dead isa Enterprise && dead.ownership == :cooperative && coop_form(model, dead) != :member
+        # members are redeemed at par out of what is left; the indivisible reserve is not theirs and goes to the public purse
+        for id in sort(collect(keys(dead.members)))
+            h = model[id]
+            (h isa Person && h.alive) || continue
+            paid_in = round(p.membership_share_price - get(dead.membership_unpaid, id, 0.0), digits = 4)
+            amount = round(min(paid_in, cash(dead)), digits = 4)
+            amount > 1e-6 && transfer!(model, dead, h, amount, :share_redemption)
+        end
+        locked = cash(dead)
+        locked > 1e-6 && transfer!(model, dead, government(model), locked, :cooperative_reserve)
+        if dead.land > 0
+            government(model).land += dead.land; dead.land = 0
+        end
+        log_event!(model, :asset_lock; actor = dead.id, amount = locked)
+    end
+    if dead isa Person
+        for e in alive_agents(model)
+            (e isa Enterprise && haskey(e.buffer_pledged_by, dead.id)) && release_pledge!(model, e, dead.id)
+        end
+    end
     heirs = [h for h in persons(model) if h.id != dead.id]
     left = cash(dead)
     if !isempty(heirs)
-        heir = rand(abmrng(model), heirs)
+        heir = rand(stream(model, :estates), heirs)
         left > 0 && transfer!(model, dead, heir, left, :inheritance)
         heir.land += dead.land
         for l in peer_claims_of(model, dead); l.lender_id = heir.id; end
@@ -754,7 +810,7 @@ end
 
 """Sell bonds to holders with surplus above their buffer / reserve (largest first); returns the amount raised."""
 function issue_bonds!(model, gov::Agent, amount::Float64)
-    p = parameters(model); rng = abmrng(model)
+    p = parameters(model); rng = stream(model, :credit)
     rate = bond_coupon_rate(model); term = bond_term(model)
     holders = [a for a in alive_agents(model) if !is_government(a) && !is_bank(a) && !is_authority(a)]
     shuffle!(rng, holders)
@@ -812,9 +868,13 @@ function pay_dividends!(model)
     p.ownership == :none && return nothing
     for e in alive_agents(model)
         (e isa Enterprise && e.ownership != :none) || continue
-        excess = cash(e) - reserve_target(model, e)
+        excess = cash(e) - distributable_floor(model, e)
         payout = round(max(excess, 0.0) / p.dividend_build_rounds, digits = 4)
         push!(e.dividend_history, payout); push!(e.net_history, e.operating_net)
+        if e.ownership == :cooperative && coop_form(model, e) != :member
+            distribute_patronage!(model, e, payout)      # patronage, with a share retained in the indivisible reserve
+            continue
+        end
         payout <= 1e-6 && continue
         gov = government(model)
         claims = e.ownership == :cooperative ? [(hid, 1.0) for hid in keys(e.members)] : [(hid, u) for (hid, u) in e.shares]
@@ -871,7 +931,7 @@ the seller's reservation and above what their cash earns; the keenest buyer take
 proceeds retire dearer bank debt first.
 """
 function share_market!(model)
-    p = parameters(model); rng = abmrng(model)
+    p = parameters(model); rng = stream(model, :shares)
     (p.share_market && p.ownership != :none) || return nothing
     cash_yield = p.monetary_system == :sumsy ? -p.demurrage_rate : (p.deposit_interest_rate + p.loyalty_bonus_rate) / max(p.deposit_interest_period, 1)
     for e in alive_agents(model)
@@ -953,23 +1013,29 @@ A person with cash above the buffer who is not yet a member of a cooperative joi
 A member who cannot afford a meal redeems one share at par if the cooperative has the cash. Dividends are per member.
 """
 function join_cooperatives!(model)
-    p = parameters(model); rng = abmrng(model)
+    p = parameters(model); rng = stream(model, :cooperatives)
+    manage_new_form_membership!(model)                   # worker and consumer cooperatives have their own rules
     (p.ownership in (:cooperative, :mixed) && p.startup_financing == :paid_in_capital) || return nothing
-    coops = [e for e in alive_agents(model) if e isa Enterprise && e.ownership == :cooperative]
+    coops = [e for e in alive_agents(model) if e isa Enterprise && e.ownership == :cooperative && coop_form(model, e) == :member]
     isempty(coops) && return nothing
     par = p.membership_share_price
     for w in shuffle(rng, persons(model))
         open = [c for c in coops if !haskey(c.members, w.id)]
-        if !isempty(open) && cash(w) - buffer_target(model, w) >= par && rand(rng) < p.cooperative_join_probability
+        if !isempty(open) && plan_contribution(model, w) !== nothing && rand(rng) < p.cooperative_join_probability
             c = rand(rng, open)
-            transfer!(model, w, c, par, :membership_share); c.members[w.id] = 1; c.paid_in_capital += par
-            log_event!(model, :membership; actor = w.id, cooperative = c.id, price = par)
+            if contribute_membership!(model, w, c)
+                log_event!(model, :membership; actor = w.id, cooperative = c.id, price = par, pledge = get(c.buffer_pledged_by, w.id, 0.0))
+            end
         elseif cash(w) < meal_price(model)
             for c in coops
-                get(c.members, w.id, 0) > 0 && cash(c) >= par || continue
-                transfer!(model, c, w, par, :share_redemption); c.members[w.id] -= 1; c.paid_in_capital -= par
-                c.members[w.id] == 0 && delete!(c.members, w.id)
-                log_event!(model, :redemption; actor = w.id, cooperative = c.id, price = par)
+                get(c.members, w.id, 0) > 0 || continue
+                paid = round(p.membership_share_price - get(c.membership_unpaid, w.id, 0.0), digits = 4)
+                (paid <= 1e-6 || cash(c) >= paid) || continue
+                paid > 1e-6 && (transfer!(model, c, w, paid, :share_redemption); c.paid_in_capital -= paid)
+                released = release_pledge!(model, c, w.id)
+                c.members[w.id] -= 1
+                c.members[w.id] == 0 && (delete!(c.members, w.id); delete!(c.membership_unpaid, w.id); delete!(c.member_since, w.id))
+                log_event!(model, :redemption; actor = w.id, cooperative = c.id, price = paid, pledge = released)
                 break
             end
         end

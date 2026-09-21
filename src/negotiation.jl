@@ -37,9 +37,10 @@ function buyer_reservation(model, buyer::Agent, good::Symbol)
     elseif good == :grain
         return p.breads_per_grain * expected_price(model, :bread) - p.bakery_grain_wage_fraction * expected_price(model, :wage)
     elseif good == :bread
-        return expected_price(model, :bread) * (p.bread_bid_base_multiplier + p.bread_bid_hunger_multiplier * buyer.hunger)
+        # willingness to pay is for the price including the consumption tax; the seller sees it net
+        return expected_price(model, :bread) * (p.bread_bid_base_multiplier + p.bread_bid_hunger_multiplier * buyer.hunger) / (1 + (buyer isa Person ? consumption_tax_rate(model) : 0.0))
     elseif good == :ticket
-        return expected_price(model, :ticket) * p.bread_bid_base_multiplier
+        return expected_price(model, :ticket) * p.bread_bid_base_multiplier / (1 + (buyer isa Person ? consumption_tax_rate(model) : 0.0))
     end
 end
 
@@ -65,7 +66,7 @@ end
 function negotiate(model, seller::Agent, buyer::Agent, good::Symbol; age::Int = 0)
     key = (good, buyer.id)
     haskey(seller.negotiated, key) && return seller.negotiated[key]
-    p = parameters(model); rng = abmrng(model)
+    p = parameters(model); rng = stream(model, :negotiation)
     seller_floor = seller_reservation(model, seller, good; age = age)
     buyer_ceiling = buyer_reservation(model, buyer, good)
     ask = max(seller.ask[good], seller_floor)
@@ -93,6 +94,30 @@ end
 sells(a::Agent) = a isa Person ? (a.land > 0 ? (:wage, :rent) : (:wage,)) : a.kind == :farm ? (:grain,) : a.kind == :bakery ? (:bread,) : a.kind == :bank ? (:rent,) : a.kind == :theatre ? (:ticket,) : ()
 buys(a::Agent) = a isa Person ? (:bread, :ticket) : a.kind == :farm ? (:rent, :wage) : a.kind == :bakery ? (:grain, :wage) : a.kind in (:bank, :theatre) ? (:wage,) : ()
 
+"""
+    demand_unmet(model, a, good)
+
+Did demand for this good go unmet enough to react to? With `unmet_demand_share = 0` any miss counts (the original
+rule). Otherwise the units the market failed to serve must be at least that share of what it sold plus what it
+missed. Wages always use the original rule (see the parameter).
+"""
+function demand_unmet(model, a::Agent, good::Symbol)
+    r = a.market[good]
+    r.unmet_demand || return false
+    share = parameters(model).unmet_demand_share
+    (share <= 0 || good == :wage) && return true
+    sold = sum(e.market[good].sold for e in alive_agents(model) if good in sells(e); init = 0.0)
+    return r.unmet_units >= share * (sold + r.unmet_units) - 1e-9
+end
+
+"""The lowest a seller will post: unit cost, plus a markup while its reserves are not full."""
+function ask_floor(model, a::Agent, good::Symbol)
+    p = parameters(model)
+    cost = seller_reservation(model, a, good)
+    short = a isa Enterprise ? cash(a) < reserve_target(model, a) : cash(a) < savings_buffer(model)
+    return cost * (1 + (short ? p.ask_floor_markup_when_short : 0.0))
+end
+
 function adapt_prices!(model)
     p = parameters(model)
     for a in alive_agents(model)
@@ -101,11 +126,13 @@ function adapt_prices!(model)
             r.offered <= 1e-9 && continue
             if r.sold >= r.offered - 1e-9
                 r.idle_rounds = 0
-                (!p.ask_increase_only_on_unmet_demand || r.unmet_demand) && (a.ask[g] *= 1 + p.ask_increase_after_sellout)
+                (!p.ask_increase_only_on_unmet_demand || demand_unmet(model, a, g)) && (a.ask[g] *= 1 + p.ask_increase_after_sellout)
             elseif r.sold > 1e-9
                 r.idle_rounds = 0
                 tol = (g == :wage && p.no_labour_tolerance) ? 0.0 : p.unsold_tolerance_units
-                r.offered - r.sold > tol && (a.ask[g] *= 1 - p.ask_decrease_after_partial_sale)
+                unsold = r.offered - r.sold
+                partly_unsold = p.unsold_share > 0 && g != :wage ? unsold >= p.unsold_share * r.offered - 1e-9 : unsold > tol
+                partly_unsold && (a.ask[g] *= 1 - p.ask_decrease_after_partial_sale)
             else
                 r.idle_rounds += 1
                 a.ask[g] *= 1 - p.ask_decrease_when_idle[min(r.idle_rounds, length(p.ask_decrease_when_idle))]
@@ -128,6 +155,7 @@ function adapt_prices!(model)
                     a.ask[g] *= 1 + p.reserve_pricing_step
                 end
             end
+            p.ask_floor == :cost && (a.ask[g] = max(a.ask[g], ask_floor(model, a, g)))
         end
         for g in buys(a)
             r = a.market[g]
@@ -194,6 +222,11 @@ function plan_targets!(model)
         end
         units = max(ceil(Int, expected / p.customers_per_labour_unit), length(theatres))
         allot!(units, theatres)
+        if p.shows_per_round > 0                            # a theatre cannot use more labour than its seats take
+            for t in theatres
+                t.production_target = min(t.production_target, Int(theatre_labour_cap(model, t)))
+            end
+        end
     end
     return nothing
 end
@@ -207,15 +240,15 @@ function adapt_targets!(model)
         is_producer(e) || continue
         if is_theatre(e)                     # service: unmet demand → +1 unit of labour, idle capacity → −1
             r = e.market[:ticket]
-            r.unmet_demand && (e.production_target += 1)
+            demand_unmet(model, e, :ticket) && (e.production_target += 1)
             r.offered - r.sold > p.unsold_tolerance_units && (e.production_target -= 1)
-            e.production_target = clamp(e.production_target, 1, max(floor(Int, total_capacity), 1))
+            e.production_target = clamp(e.production_target, 1, max(floor(Int, min(total_capacity, theatre_labour_cap(model, e))), 1))
             continue
         end
         good = e.kind == :farm ? :grain : :bread
         r = e.market[good]
         stock_left = e.kind == :farm ? grain_units(e) : bread_units(e)
-        if r.unmet_demand && stock_left <= 1e-9
+        if demand_unmet(model, e, good) && stock_left <= 1e-9
             e.production_target += 1
         elseif stock_left > (e.kind == :bakery ? p.unsold_tolerance_units : p.unsold_tolerance_units / p.breads_per_grain)
             e.production_target -= 1

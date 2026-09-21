@@ -66,7 +66,14 @@ function record!(model)
         peer_lent = model.peer_lent_this_round,
         government_debt = debt_of(gov) + government_rest_interest(model) + bonds_outstanding(model) + government_trade_arrears(model), government_bank_debt = debt_of(gov) + government_rest_interest(model), bonds_outstanding = bonds_outstanding(model), government_arrears = government_trade_arrears(model),
         bonds_issued = model.bonds_issued_this_round, coupons = model.coupons_this_round, bond_rate = bond_coupon_rate(model),
-        government_cash = cash(gov),
+        government_cash = cash(gov), government_reserve_target = model.government_reserve_target,
+        surplus_redistributed = model.surplus_redistributed_this_round, tax_scale = model.tax_scale,
+        government_outlay = model.government_outlay_this_round, tax_shortfall = model.tax_shortfall, tax_policy_step = model.tax_policy_step,
+        consumption_tax = model.consumption_tax_this_round, consumption_tax_scale = model.consumption_tax_scale,
+        wealth_tax = model.wealth_tax_this_round, wealth_tax_base = model.wealth_tax_base, wealth_tax_scale = model.wealth_tax_scale,
+        wealth_tax_arrears = sum(w.wealth_tax_arrears for w in ps; init = 0.0),
+        consumption_tax_rate_now = consumption_tax_rate(model),
+        bracket_top_rate = maximum(model.bracket_rates), bracket_bottom_rate = minimum(model.bracket_rates),
         bank_retained_interest = sum(b.retained_interest for b in banks; init = 0.0),
         cumulative_interest_paid = model.cumulative_interest_paid,
         cumulative_write_offs = model.cumulative_write_offs,
@@ -137,6 +144,21 @@ function record!(model)
         founders_stake_mean = mean_or_nan([founders_stake(e) for e in alive if e isa Enterprise && e.ownership == :shareholders]),
         outside_holders = length(unique(h for e in alive if e isa Enterprise && e.ownership == :shareholders for (h, u) in e.shares if u > 1e-6 && !(h in e.founder_ids))),
         forward_value_mean = mean_or_nan([forward_value_per_unit(model, e, parameters(model).required_yield) for e in alive if e isa Enterprise && e.ownership == :shareholders]),
+        coop_worker_open = count(e -> e isa Enterprise && coop_form(model, e) == :worker, alive),
+        coop_consumer_open = count(e -> e isa Enterprise && coop_form(model, e) == :consumer, alive),
+        coop_member_open = count(e -> e isa Enterprise && coop_form(model, e) == :member, alive),
+        coop_retained_reserve = sum(e.retained_reserve for e in alive if e isa Enterprise; init = 0.0),
+        coop_buffer_pledged = sum(e.buffer_pledged for e in alive if e isa Enterprise; init = 0.0),
+        buffer_pledged_persons = sum(w.buffer_pledged for w in ps; init = 0.0),
+        patronage_wages = model.patronage_wages_this_round, rebates = model.rebates_this_round,
+        membership_capital = model.membership_capital_this_round, reserved_labour = model.reserved_labour_this_round,
+        coop_worker_hours = sum(sum(values(e.patronage_this_round); init = 0.0) for e in alive if e isa Enterprise && coop_form(model, e) == :worker; init = 0.0),
+        coop_members_worker = sum(length(e.members) for e in alive if e isa Enterprise && coop_form(model, e) == :worker; init = 0),
+        coop_members_consumer = sum(length(e.members) for e in alive if e isa Enterprise && coop_form(model, e) == :consumer; init = 0),
+        worker_members = count(w -> any(e -> e isa Enterprise && coop_form(model, e) == :worker && haskey(e.members, w.id), alive), ps),
+        unemployed_members = count(w -> unemployed(w) && any(e -> e isa Enterprise && coop_form(model, e) == :worker && haskey(e.members, w.id), alive), ps),
+        unemployed_nonmembers = count(w -> unemployed(w) && !any(e -> e isa Enterprise && coop_form(model, e) == :worker && haskey(e.members, w.id), alive), ps),
+        rebate_income_persons = sum(w.rebate_income for w in ps; init = 0.0),
         coop_open = count(e -> e isa Enterprise && e.ownership == :cooperative, alive), forprofit_open = count(e -> e isa Enterprise && e.ownership == :shareholders, alive),
         cash_coops = sum(cash(e) for e in alive if e isa Enterprise && e.ownership == :cooperative; init = 0.0),
         coop_members = sum(length(e.members) for e in alive if e isa Enterprise && e.ownership == :cooperative; init = 0),
@@ -198,6 +220,7 @@ end
 
 function record_and_adapt!(model)
     record!(model)
+    roll_patronage_window!(model)
     adapt_prices!(model)
     adapt_targets!(model)
     absorb_surplus!(model)

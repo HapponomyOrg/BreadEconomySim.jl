@@ -25,10 +25,22 @@ end
 
 const ROUND_BEHAVIORS = Function[]
 
+# One random stream per subsystem (18 September 2026). Every draw the model makes goes through `stream(model, name)`.
+# With a single shared generator, any change in how often one part of the model draws — a new rule, a switch turned
+# on, a reordered check — shifts every later draw everywhere, so the same seed no longer gives the same experiment
+# in the parts that did not change. Separate streams confine such a change to its own subsystem. Each stream is
+# seeded from the run seed and its own name, so adding a stream never re-seeds the others.
+const RANDOM_STREAMS = (:negotiation, :land, :labour, :grain, :bread, :tickets, :greed, :credit, :estates, :shares, :cooperatives)
+
+"""The random generator of a subsystem; the model's single generator when `random_streams` is off."""
+stream(model, name::Symbol) = parameters(model).random_streams ? model.streams[name] : abmrng(model)
+
 function create_bread_economy(parameters::SimulationParameters = SimulationParameters())
+    validate_cooperatives(parameters)
     model = create_econo_model(Agent, copy(ROUND_BEHAVIORS))
     Random.seed!(abmrng(model), parameters.seed)
     props = abmproperties(model)
+    props[:streams] = Dict{Symbol, Random.Xoshiro}(name => Random.Xoshiro(hash(name, UInt(parameters.seed))) for name in RANDOM_STREAMS)
     props[:parameters] = parameters
     props[:loans] = Loan[]
     props[:wage_contracts] = WageContract[]
@@ -57,6 +69,26 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
     props[:termination_reason] = ""
     props[:initial_person_count] = parameters.number_of_persons
     props[:closures] = 0
+    props[:patronage_wages_this_round] = 0.0
+    props[:rebates_this_round] = 0.0
+    props[:membership_capital_this_round] = 0.0
+    props[:reserved_labour_this_round] = 0.0
+    props[:tax_scale] = 1.0
+    props[:consumption_tax_scale] = 1.0                            # one scale per tax family: income (`tax_scale`), consumption, wealth
+    props[:wealth_tax_scale] = 1.0
+    props[:wealth_revenue_history] = Float64[]
+    props[:consumption_tax_this_round] = 0.0
+    props[:wealth_tax_this_round] = 0.0
+    props[:wealth_tax_base] = 0.0
+    props[:consumption_revenue_history] = Float64[]
+    props[:government_outlay_this_round] = 0.0
+    props[:government_outlay_history] = Float64[]
+    props[:government_reserve_target] = 0.0
+    props[:bracket_rates] = copy(parameters.tax_bracket_rates)      # live copy: `tax_policy = :brackets` moves it
+    props[:revenue_history] = Float64[]                              # tax collected per round, trailing window
+    props[:tax_shortfall] = 0.0                                      # last round's shortfall as the policy saw it
+    props[:tax_policy_step] = 0.0                                    # last round's relative change in revenue (signed)
+    props[:surplus_redistributed_this_round] = 0.0
     props[:peer_loans] = PeerLoan[]
     props[:bonds] = Bond[]
     props[:share_collateral] = Dict{Int, Tuple{Int, Float64}}()   # peer loan id → (enterprise id, share units pledged)
@@ -129,12 +161,12 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
         for kind in (:farm, :bakery, :theatre)
             es = sort([a for a in allagents(model) if a isa Enterprise && a.kind == kind]; by = a -> a.id)
             ncoop = parameters.ownership == :cooperative ? length(es) : parameters.ownership == :shareholders ? 0 :
-                    kind == :farm ? parameters.cooperative_farms : kind == :bakery ? parameters.cooperative_bakeries : 0
+                    kind == :farm ? parameters.cooperative_farms : kind == :bakery ? parameters.cooperative_bakeries : parameters.cooperative_theatres
             for (k, e) in enumerate(es)
                 if k <= ncoop
                     e.ownership = :cooperative
-                    if parameters.startup_financing == :paid_in_capital
-                        # members join by buying shares at par; nobody is a member at the start
+                    if parameters.startup_financing == :paid_in_capital || coop_form(parameters, kind) != :member
+                        # members join by buying shares at par (worker: by being hired); nobody is a member at the start
                     else
                         for w in ps; e.shares[w.id] = units_total / length(ps); e.members[w.id] = 1; end
                     end
@@ -151,7 +183,7 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
         a isa Person ? push!(model.person_list, a) : push!(model.enterprise_list, a)
     end
     if parameters.required_yield_dispersion > 0           # drawn only when a spread exists, so the random stream is untouched otherwise
-        let rng = abmrng(model)
+        let rng = stream(model, :shares)
             for w in model.person_list
                 w.required_yield = parameters.required_yield + parameters.required_yield_dispersion * (2 * rand(rng) - 1)
             end
@@ -162,13 +194,16 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
     if parameters.greed
         ps = collect(persons(model)); n = round(Int, parameters.greed_share * length(ps))
         wealth(w) = cash(w) + w.land * parameters.land_price_rent_multiple * prices[:rent] + sum(get(e.shares, w.id, 0.0) for e in allagents(model) if e isa Enterprise; init = 0.0)
-        chosen = parameters.greed_selection == :rich ? sort(ps; by = w -> (-wealth(w), w.id))[1:n] : shuffle(abmrng(model), ps)[1:n]
+        chosen = parameters.greed_selection == :rich ? sort(ps; by = w -> (-wealth(w), w.id))[1:n] : shuffle(stream(model, :greed), ps)[1:n]
         for w in chosen; w.greed = :greedy; end
     end
     if sumsy && parameters.start_at_saturation != :none
         b = parameters.demurrage_free_buffer; n = parameters.number_of_persons; gi_d = parameters.guaranteed_income / parameters.demurrage_rate
         if parameters.start_at_saturation == :upper
             for w in persons(model); create_money!(model, w, b + gi_d); end
+        elseif parameters.start_at_saturation == :equilibrium
+            per_person = b + parameters.guaranteed_income / (parameters.demurrage_rate + parameters.demurrage_tax_rate)
+            for w in persons(model); create_money!(model, w, per_person); end
         else
             create_money!(model, first(sort(persons(model); by = w -> w.id)), b + n * gi_d)
         end
@@ -294,12 +329,13 @@ function begin_round!(model)
         a.land_let = 0
         for g in GOODS
             r = a.market[g]
-            r.offered = 0.0; r.sold = 0.0; r.unmet_demand = false; r.wanted = 0.0; r.got = 0.0; r.failed_for_cash = 0; r.max_failed_cash = 0.0
+            r.offered = 0.0; r.sold = 0.0; r.unmet_demand = false; r.unmet_units = 0.0; r.wanted = 0.0; r.got = 0.0; r.failed_for_cash = 0; r.max_failed_cash = 0.0
         end
         if a isa Person
             a.effective_capacity = a.last_meal == :half ? a.capacity * p.half_meal_capacity_fraction : a.capacity
             a.labour_available = 0.0; a.labour_offered = 0.0; a.labour_sold = 0.0
-            a.labour_income = 0.0; a.rent_income = 0.0; a.fee_received = 0.0
+            a.labour_income = 0.0; a.rent_income = 0.0; a.fee_received = 0.0; a.rebate_income = 0.0
+            empty!(a.labour_reserved)
             a.ate_this_round = :none; a.glutton = false
         else
             a.reserved_cash = 0.0; a.hired_labour = 0.0; a.rented_land = 0; a.wage_bill = 0.0
@@ -326,6 +362,11 @@ function begin_round!(model)
     for w in model.person_list; w.gross_wage_this_round = 0.0; w.dividend_income = 0.0; empty!(w.worked_for); end
     for e in model.enterprise_list; e.tier_sold = 0; e.tier_unmet = false; end
     model.bonds_issued_this_round = 0.0; model.coupons_this_round = 0.0
+    model.patronage_wages_this_round = 0.0; model.rebates_this_round = 0.0
+    model.membership_capital_this_round = 0.0; model.reserved_labour_this_round = 0.0
+    model.government_outlay_this_round = 0.0; model.surplus_redistributed_this_round = 0.0
+    model.consumption_tax_this_round = 0.0; model.wealth_tax_this_round = 0.0
+    for e in model.enterprise_list; empty!(e.patronage_this_round); end
     model.gi_this_round = 0.0; model.demurrage_this_round = 0.0; model.demurrage_tax_this_round = 0.0
     model.account_fees_this_round = 0.0; model.peer_lent_this_round = 0.0
     return nothing

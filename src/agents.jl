@@ -9,6 +9,7 @@ Base.@kwdef mutable struct MarketRecord
     offered::Float64 = 0.0
     sold::Float64 = 0.0
     unmet_demand::Bool = false
+    unmet_units::Float64 = 0.0  # units that went unserved this round, market-wide, recorded on every seller of the good
     wanted::Float64 = 0.0
     got::Float64 = 0.0
     idle_rounds::Int = 0      # consecutive rounds with nothing sold although offered
@@ -108,6 +109,10 @@ end
     worked_for::Set{Int} = Set{Int}()   # employers this round (a theatre worker is not served at their own theatre)
     buffer_lender::Bool = false         # opted into lending part of the buffer to the bank
     buffer_lent::Float64 = 0.0
+    buffer_pledged::Float64 = 0.0       # demurrage-free buffer pledged to cooperatives (no money moves: the exemption does)
+    labour_reserved::Dict{Int, Float64} = Dict{Int, Float64}()   # capacity held back for a worker cooperative that hires later in the round
+    rebate_income::Float64 = 0.0        # consumer cooperative patronage rebate received this round (untaxed: a price reduction)
+    wealth_tax_arrears::Float64 = 0.0   # wealth tax due but unpaid for want of cash; collected first from later cash
 end
 
 """An enterprise: bank, farm, bakery or government. No capacity, no hunger."""
@@ -133,7 +138,7 @@ end
     tax_collected::Float64 = 0.0        # government
     fees_paid::Float64 = 0.0            # government
     closed_round::Int = 0
-    operating_net::Float64 = 0.0        # receipts − outlays settled at clearing this round
+    operating_net::Float64 = 0.0        # receipts − outlays this round: netted at clearing, or accumulated per payment with clearing off
     interest_paid::Float64 = 0.0        # this round
     interest_received::Float64 = 0.0    # banks, this round
     enterprise_tax_paid::Float64 = 0.0  # this round
@@ -149,6 +154,14 @@ end
     tier_multiplier::Float64 = 1.5      # bakery: price of loaves beyond the ration relative to the ordinary ask (tiered pricing)
     tier_sold::Int = 0                  # this round
     tier_unmet::Bool = false
+    patronage_this_round::Dict{Int, Float64} = Dict{Int, Float64}()  # cooperative: member id -> hours worked / units bought this round
+    patronage_log::Vector{Dict{Int, Float64}} = Dict{Int, Float64}[]  # the trailing patronage_window rounds
+    membership_unpaid::Dict{Int, Float64} = Dict{Int, Float64}()      # worker cooperative: share capital still to be collected from wages
+    member_since::Dict{Int, Int} = Dict{Int, Int}()                   # member id -> round of admission
+    buffer_pledged::Float64 = 0.0       # cooperative: exemption pledged by its members (demurrage-free headroom)
+    buffer_pledged_by::Dict{Int, Float64} = Dict{Int, Float64}()  # member id -> pledge, released on redemption
+    retained_reserve::Float64 = 0.0     # cooperative: indivisible reserve, never distributed, not members' property
+    rebate_per_unit::Float64 = 0.0      # consumer cooperative: expected rebate per unit bought (smoothed)
     insurance_premiums::Float64 = 0.0   # bank: cumulative
     insurance_payouts::Float64 = 0.0    # bank: cumulative
 end

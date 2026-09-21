@@ -19,6 +19,7 @@ include("parameters.jl")
 include("agents.jl")
 include("model.jl")
 include("credit.jl")
+include("cooperatives.jl")
 include("negotiation.jl")
 include("markets.jl")
 include("government.jl")
@@ -54,6 +55,8 @@ append!(ROUND_BEHAVIORS, Function[
     pay_dividends!,
     share_market!,
     apply_demurrage!,
+    collect_wealth_tax!,
+    manage_government_reserve!,
     eat!,
     age_stock!,
     record_and_adapt!,

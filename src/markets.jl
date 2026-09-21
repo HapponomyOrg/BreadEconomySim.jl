@@ -17,7 +17,7 @@ landowners); enterprises have first refusal, then persons with surplus savings m
 at a time from the owner with the lowest rent ask, paid up front; rent income is taxed as capital income.
 """
 function land_market!(model)
-    rng = abmrng(model)
+    rng = stream(model, :land)
     farms = shuffle(rng, enterprises(model, :farm))
     price = land_price(model)
     sellers_cache = Agent[]; sellers_dirty = Ref(true)
@@ -116,8 +116,9 @@ function land_market!(model)
         end
     end
     if any(f -> f.market[:rent].got < f.market[:rent].wanted, farms)
+        shortfall = sum(max(f.market[:rent].wanted - f.market[:rent].got, 0.0) for f in farms; init = 0.0)
         for o in alive_agents(model)
-            o.market[:rent].offered > 0 && land_to_let(o) == 0 && (o.market[:rent].unmet_demand = true)
+            o.market[:rent].offered > 0 && land_to_let(o) == 0 && (o.market[:rent].unmet_demand = true; o.market[:rent].unmet_units += shortfall)
         end
     end
     return nothing
@@ -136,8 +137,42 @@ function labour_supply(model, w::Person)
     return min(w.effective_capacity, units)
 end
 
+"""Tickets a theatre can sell in a round: shows × seats, or unlimited with `shows_per_round = 0`."""
+function ticket_capacity(model, t::Enterprise)
+    p = parameters(model)
+    p.shows_per_round <= 0 && return Inf
+    seats = p.seats_per_show > 0 ? p.seats_per_show : p.number_of_persons
+    return Float64(p.shows_per_round * seats)
+end
+
+"""Labour a theatre can put to use: enough to serve its seats, no more."""
+theatre_labour_cap(model, t::Enterprise) = ceil(ticket_capacity(model, t) / parameters(model).customers_per_labour_unit)
+
 labour_need(e::Enterprise) = e.kind == :farm ? max(min(e.production_target, e.land + e.rented_land), 0) :
                             e.kind == :bakery ? max(min(e.production_target, floor(grain_units(e) + 1e-9)), 0) : e.kind == :bank ? 1.0 : e.kind == :theatre ? Float64(max(e.production_target, 0)) : 0.0
+
+"""
+    hire!(model, e, w, units, wage)
+
+One hiring: the wage is promised at hiring (priority 2, taxed at source) and settled at clearing.
+A worker cooperative takes the worker on as a member, counts the hours as patronage and collects
+part of the net wage towards the membership share.
+"""
+function hire!(model, e::Enterprise, w::Person, units::Float64, wage::Float64)
+    e.wage_bill += units * wage
+    w.labour_available -= units; w.labour_sold += units; w.market[:wage].sold += units
+    e.hired_labour += units; e.market[:wage].got += units
+    net = pay_income!(model, e, w, units * wage, :wage)
+    push!(w.worked_for, e.id)
+    record_transaction!(model, :wage, wage, units)
+    log_event!(model, :hire; employer = e.id, employer_kind = e.kind, worker = w.id, units = units, price = wage)
+    if is_worker_coop(model, e)
+        admit_worker_member!(model, e, w)
+        e.patronage_this_round[w.id] = get(e.patronage_this_round, w.id, 0.0) + units
+        deduct_membership_capital!(model, e, w, net)
+    end
+    return nothing
+end
 
 """
     labour_market!(model, kinds)
@@ -147,14 +182,18 @@ Wages are promised at hiring (priority 2, taxed at source) and settled at cleari
 before the harvest; bakeries hire after the grain market, up to the grain they hold (spec v2 addendum).
 """
 function labour_market!(model, kinds)
-    rng = abmrng(model)
+    rng = stream(model, :labour)
     if :farm in kinds
         for w in persons(model)
             w.labour_available = labour_supply(model, w)
             w.labour_offered = w.labour_available
             w.market[:wage].offered = w.labour_available
         end
+        reserve_labour_for_cooperatives!(model, (:bakery,))   # bakery cooperatives hire after the grain market
+    else
+        release_reserved_labour!(model, kinds)
     end
+    allocate_cooperative_labour!(model, kinds)                # members first, the work spread over them
     employers = shuffle(rng, reduce(vcat, [enterprises(model, k) for k in kinds]; init = Enterprise[]))
     for e in employers
         e.market[:wage].wanted = labour_need(e)
@@ -178,14 +217,8 @@ function labour_market!(model, kinds)
                 wage = negotiate(model, w, e, :wage)
                 wage === nothing && continue
                 units = min(unit - filled, w.labour_available)
-                e.wage_bill += units * wage
-                w.labour_available -= units; w.labour_sold += units; w.market[:wage].sold += units
-                e.hired_labour += units; e.market[:wage].got += units
+                hire!(model, e, w, units, wage)
                 filled += units
-                pay_income!(model, e, w, units * wage, :wage)
-                push!(w.worked_for, e.id)
-                record_transaction!(model, :wage, wage, units)
-                log_event!(model, :hire; employer = e.id, employer_kind = e.kind, worker = w.id, units = units, price = wage)
             end
             filled <= 1e-9 && filter!(x -> x !== e, active)
         end
@@ -241,7 +274,7 @@ end
 # ---- grain market (spec v1 §4.6) ---------------------------------------------------
 
 function grain_market!(model)
-    rng = abmrng(model)
+    rng = stream(model, :grain)
     bakeries = shuffle(rng, enterprises(model, :bakery))
     for b in bakeries
         b.market[:grain].wanted = max(b.production_target - grain_units(b), 0.0)
@@ -257,7 +290,8 @@ function grain_market!(model)
             end
             sellers = sort([f for f in enterprises(model, :farm) if grain_units(f) >= 1 - 1e-9]; by = f -> f.ask[:grain])
             if isempty(sellers)
-                foreach(f -> f.market[:grain].unmet_demand = true, enterprises(model, :farm))
+                shortfall = max(b.market[:grain].wanted - b.market[:grain].got, 0.0)
+                foreach(f -> (f.market[:grain].unmet_demand = true; f.market[:grain].unmet_units += shortfall), enterprises(model, :farm))
                 filter!(x -> x !== b, active); continue
             end
             bought = false
@@ -284,14 +318,15 @@ oldest_bread_age(b::Enterprise) = isempty(b.bread) ? 0 : maximum(i.age for i in 
 
 """Buy one bread from cash — savings may be used, no credit; returns true on success."""
 function buy_extra_bread!(model, buyer::Person, purpose::Symbol; tier::Bool = false)
-    sellers = sort([b for b in enterprises(model, :bakery) if sellable_bread(b) >= 1 - 1e-9]; by = b -> b.ask[:bread] * (tier ? b.tier_multiplier : 1.0))
+    sellers = sort([b for b in enterprises(model, :bakery) if sellable_bread(b) >= 1 - 1e-9]; by = b -> member_ask(model, b, buyer, :bread) * (tier ? b.tier_multiplier : 1.0))
     for s in sellers
         price = negotiate(model, s, buyer, :bread; age = oldest_bread_age(s))
         price === nothing && continue
         tier && (price = round(price * s.tier_multiplier, digits = 4); s.tier_sold += 1)
-        available_cash(buyer) >= price || return false            # savings allowed, no credit
-        pay!(model, buyer, s, price, purpose)
+        available_cash(buyer) >= gross_price(model, buyer, price) || return false            # savings allowed, no credit
+        pay_consumption!(model, buyer, s, price, purpose)
         take_stock!(s.bread, 1.0); push!(buyer.bread, StockItem(1.0, 0))
+        record_patronage!(model, s, buyer, 1.0)
         s.market[:bread].sold += 1
         tier ? (model.tier_revenue_this_round += price) : record_transaction!(model, :bread, price, 1.0)   # tier sales stay out of the ordinary price
         log_event!(model, :bread_sale; bakery = s.id, buyer = buyer.id, size = 1.0, price = price, purpose = purpose)
@@ -308,7 +343,7 @@ addendum). A glutton then stocks up: one more bread with the `stocking_marginali
 current stock level (EconoSim `Marginality` semantics, model RNG), as long as surplus cash allows.
 """
 function gluttony_and_stocking!(model, buyer::Person)
-    p = parameters(model); rng = abmrng(model)
+    p = parameters(model); rng = stream(model, :bread)
     if p.bread_rationing && buyer.greed == :greedy     # stage one: a greedy person may take the ration like anyone else
         while bread_units(buyer) < model.ration_this_round && cash(buyer) - buffer_target(model, buyer) >= expected_price(model, :bread) && buy_extra_bread!(model, buyer, :ration); end
         bread_units(buyer) > p.breads_per_meal && (buyer.glutton = true)
@@ -335,7 +370,7 @@ end
 
 """A full meal when affordable, otherwise one bread; persons buy only when they hold less than a meal. Gluttony and stocking follow."""
 function bread_market!(model)
-    rng = abmrng(model); p = parameters(model)
+    rng = stream(model, :bread); p = parameters(model)
     for b in enterprises(model, :bakery)
         b.market[:bread].offered = sellable_bread(b)
     end
@@ -349,9 +384,10 @@ function bread_market!(model)
             gluttony_and_stocking!(model, buyer); continue
         end
         buyer.market[:bread].wanted = meal - bread_units(buyer)
-        sellers = sort([b for b in enterprises(model, :bakery) if sellable_bread(b) >= 1 - 1e-9]; by = b -> b.ask[:bread])
+        sellers = sort([b for b in enterprises(model, :bakery) if sellable_bread(b) >= 1 - 1e-9]; by = b -> member_ask(model, b, buyer, :bread))
         if isempty(sellers)
-            foreach(b -> b.market[:bread].unmet_demand = true, enterprises(model, :bakery))
+            shortfall = buyer.market[:bread].wanted
+            foreach(b -> (b.market[:bread].unmet_demand = true; b.market[:bread].unmet_units += shortfall), enterprises(model, :bakery))
             continue
         end
         for s in sellers
@@ -361,10 +397,12 @@ function bread_market!(model)
             for size in (buyer.market[:bread].wanted, 1.0)
                 size <= sellable_bread(s) + 1e-9 || continue
                 cost = round(price * size, digits = 4)
-                can_pay = cash(buyer) >= cost - 1e-6 || (p.credit_for_bread && credit_eligible(model, buyer, cost - cash(buyer)))
+                gross = gross_price(model, buyer, cost)
+                can_pay = cash(buyer) >= gross - 1e-6 || (p.credit_for_bread && credit_eligible(model, buyer, gross - cash(buyer)))
                 can_pay || continue
-                pay!(model, buyer, s, cost, :bread)
+                pay_consumption!(model, buyer, s, cost, :bread)
                 take_stock!(s.bread, size); push!(buyer.bread, StockItem(size, 0))
+                record_patronage!(model, s, buyer, size)
                 s.market[:bread].sold += size; buyer.market[:bread].got = size
                 record_transaction!(model, :bread, price, size)
                 log_event!(model, :bread_sale; bakery = s.id, buyer = buyer.id, size = size, price = price)
@@ -394,11 +432,11 @@ buys from the cheapest theatre with capacity (hired labour × customers per unit
 function ticket_market!(model)
     p = parameters(model)
     p.entertainment || return nothing
-    rng = abmrng(model)
+    rng = stream(model, :tickets)
     theatres = enterprises(model, :theatre)
     isempty(theatres) && return nothing
     for t in theatres
-        t.market[:ticket].offered = t.hired_labour * p.customers_per_labour_unit
+        t.market[:ticket].offered = min(t.hired_labour * p.customers_per_labour_unit, ticket_capacity(model, t))
     end
     for w in shuffle(rng, persons(model))
         tp = expected_price(model, :ticket)
@@ -412,15 +450,16 @@ function ticket_market!(model)
         for _ in 1:wanted
             open = [t for t in theatres if t.market[:ticket].offered - t.market[:ticket].sold >= 1 - 1e-9 && !(p.no_self_service && t.id in w.worked_for)]
             if isempty(open)
-                foreach(t -> t.market[:ticket].unmet_demand = true, theatres); break
+                foreach(t -> (t.market[:ticket].unmet_demand = true; t.market[:ticket].unmet_units += wanted - bought), theatres); break
             end
-            sort!(open; by = t -> t.ask[:ticket])
+            sort!(open; by = t -> member_ask(model, t, w, :ticket))
             done = false
             for t in open
                 price = negotiate(model, t, w, :ticket)
                 price === nothing && continue
-                cash(w) - buffer_target(model, w) >= price - 1e-6 || continue
-                pay!(model, w, t, price, :ticket)
+                cash(w) - buffer_target(model, w) >= gross_price(model, w, price) - 1e-6 || continue
+                pay_consumption!(model, w, t, price, :ticket)
+                record_patronage!(model, t, w, 1.0)
                 t.market[:ticket].sold += 1; w.market[:ticket].got += 1; bought += 1
                 record_transaction!(model, :ticket, price, 1.0)
                 log_event!(model, :ticket; buyer = w.id, theatre = t.id, price = price)
@@ -441,7 +480,7 @@ purchase goes to a loaf or a ticket by a coin flip (a side whose cap is reached,
 to the other). Loaves bought are eaten this round.
 """
 function greed_spending!(model)
-    p = parameters(model); rng = abmrng(model)
+    p = parameters(model); rng = stream(model, :greed)
     p.greed || return nothing
     theatres = enterprises(model, :theatre)
     for w in shuffle(rng, [w for w in persons(model) if w.greed == :greedy])
@@ -466,15 +505,16 @@ function greed_spending!(model)
                 buy_extra_bread!(model, w, :greed; tier = tiered) || (can_ticket ? nothing : break)
                 loaves += 1
             else
-                sort!(open; by = t -> t.ask[:ticket]); done = false
+                sort!(open; by = t -> member_ask(model, t, w, :ticket)); done = false
                 for t in open
                     price = negotiate(model, t, w, :ticket)
                     price === nothing && continue
-                    cash(w) - buffer_target(model, w) >= price - 1e-6 || continue
-                    pay!(model, w, t, price, :ticket); t.market[:ticket].sold += 1; w.market[:ticket].got += 1; tickets += 1
+                    cash(w) - buffer_target(model, w) >= gross_price(model, w, price) - 1e-6 || continue
+                    pay_consumption!(model, w, t, price, :ticket); record_patronage!(model, t, w, 1.0)
+                    t.market[:ticket].sold += 1; w.market[:ticket].got += 1; tickets += 1
                     record_transaction!(model, :ticket, price, 1.0); log_event!(model, :ticket; buyer = w.id, theatre = t.id, price = price, greed = true); done = true; break
                 end
-                done || (isempty(open) ? break : (foreach(t -> t.market[:ticket].unmet_demand = true, theatres); break))
+                done || (isempty(open) ? break : (foreach(t -> (t.market[:ticket].unmet_demand = true; t.market[:ticket].unmet_units += 1.0), theatres); break))
             end
         end
         bread_units(w) > p.breads_per_meal && (w.glutton = true)

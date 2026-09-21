@@ -43,6 +43,21 @@ Base.@kwdef struct SimulationParameters
     farm_maximum_rent_fraction_of_grain_price::Float64 = 0.6
     bakery_grain_wage_fraction::Float64 = 0.5
     bread_bid_base_multiplier::Float64 = 1.3
+    # Unmet demand (19 September 2026). Sellers raise their ask and their production target when demand went unmet.
+    # 0 = the original rule: one buyer who found nothing is enough. A share s > 0 requires the units that went unserved
+    # to be at least s of what the market sold plus what it missed (5–10 % is a realistic threshold). Wages keep the
+    # original rule: a worker who sold all their capacity cannot observe how much more was wanted.
+    unmet_demand_share::Float64 = 0.0
+    # Unsold stock, the mirror image (20 September 2026): 0 = the original rule, a cut of `ask_decrease_after_partial_sale`
+    # whenever more than `unsold_tolerance_units` were left; a share s > 0 requires the unsold units to be at least s of what
+    # was offered, so that the cut has the same logic as the rise on unmet demand.
+    unsold_share::Float64 = 0.0
+    # Ask floor (20 September 2026). :none = the posted ask may decay without limit (only the negotiation floors it, and aged
+    # bread is discounted below cost); :cost = after adaptation the posted ask is never below the seller's unit cost —
+    # `seller_reservation` at age 0 — raised by `ask_floor_markup_when_short` while the seller's cash is below its reserve
+    # (a producer) or savings buffer (a person). Realistic: nobody prices new output below what it cost to make.
+    ask_floor::Symbol = :none
+    ask_floor_markup_when_short::Float64 = 0.05
     bread_bid_hunger_multiplier::Float64 = 0.4
     initial_production_target::Int = 6
 
@@ -109,9 +124,65 @@ Base.@kwdef struct SimulationParameters
     guaranteed_income_in_breads::Float64 = 0.0        # > 0: the income is this many loaves at the expected bread price each round (indexed; breaks the bounded money stock — a test, not a design)
     demurrage_rate::Float64 = 0.02                    # per round, on balances above the buffer; destroys money
     demurrage_tax_rate::Float64 = 0.0                 # surcharge on the same base, transferred to the government
+    # Government reserve (20 September 2026). 0 = the rule until now: whatever tax exceeds spending sits on the government's
+    # balance (under SuMSy it pays demurrage there, and in the no-greed village it reached a fifth of the money stock).
+    # n > 0: the government keeps a reserve of n rounds of expected spending (the trailing mean of its outlays over
+    # `government_expense_window` rounds) and disposes of the surplus above it each round, `surplus_redistribution_share`
+    # of it as an equal per-capita payment to the living and `surplus_tax_reduction_share` of it by scaling next round's
+    # taxes down (all of them: wage, capital, demurrage tax — the scale is one number, `tax_scale`, never above 1). With
+    # the two shares summing to 1 the reserve tracks the target up to the volatility of spending; below 1 it drifts up.
+    # A shortfall lets the scale climb back towards 1 at `surplus_tax_reduction_share` of the gap a round.
+    government_reserve_in_rounds::Int = 0
+    government_expense_window::Int = 12
+    surplus_redistribution_share::Float64 = 0.0
+    surplus_tax_reduction_share::Float64 = 0.0
+    # Fiscal policy (20 September 2026): taxes that move in both directions, incrementally.
+    # The shortfall a round is what spending exceeds revenue by (trailing means over `government_expense_window`) plus
+    # the gap between the reserve and its target spread over `government_reserve_in_rounds` rounds. The policy aims to
+    # close `tax_response_coverage` of it by raising taxes, and lowers them again on a surplus (the reserve rule's
+    # `surplus_tax_reduction_share` of the surplus above target), but never changes revenue by more than
+    # `tax_response_step` (a fraction of current revenue) in one round, so that there are no shocks.
+    #   :none     — no raises; only the reserve rule's reductions, unlimited in size (the rule until now)
+    #   :scale    — one multiplier on every tax (flat wage tax, capital tax, demurrage tax; the whole progressive schedule).
+    #               The "income" family is the wage and capital tax under debt money and the demurrage tax under SuMSy,
+    #               which taxes no income; the lever on that family acts on whichever the village has.
+    #   :brackets — needs `income_tax_schedule = :progressive`: a rise of r changes each bracket's rate to
+    #               rate × (1 + r) + `bracket_fixed_rise` × sign(r) — proportional, so the 50 % bracket moves five times as
+    #               much as the 10 % one, plus a fixed number of points per bracket; falls back to :scale under :flat
+    # Consumption tax (20 September 2026): a VAT on what persons buy to consume — bread and tickets — paid by the buyer on
+    # top of the negotiated price and promised to the government (grain is an input and stays untaxed, as VAT is neutral
+    # between firms). The buyer's willingness to pay is for the price including tax, so the ceiling passed to the
+    # negotiation is divided by (1 + rate). Belgium's average rate on consumption is about 6 %. The fiscal policy scales
+    # it with the same triggers and step as the income tax.
+    consumption_tax_rate::Float64 = 0.0
+    # Mix (20 September 2026, night — levers, replacing the sliders): three tax families, each with its own scale — income
+    # (wage, capital, demurrage tax; the progressive brackets), consumption, wealth. Each round the policy first *shifts*
+    # and then *moves*. The move is r (raise on a shortfall, cut on a surplus, step-limited), applied to every family.
+    # The shift is a lever per family: family i first moves by r × lever_i — a positive lever moves with the policy at
+    # that rate, a negative one against it, 0 not at all. So a family's total relative move in a round is
+    # (1 + |r| × lever_i) × (1 + r) − 1. The shift uses |r|: a lever is a standing preference, not a direction, so a
+    # family with a negative lever is relieved on a raise and cut hardest on a cut. Levers (0, 0, 0) = one scale;
+    # (−2, +1, 0) shifts the burden from income to consumption whichever way the total moves. The step limit applies to
+    # r; a lever multiplies it. Under SuMSy the income family is the demurrage tax (see `tax_policy`).
+    tax_levers::NamedTuple{(:income, :consumption, :wealth), NTuple{3, Float64}} = (income = 0.0, consumption = 0.0, wealth = 0.0)
+    # Wealth tax (20 September 2026): a yearly rate on what a person holds in land and shares, valued at book — land at
+    # `land_price` (rent multiple × expected rent), shares at `book_per_unit` (the firm's cash + land − debt per unit),
+    # cooperative membership at the capital paid in. Charged every round at rate ÷ `wealth_tax_rounds_per_year`, in cash,
+    # after demurrage; what a person cannot pay is carried as `wealth_tax_arrears` (no interest) and collected first from
+    # the next round's cash. Part of the mix: the fiscal policy moves its own scale (with r, and with the shift)
+    # (weight 0 keeps it statutory). Enterprises are not taxed directly: their
+    # land and cash are in the book value of the shares their owners pay on.
+    wealth_tax_rate::Float64 = 0.0                    # per year, on book value of land and shares held by persons
+    wealth_tax_rounds_per_year::Int = 12
+    tax_policy::Symbol = :none
+    tax_response_coverage::Float64 = 0.5              # share of the shortfall a raise is sized to cover
+    tax_response_step::Float64 = 0.02                 # largest relative change in revenue per round (2 % = incremental)
+    bracket_fixed_rise::Float64 = 0.0                 # :brackets — points added to every bracket per step, on top of the proportional rise
+    tax_scale_maximum::Float64 = 3.0                  # :scale — the multiplier never exceeds this (statutory rates × 3)
+    bracket_rate_maximum::Float64 = 0.9               # :brackets — no bracket rate above this
     demurrage_free_buffer::Float64 = 30.0             # persons only (3 meals at initial prices); everyone else: 0
     initial_money_per_person::Float64 = 30.0          # debt-free initial money, created by the authority
-    start_at_saturation::Symbol = :none               # SuMSy: :upper — every person starts at buffer + GI/d (all buffers used, stock N·b + N·GI/d); :lower — one person holds b + N·GI/d, the rest nothing
+    start_at_saturation::Symbol = :none               # SuMSy: :upper — every person starts at buffer + GI/d (all buffers used, stock N·b + N·GI/d); :lower — one person holds b + N·GI/d, the rest nothing; :equilibrium (20 September 2026) — every person at b + GI/(d + demurrage tax), the balance at which their own creation equals their own destruction, so the stock starts inside its bounds and stays there. The money stock depends on GI and demurrage only, never on prices: a village started below its equilibrium sees the stock — and with it the price level — rise for ~60 rounds. Pair with `initial_price_multiplier` ≈ 1.35 (the 64-person steady state: bread 1.27×, grain 1.32×, wage 1.49× the initial vector; the 0.63 used in the 15 September saturation runs is a 16-person figure)
     initial_price_multiplier::Float64 = 1.0           # scales the initial price vector (a saturated village runs at a lower price level than a starting one)
     account_fee_person::Float64 = 0.5                 # per round, promised to the person's bank at clearing
     account_fee_enterprise::Float64 = 1.5
@@ -177,6 +248,12 @@ Base.@kwdef struct SimulationParameters
     max_tickets_per_person::Int = 3                   # 1–3 tickets a round, at random within what cash above the buffer allows
     entertainment_propensity::Float64 = 1.0           # probability a person who can afford a ticket wants one
     plan_for_tickets::Bool = true                     # theatres plan hiring on expected ticket demand (like bakeries on gluttony)
+    # Theatre capacity (20 September 2026). A theatre runs at most `shows_per_round` shows a round with `seats_per_show`
+    # seats each, so it can sell at most shows × seats tickets and never needs more labour than that takes at
+    # `customers_per_labour_unit`. 0 shows = unlimited (the rule until 20 September: a theatre absorbed whatever labour
+    # ticket demand paid for). 0 seats = one seat for every person in the village at founding.
+    shows_per_round::Int = 0
+    seats_per_show::Int = 0
     # Clearing switch (13 September 2026): true = all intra-round payments are promises netted at clearing (spec v2 addendum);
     # false = every payment is settled immediately (cash, then credit, the unpaid tail becomes a trade arrear)
     clearing::Bool = true
@@ -185,6 +262,30 @@ Base.@kwdef struct SimulationParameters
     shareholder_count::Int = 2                         # :shareholders / :mixed — persons (lowest ids) who hold the shares
     cooperative_farms::Int = 2                         # :mixed
     cooperative_bakeries::Int = 2
+    cooperative_theatres::Int = 0                      # :mixed — theatres were for-profit only until 14 September 2026
+    # Cooperative forms (14 September 2026), per kind: :member (the original equal-share, equal-dividend rule),
+    # :worker (membership follows employment, surplus by hours) or :consumer (membership follows purchases,
+    # surplus as a patronage rebate). Farms cannot be consumer cooperatives: they sell to bakeries, not to persons.
+    cooperative_form_farms::Symbol = :member
+    cooperative_form_bakeries::Symbol = :member
+    cooperative_form_theatres::Symbol = :member
+    patronage_window::Int = 12                         # rounds of hours or purchases a distribution is measured over
+    retained_surplus_share::Float64 = 0.25             # share of every distribution locked in the indivisible reserve
+    capital_deduction_share::Float64 = 0.10            # worker cooperative: share of each net wage collected towards the membership share
+    membership_lapse_rounds_worker::Int = 6            # grace period before a member without hours is redeemed
+    membership_lapse_rounds_consumer::Int = 12         # grace period before a member without purchases is redeemed
+    minimum_member_hours::Float64 = 0.5                # average units a round below which worker membership lapses
+    members_first_hiring::Bool = true                  # worker cooperatives serve their members before the open market, spreading the work over them
+    member_price_awareness::Bool = true                # consumer cooperative members net the expected rebate off the ask when choosing a seller
+    # What a member brings in (14 September 2026). Under SuMSy a member can pledge part of their demurrage-free
+    # buffer instead of money: no money moves, the member's own exemption shrinks by the pledge and the cooperative's
+    # grows by the same amount, so the cooperative can hold that much cash without paying demurrage. A pledge is
+    # worthless under debt money (there is no demurrage): a :buffer membership is then free and a :mixed_flexible one
+    # costs its money half alone, so the buffer forms are only meaningful under SuMSy.
+    membership_contribution::Symbol = :money           # :money | :buffer | :mixed_fixed (both) | :mixed_flexible (the member splits a single total)
+    membership_buffer_pledge::Float64 = 10.0           # buffer requirement, in currency units of exemption
+    buffer_contribution_value::Float64 = 1.0           # money a unit of pledged buffer counts for under :mixed_flexible (0 under debt money)
+    cooperative_founding::Symbol = :par_only           # :par_only (members bring one share at par) | :symmetric (members are called on for capital like shareholder founders)
     dividend_build_rounds::Int = 10                    # cash above the reserve target is paid out over this many rounds
     dividend_tax_rate::Float64 = 0.30                  # Belgian withholding tax on dividends
     share_market::Bool = false                         # shareholder enterprises' shares trade once a round
@@ -218,6 +319,7 @@ Base.@kwdef struct SimulationParameters
     stop_when_stationary::Bool = true
 
     # Run control
+    random_streams::Bool = true                        # one random stream per subsystem (18 September 2026), each seeded from `seed`; false = the single shared stream of earlier runs
     maximum_rounds::Int = 50
     stationary_rounds::Int = 5
     stationary_tolerance::Float64 = 0.01

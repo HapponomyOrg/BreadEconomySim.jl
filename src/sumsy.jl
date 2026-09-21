@@ -40,14 +40,15 @@ function pay_guaranteed_income!(model)
     return nothing
 end
 
-demurrage_buffer(model, a::Agent) = a isa Person ? max(parameters(model).demurrage_free_buffer - a.buffer_lent, 0.0) : is_bank(a) ? a.buffer_received : 0.0
+demurrage_buffer(model, a::Agent) = a isa Person ? max(parameters(model).demurrage_free_buffer - a.buffer_lent - a.buffer_pledged, 0.0) :
+                                    is_bank(a) ? a.buffer_received + a.buffer_pledged : a.buffer_pledged
 
 # ---- buffer pool: opted-in persons lend part of their buffer (money and exemption) to their bank; callable ----
 function manage_buffer_pool!(model)
     p = parameters(model)
     (is_sumsy(model) && p.buffer_lending) || return nothing
     if current_round(model) == 1
-        rng = abmrng(model)
+        rng = stream(model, :credit)
         for w in persons(model); w.buffer_lender = rand(rng) < p.buffer_lending_participation; end
     end
     for w in persons(model)
@@ -82,7 +83,7 @@ function apply_demurrage!(model)
         model.demurrage_this_round += dem
         a isa Person && (model.demurrage_persons_this_round += dem)
         if p.demurrage_tax_rate > 0 && a !== gov
-            tax = round(min(p.demurrage_tax_rate * excess, cash(a)), digits = 4)
+            tax = round(min(p.demurrage_tax_rate * model.tax_scale * excess, cash(a)), digits = 4)
             if tax > 0
                 transfer!(model, a, gov, tax, :demurrage_tax)
                 gov.tax_collected += tax; model.tax_this_round += tax; model.demurrage_tax_this_round += tax
@@ -137,7 +138,7 @@ lender. Refused when lending is off, there is no bank, the borrower is in arrear
 government is always eligible). Returns true when anything was lent.
 """
 function request_peer_loan!(model, borrower::Agent, amount::Float64, purpose::Symbol)
-    p = parameters(model); rng = abmrng(model)
+    p = parameters(model); rng = stream(model, :credit)
     model.credit_demand_this_round += amount
     bank = bank_of(model, borrower)
     reason = nothing
