@@ -1,6 +1,6 @@
 # BreadEconomySim — dashboard design document
 
-*Kept in step with `src/parameters.jl`; last regenerated 13 September 2026. The parameter tables below are generated from the source, so every field of `SimulationParameters` appears exactly once.*
+*Kept in step with `src/parameters.jl`; last updated 18 September 2026 (cooperative forms, membership contribution, random streams). The parameter tables below are generated from the source, so every field of `SimulationParameters` appears exactly once.*
 
 ## 1. Purpose
 
@@ -282,6 +282,22 @@ Column meanings: *widget* is the control; *range* the dashboard's allowed span (
 | `shareholder_count` | Int | `2` | integer field |  | ownership ≠ :none | :shareholders / :mixed — persons (lowest ids) who hold the shares |
 | `cooperative_farms` | Int | `2` | integer field |  | ownership = :mixed | :mixed |
 | `cooperative_bakeries` | Int | `2` | integer field |  | ownership = :mixed |  |
+| `cooperative_theatres` | Int | `0` | integer field | 0–number_of_theatres | ownership = :mixed and entertainment | theatres were for-profit only before 14 September 2026 |
+| `cooperative_form_farms` | Symbol | `:member` | select | :member, :worker | ownership ∈ (:cooperative, :mixed) | :member (the 13 September rule: open membership at par, one equal dividend per member) | :worker (membership follows employment, surplus by hours worked, taxed as wages). Farms cannot be consumer co-ops: they sell to bakeries, not persons |
+| `cooperative_form_bakeries` | Symbol | `:member` | select | :member, :worker, :consumer | ownership ∈ (:cooperative, :mixed) | as above; :consumer = membership follows purchases, surplus as an untaxed patronage rebate by units bought |
+| `cooperative_form_theatres` | Symbol | `:member` | select | :member, :worker, :consumer | cooperative_theatres > 0 | as above |
+| `patronage_window` | Int | `12` | integer field | 1–50 | any :worker / :consumer form | rounds of hours or purchases a distribution and the lapse rule are measured over |
+| `retained_surplus_share` | Float64 | `0.25` | slider / number | 0–0.9 | any :worker / :consumer form | share of every distribution locked in the indivisible reserve (never distributed; to the government on dissolution). Under SuMSy it pays demurrage like any balance |
+| `capital_deduction_share` | Float64 | `0.10` | slider / number | 0–1 | :worker form | share of each net wage withheld until the membership share is paid |
+| `membership_lapse_rounds_worker` | Int | `6` | integer field | 1–50 | :worker form | grace period before a member without hours is redeemed |
+| `membership_lapse_rounds_consumer` | Int | `12` | integer field | 1–50 | :consumer form | grace period before a member without purchases is redeemed |
+| `minimum_member_hours` | Float64 | `0.5` | slider / number | 0–4 | :worker form | average units a round below which worker membership lapses |
+| `members_first_hiring` | Bool | `true` | toggle |  | :worker form | members' capacity is allocated before the open market and the work spread over them in proportion to capacity; bakery members reserve capacity at the start of the round |
+| `member_price_awareness` | Bool | `true` | toggle |  | :consumer form | members rank sellers by ask net of the expected rebate |
+| `cooperative_founding` | Symbol | `:par_only` | select | :par_only, :symmetric | ownership ∈ (:cooperative, :mixed) | :symmetric — a cooperative short of capital calls on its members (spare cash first, then a personal loan), as a shareholder firm's founders are; :par_only — the cooperative borrows itself |
+| `membership_contribution` | Symbol | `:money` | select | :money, :buffer, :mixed_fixed, :mixed_flexible | ownership ∈ (:cooperative, :mixed) | what a member brings in: money at par; a pledge of demurrage-free buffer (no money moves, the exemption does); both; or one total split as the member chooses (idle buffer first, then money). A pledge is worth nothing under debt money: :buffer is then free and :mixed_flexible costs its money half |
+| `membership_buffer_pledge` | Float64 | `10.0` | slider / number | 0–demurrage_free_buffer | membership_contribution ≠ :money | buffer requirement, in currency units of exemption |
+| `buffer_contribution_value` | Float64 | `1.0` | slider / number | 0–5 | membership_contribution = :mixed_flexible | money a unit of pledged buffer counts for (0 under debt money) |
 | `dividend_build_rounds` | Int | `10` | integer field | 1–50 | ownership ≠ :none | cash above the reserve target is paid out over this many rounds |
 | `dividend_tax_rate` | Float64 | `0.30` | slider / number | 0–0.5 | ownership ≠ :none | Belgian withholding tax on dividends |
 | `share_market` | Bool | `false` | toggle |  | ownership ∈ (:shareholders, :mixed) | shareholder enterprises' shares trade once a round |
@@ -325,7 +341,28 @@ Column meanings: *widget* is the control; *range* the dashboard's allowed span (
 
 | parameter | type | default | widget | range / options | enabled by | meaning |
 |---|---|---|---|---|---|---|
+| `random_streams` | Bool | `true` | toggle |  |  | one random stream per subsystem (negotiation, land, labour, grain, bread, tickets, greed, credit, estates, shares, cooperatives), each seeded from `seed` and its name; false = the single shared stream of runs before 18 September 2026 |
 | `maximum_rounds` | Int | `50` | integer field | 10–500 |  |  |
+| `government_reserve_in_rounds` | Int | `0` | integer field | 0–24 |  | 0 = the government keeps whatever tax exceeds spending (under SuMSy it pays demurrage on it; reached a fifth of the stock). n = a reserve of n rounds of expected spending (trailing mean of outlays over `government_expense_window`) |
+| `government_expense_window` | Int | `12` | integer field | 1–50 | reserve > 0 | rounds over which expected spending and revenue are averaged |
+| `surplus_redistribution_share` | Float64 | `0.0` | slider | 0–1 | reserve > 0 | share of the surplus above target paid out equally to every living person each round |
+| `surplus_tax_reduction_share` | Float64 | `0.0` | slider | 0–1 | reserve > 0 | share of the surplus returned by lowering taxes (through `tax_policy` when set, else in full) |
+| `tax_policy` | Symbol | `:none` | select | :none, :scale, :brackets | reserve > 0 | raises on a shortfall (spending above revenue plus the reserve gap), cuts on a surplus; :scale = one multiplier on all taxes; :brackets = each progressive bracket in proportion to its rate (needs `income_tax_schedule = :progressive`) |
+| `tax_response_coverage` | Float64 | `0.5` | slider | 0–1 | tax_policy ≠ :none | share of the shortfall a raise is sized to cover |
+| `tax_response_step` | Float64 | `0.02` | slider | 0.005–0.2 | tax_policy ≠ :none | largest relative change in revenue per round, both directions — the "no shocks" limit |
+| `bracket_fixed_rise` | Float64 | `0.0` | number | 0–0.05 | tax_policy = :brackets | points added to every bracket per step on top of the proportional rise |
+| `tax_scale_maximum` | Float64 | `3.0` | number | 1–10 | tax_policy ≠ :none | ceiling on the multiplier |
+| `bracket_rate_maximum` | Float64 | `0.9` | number | 0.5–1 | tax_policy = :brackets | ceiling on any bracket rate |
+| `consumption_tax_rate` | Float64 | `0.0` | slider | 0–0.3 |  | VAT on bread and tickets, paid by the buyer on top of the price and booked as government revenue; buyers' willingness to pay is gross. Belgium ≈ 6 % |
+| `tax_levers` | NamedTuple | `(income = 0, consumption = 0, wealth = 0)` | three numbers | any finite | tax_policy ≠ :none | shift then move: each family first goes by r × its lever (positive = with the policy, negative = against, 0 = none), then by r with the others. (0, 0, 0) = one scale; −1 holds a family flat; (−2, +1, 0) shifts the burden from income to consumption while the total follows the budget |
+| `wealth_tax_rate` | Float64 | `0.0` | slider | 0–0.3 |  | yearly rate on persons' land (at the land price) and shares (at book value per unit; co-op membership at capital paid), charged every round at rate ÷ `wealth_tax_rounds_per_year`, scaled by the fiscal policy; unpaid amounts carried as arrears |
+| `wealth_tax_rounds_per_year` | Int | `12` | integer field | 1–52 | wealth_tax_rate > 0 | rounds a year for the wealth tax. Its own scale: moved with the policy's r and by the shift |
+| `shows_per_round` | Int | `0` | integer field | 0–10 | entertainment | 0 = unlimited; a theatre sells at most shows × seats tickets a round and hires no more labour than that takes |
+| `seats_per_show` | Int | `0` | integer field | 0–N | shows > 0 | 0 = one seat per person at founding |
+| `unmet_demand_share` | Float64 | `0.0` | slider | 0–0.5 |  | 0 = one missed buyer raises the ask; s = the unserved units must be ≥ s of sold + unserved. Wages keep the one-miss rule |
+| `unsold_share` | Float64 | `0.0` | slider | 0–0.5 |  | 0 = more than `unsold_tolerance_units` left cuts the ask; s = the unsold units must be ≥ s of what was offered |
+| `ask_floor` | Symbol | `:none` | select | :none, :cost | | :cost = the posted ask never below unit cost (`seller_reservation` at age 0), plus `ask_floor_markup_when_short` while the reserve or buffer is not full |
+| `ask_floor_markup_when_short` | Float64 | `0.05` | slider | 0–0.5 | ask_floor = :cost | markup above cost while cash is below the reserve (producer) or buffer (person) |
 | `stationary_rounds` | Int | `5` | integer field |  | stop_when_stationary |  |
 | `stationary_tolerance` | Float64 | `0.01` | slider / number |  | stop_when_stationary |  |
 | `seed` | Int | `1` | integer field | 1–10⁶ |  |  |
@@ -336,7 +373,7 @@ Column meanings: *widget* is the control; *range* the dashboard's allowed span (
 - `breads_per_meal` ≤ `maximum_breads_per_round` ≤ `greedy_max_breads_per_round`; `ration_breads_per_person` ≥ `breads_per_meal`.
 - Under `monetary_system = :sumsy` the dashboard forces `wage_tax_rate = 0`, `capital_tax_rate = 0`, the unemployment fee to 0 and `partial_unemployment_fee = false` unless the user unlocks them (a SuMSy village with wage taxes is allowed but flagged as unusual); `demurrage_tax_rate` is the SuMSy tax.
 - `initial_endowment = :norm` with `startup_financing = :paid_in_capital` requires `ownership ≠ :none` (otherwise there are no founders to borrow the villagers' starting cash).
-- `share_market = true` requires `ownership ∈ (:shareholders, :mixed)`; `cooperative_farms ≤ number_of_farms`, `cooperative_bakeries ≤ number_of_bakeries`.
+- `share_market = true` requires `ownership ∈ (:shareholders, :mixed)`; `cooperative_farms ≤ number_of_farms`, `cooperative_bakeries ≤ number_of_bakeries`, `cooperative_theatres ≤ number_of_theatres`; `cooperative_form_farms ≠ :consumer`; `membership_contribution = :buffer` needs `membership_buffer_pledge > 0`; `0 ≤ retained_surplus_share < 1`. These are enforced at construction (`validate_cooperatives`).
 - `harvest_shock_start` + `harvest_shock_length` ≤ `maximum_rounds`; `bond_term_short` < `bond_term_long`; `tax_bracket_edges` strictly increasing with one more rate than edges.
 - `initial_production_target` should be about `number_of_persons` ÷ (2 × number of farms) for a village that feeds itself from round 1; the dashboard proposes this value when the population changes.
 - Runs that end early report why (`termination_reason`): everyone dead, half dead (if enabled), no farm or bakery left, stationary, maximum rounds.
@@ -389,6 +426,14 @@ A preset is a named parameter set. The ladder of the report is the first family;
 - A *sweep* control: run one parameter across a list of values (e.g. `greed_hoarding` 0, 0.25, 0.5, 0.75, 1) and chart the metric cards against it.
 
 ## 10. Change log
+
+- 20 September 2026 (night): the mix is a lever per tax family (`tax_levers`: shift by r × lever, then move by r; replacing the weights, which could only raise, and the sliders, whose shift the raise cancelled), the wealth tax in the mix with its own scale; `mix` block.
+- 20 September 2026 (latest): wealth tax on land and shares at book value (`wealth_tax_rate`, `wealth_tax_rounds_per_year`); `wealth` block. 428 tests.
+- 20 September 2026 (later): consumption tax (`consumption_tax_rate`, `consumption_tax_share`), scaled by the fiscal policy; `vat` block. 418 tests.
+- 20 September 2026: theatre capacity (`shows_per_round`, `seats_per_show`); unmet-demand and unsold thresholds; ask floor at cost; `start_at_saturation = :equilibrium`; government reserve with per-capita and tax-cut disposal; fiscal policy (`tax_policy` :scale / :brackets, incremental, both directions). Findings in `HANDOFF_2026-09-18.md`. 395 tests. `all64.jl` resumable, takes `<block> <seeds> <systems>`. Starting prices asserted identical across systems.
+
+- 18 September 2026: one random stream per subsystem (`random_streams`); golden values regenerated as a second set, the 15 September set kept under `random_streams = false`; every cooperative run rerun. Membership contribution forms (`membership_contribution`, `membership_buffer_pledge`, `buffer_contribution_value`): a member may pledge demurrage-free buffer instead of money. 329 tests passing.
+- 14 September 2026 (cooperatives): three cooperative forms per kind (`cooperative_form_*`: :member kept as the original rule, :worker, :consumer), `cooperative_theatres`, patronage distribution with an indivisible reserve, members-first hiring with the work spread over members, membership out of wages, patronage rebates with member price awareness, hours- and purchase-based lapse, asset lock on dissolution, `cooperative_founding = :symmetric` capital calls. New data columns `coop_*`, `patronage_wages`, `rebates`, `membership_capital`, `reserved_labour`, `unemployed_members` / `_nonmembers`. Ladder rungs 9a, 9b; `all64.jl` blocks `coops` (8 variants) and `contribution` (6).
 
 - 13 September 2026: first version, generated from `parameters.jl` after the greed, rationing and tiered-price additions; 113-test suite passing.
 - 15 September 2026 (later): ladder rerun at 64 persons over 100 rounds with three seeds; `inherited_money` test variant; the report's ladder rebuilt on it.
