@@ -193,18 +193,18 @@ Every parameter, its default, its range and the rung or section that uses it is 
 
 ## 13. Stress tests: greed on the best cases
 
-Greed is put into the two debt villages the ladder ends on — rung 11, the best-surviving, and rung 12, the least-indebted — and into their SuMSy mirrors, in two doses: the richest quarter greedy (hoarding 0.5, the plausible case) and everyone greedy (the extreme). Ten seeds; alive of 64 (worst run) · tickets · cash Gini. *Provisional: the raw rows of S1–S3 were lost to a file crash on 21 September and are being rerun; the figures below are as read before the loss, S3 and S4 on the seeds completed.*
+Greed is put into the two debt villages the ladder ends on — rung 11, the best-surviving, and rung 12, the least-indebted — and into their SuMSy mirrors, in two doses: the richest quarter greedy (hoarding 0.5, the plausible case) and everyone greedy (the extreme). Ten seeds; alive of 64 (worst run) · runs in which the village stayed whole · tickets · cash Gini.
 
 | | debt, rung 11 (best surviving) | debt, rung 12 (least indebted) | SuMSy, rung 11 | SuMSy, rung 12 |
 |---|---|---|---|---|
-| no greed | 64 (63) · 32 · 0.33 | 53 (46) · 16 · 0.48 | 64 · 59 · 0.65 | 64 · 48 · 0.65 |
-| richest quarter greedy | **64 (63) · 0 · 0.27** | 55 (21) · 0 · 0.40 | **64 · 113 · 0.28** | 60 (25) · 111 · 0.33 |
-| everyone greedy | 64 (6 seeds) · 0 · 0.31 | 56 (45; 5 seeds) · 0 · 0.42 | 64 (9 seeds) | 58 (0; 9 of 10 whole) · 36 · 0.30 |
+| no greed | 64 (63) · 10 · 32 · 0.33 | 53 (46) · 3 · 16 · 0.48 | 64 (63) · 10 · 59 · 0.65 | 64 · 10 · 48 · 0.65 |
+| richest quarter greedy | **64 (63) · 10 · 0 · 0.27** | 55 (21) · 4 · 0 · 0.40 | **64 · 10 · 113 · 0.28** | 60 (25) · 9 · 111 · 0.33 |
+| everyone greedy | **64 · 10 · 0 · 0.36** | 57 (45) · 3 · 0 · 0.45 | 58 (0) · 9 · 37 · 0.32 | 58 (0) · 9 · 36 · 0.30 |
 
 Three readings.
 
-**The best-surviving villages survive greed.** Rung 11 keeps everyone alive under both doses in both systems. The debt village pays for it in a way the survival count hides: its theatres close in every greedy run (tickets 0), because the greedy buy the shares and the dividends that would have bought tickets go into more shares. The SuMSy village at rung 11 does the reverse — tickets double to 113 and unemployment falls below one — because responsive prices let the food chain outbid the theatres for labour and the guaranteed income lets everyone else keep buying.
+**The best-surviving debt village survives greed, and pays with its theatres.** Rung 11 keeps everyone alive under both doses. Its theatres close in every greedy run (tickets 0): the greedy buy the shares, and the dividends that would have bought tickets go into more shares. The village is fed and has nothing to do in the evening.
 
-**The least-indebted villages are fragile.** Rung 12 loses a run in ten to the greedy quarter in both systems (worst seeds 21 and 25 alive), and everyone-greedy costs the debt village nine more people than rung 11 does. A budget that has been squeezed toward balance — no wage tax, a 12 % VAT — has no slack when the greedy pull labour and cash out of the food chain. The least-indebted village is the least robust one.
+**The best-surviving SuMSy village survives the plausible greed and improves on it.** With the richest quarter greedy, tickets double to 113 and unemployment falls below one, because responsive prices let the food chain hold its labour and the guaranteed income lets everyone else keep buying. With everyone greedy it loses one run in ten outright — the village that dies goes the way of Section 10B, a late price spiral against a fixed income — and keeps the other nine whole. On the previous report's village universal greed killed nine runs in ten; what changed is the price rules and the disposal of the public surplus, not the money.
 
-**Universal greed no longer kills SuMSy.** On the previous report's village it died in nine runs of ten. On rung 11 — responsive prices, a reserve rule that cuts the surcharge instead of hoarding — it lives in every seed run so far; on rung 12 it lives in nine of ten. What changed is not the money: it is the price rules and where the public surplus goes, both of which Section 10 traced one at a time. The one SuMSy death in this table (rung 12, everyone greedy, one seed) is the equilibrium-start inflation of Section 10B arriving late in a norm-start village.
+**The least-indebted villages are the least robust.** Rung 12 loses a run in ten to the greedy quarter in both systems (worst seeds 21 and 25 alive) and, in the debt village, seven more people to universal greed than rung 11 does. A budget squeezed toward balance — no wage tax, a 12 % consumption tax — has no slack when the greedy pull labour and cash out of the food chain. The ladder's two endpoints are therefore a trade-off twice over: the least-indebted village is also the one greed breaks first.
