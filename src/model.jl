@@ -46,9 +46,24 @@ const RANDOM_STREAMS = (:negotiation, :land, :labour, :grain, :bread, :tickets, 
 """The random generator of a subsystem; the model's single generator when `random_streams` is off."""
 stream(model, name::Symbol) = parameters(model).random_streams ? model.streams[name] : model.single_stream
 
+# Agents.jl warns that the agent type is not concrete whenever it is a union — here `Union{Person, Enterprise}`, the
+# "mixed agent models" case its own message says can be silenced. It would be printed at every model creation and would
+# drown out warnings that matter, so it is filtered out here (and only it: everything else reaches the usual logger).
+# The tidier fix is upstream: `create_econo_model` could take a `warn` keyword and pass it to `StandardABM`.
+struct QuietAgentTypeLogger <: AbstractLogger
+    parent::AbstractLogger
+end
+Logging.shouldlog(l::QuietAgentTypeLogger, level, _module, group, id) = Logging.shouldlog(l.parent, level, _module, group, id)
+Logging.min_enabled_level(l::QuietAgentTypeLogger) = Logging.min_enabled_level(l.parent)
+Logging.catch_exceptions(l::QuietAgentTypeLogger) = Logging.catch_exceptions(l.parent)
+function Logging.handle_message(l::QuietAgentTypeLogger, level, message, _module, group, id, file, line; kwargs...)
+    (level == Logging.Warn && file isa String && endswith(file, "model_validation.jl")) && return nothing
+    Logging.handle_message(l.parent, level, message, _module, group, id, file, line; kwargs...)
+end
+
 function create_bread_economy(parameters::SimulationParameters = SimulationParameters())
     validate_cooperatives(parameters)
-    model = create_econo_model(Agent, copy(ROUND_BEHAVIORS))
+    model = with_logger(() -> create_econo_model(Agent, copy(ROUND_BEHAVIORS)), QuietAgentTypeLogger(current_logger()))
     Random.seed!(abmrng(model), parameters.seed)
     props = abmproperties(model)
     # version-stable streams (23 September 2026): StableRNGs seeded by a fixed rule — see stable_random.jl

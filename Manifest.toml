@@ -2,7 +2,7 @@
 
 julia_version = "1.13.0"
 manifest_format = "2.0"
-project_hash = "6ea091f5a8db42b1ef3cce8bb75403cb8768f7e3"
+project_hash = "28ba39cca84c09abfff71ed0fed1e494230f5fb1"
 
 [[deps.AbstractTrees]]
 git-tree-sha1 = "2d9c9a55f9c93e8887ad391fbae72f8ef55e1177"
@@ -94,7 +94,7 @@ uuid = "c3b6d118-76ef-56ca-8cc7-ebb389d030a1"
 version = "0.3.7"
 
 [[deps.BreadEconomySim]]
-deps = ["Agents", "CSV", "DataFrames", "EconoSim", "Random", "Statistics"]
+deps = ["Agents", "CSV", "DataFrames", "EconoSim", "OrderedCollections", "Random", "StableRNGs", "Statistics"]
 path = "."
 uuid = "7f0f7a1e-4d2c-4b5a-9c1e-b2ead0000001"
 version = "0.1.0"

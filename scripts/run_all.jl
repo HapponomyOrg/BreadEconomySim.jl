@@ -94,7 +94,10 @@ JOBS > 1 && nprocs() < JOBS + 1 && addprocs(JOBS - nprocs() + 1; exeflags = ["--
     """One run: build the rung's parameters, simulate, save the rounds to the job's own file (written under a temporary
     name and renamed, so a half-written file is never taken for a finished run)."""
     function run_job(job)
-        isfile(job.file) && return "skipped " * basename(job.file)
+        # every line is printed by the worker the moment the run finishes (a worker's output is forwarded to this terminal),
+        # so progress is visible while the batch is running, not only at the end
+        say(line) = (println("[", lpad(job.index, 4), "/", job.total, "] ", line); flush(stdout))
+        isfile(job.file) && (say("skipped (already done): $(job.rung) | $(job.system) seed $(job.seed)"); return "skipped")
         def = ladder(job.N, job.rounds, job.settlement)
         (_, kd, ks) = only(r for r in def.rungs if r[1] == job.rung)
         base, kw = job.system == "debt" ? (def.BARE_DEBT, kd) : (def.BARE_SUMSY, ks)
@@ -103,7 +106,9 @@ JOBS > 1 && nprocs() < JOBS + 1 && addprocs(JOBS - nprocs() + 1; exeflags = ["--
         d.rung .= job.rung; d.system .= job.system; d.seed .= job.seed; d.identity .= money_identity_gap(m)
         mkpath(dirname(job.file)); tmp = job.file * ".tmp"
         CSV.write(tmp, d); mv(tmp, job.file; force = true)
-        return "$(job.N) $(job.settlement) | $(job.rung) | $(job.system) seed $(job.seed): alive $(d.persons_alive[end]) of $(job.N), $(round(t, digits = 0)) s"
+        line = "$(job.N) $(job.settlement) | $(job.rung) | $(job.system) seed $(job.seed): alive $(d.persons_alive[end]) of $(job.N), $(round(t, digits = 0)) s"
+        say(line)
+        return line
     end
 end
 
@@ -117,18 +122,16 @@ for (N, settlement) in LADDERS
             (startswith(name, "X1") && system == "debt") && continue       # the 2×2 rungs run one side only
             (startswith(name, "X2") && system == "sumsy") && continue
             job = (; N, settlement, rounds = ROUNDS, rung = name, system, seed)
-            push!(jobs, (; job..., file = part_file(job)))
+            push!(jobs, (; job..., file = part_file(job), index = length(jobs) + 1, total = 0))
         end
     end
 end
+jobs = [(; j..., total = length(jobs)) for j in jobs]                 # each run knows its number, for the progress lines
 todo = filter(j -> !isfile(j.file), jobs)
 println("\n$(length(jobs)) runs in total, $(length(jobs) - length(todo)) already done, $(length(todo)) to go, on $(max(nworkers(), 1)) worker(s).\n"); flush(stdout)
 
 results = pmap(todo; on_error = e -> "FAILED: " * sprint(showerror, e)) do job
     run_job(job)
-end
-for (k, line) in enumerate(results)
-    println(lpad(k, 5), "  ", line)
 end
 failed = count(startswith("FAILED"), results)
 failed > 0 && @warn "$failed runs failed; run the script again to retry them (finished runs are kept)"

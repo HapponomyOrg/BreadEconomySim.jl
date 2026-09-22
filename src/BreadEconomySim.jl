@@ -9,6 +9,7 @@ using Agents
 using EconoSim
 using DataFrames
 using Random
+using Logging
 using Statistics
 using StableRNGs
 using OrderedCollections
