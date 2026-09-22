@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>The Bread Economy — what happens to a village when you change its money</title>
+<style>
+:root { --bg:#fbf8f2; --fg:#1f1d1a; --muted:#6b675f; --frame:#f0ebe0; --rule:#d9d2c3; --accent:#b8541c; --link:#9a4413; box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#181613; --fg:#ece7dd; --muted:#a9a397; --frame:#242019; --rule:#3a352c; --link:#f0a06a; } }
+:root[data-theme="dark"] { --bg:#181613; --fg:#ece7dd; --muted:#a9a397; --frame:#242019; --rule:#3a352c; --link:#f0a06a; }
+html { scroll-padding-top:env(safe-area-inset-top,0px); }
+body { margin:0; background:var(--bg); color:var(--fg); font:17px/1.6 Georgia, "Times New Roman", serif; }
+main { max-width:46rem; margin:0 auto; padding:2rem 1.2rem 4rem; }
+h1 { font-size:2.2rem; line-height:1.15; margin:1rem 0 .3rem; } h2 { font-size:1.5rem; margin-top:2.6rem; border-top:1px solid var(--rule); padding-top:1.2rem; }
+h3 { font-size:1.15rem; margin-top:1.8rem; } p { margin:.8rem 0; } em { color:var(--muted); }
+a, a:visited { color:var(--link); text-decoration:underline; text-underline-offset:2px; } a:hover { color:var(--accent); }
+aside.frame { background:var(--frame); border-left:4px solid var(--accent); padding:.6rem 1rem; margin:1.2rem 0; font:15px/1.5 system-ui, sans-serif; overflow-x:auto; }
+aside.frame p { margin:.4rem 0; }
+figure.chart { margin:1.4rem 0; padding:.6rem .4rem; border:1px solid var(--rule); border-radius:6px; }
+figure.chart figcaption { font:14px/1.45 system-ui, sans-serif; color:var(--muted); padding:.3rem .5rem 0; }
+table.whatis { font:13px/1.45 system-ui, sans-serif; margin:.4rem 0 1rem; } table.whatis td { width:50%; vertical-align:top; background:var(--frame); }
+table { border-collapse:collapse; width:100%; font:14px/1.4 system-ui, sans-serif; } th, td { border-bottom:1px solid var(--rule); padding:.3rem .5rem; text-align:left; vertical-align:top; }
+.wrap { overflow-x:auto; } nav.reportnav { font:14px/1.5 system-ui, sans-serif; color:var(--muted); }
+.colophon { color:var(--muted); font-size:.9rem; margin-top:3rem; border-top:1px solid var(--rule); padding-top:1rem; }
+</style></head><body><main>
+<h1>The Bread Economy</h1>
+<p><em>What happens to a village when you change its money</em></p>
+<p>Version 3 — 21 September 2026</p>
+<p>← Previous report: <a href="https://claude.ai/code/artifact/2be74be5-2f76-43a0-954b-dfb600013158" target="_blank" rel="noopener">version 2, 15 September 2026</a> (<a href="https://claude.ai/code/artifact/2be74be5-2f76-43a0-954b-dfb600013158" target="_blank" rel="noopener">https://claude.ai/code/artifact/2be74be5-2f76-43a0-954b-dfb600013158</a>) · Next report: none yet</p>
+<p><em>This is an AI-generated report. It was written by Claude (Anthropic) in an interactive session with a human researcher, who set the questions, the design of the village and the rules of engagement, and it is supported throughout by the results of the simulations described. The source code of the simulation is public at <a href="https://github.com/HapponomyOrg/BreadEconomySim.jl" target="_blank" rel="noopener">https://github.com/HapponomyOrg/BreadEconomySim.jl</a>. Read it as a working document: every number in it comes from a run that can be repeated, and every judgement in it is open to challenge.</em></p>
+<p>Some passages are set apart in frames like this one. They hold the numbers and the mechanics for the reader who wants them; the running text can be read without them.</p>
+<aside class="frame">
+<p><strong>How to read the numbers in this report.</strong><br />
+Everything here comes from a computer simulation. The village is run for a hundred rounds, ten times over, with a different roll of the dice each time; the figures given are the average of those ten runs, and where one run went badly wrong the worst one is mentioned as well. A round is best thought of as a month. There are sixty-four villagers. "Alive" means alive at the end of the hundred rounds. Whenever a result rests on a rule the author chose rather than something measured in the real world, the text says so. The code and every result are public: github.com/HapponomyOrg/BreadEconomySim.jl.</p>
+</aside>
+
+<h2>1. A village, twice</h2>
+<p>Imagine a small village. Sixty-four people live there. Some own land, most do not. Two farms grow grain, two bakeries turn it into bread, and later on two theatres give people something to do in the evening. Everyone needs two loaves a day. Go three days without any bread at all and you die.</p>
+<p>Now imagine the same village built twice, with the same people, the same fields, the same ovens, the same habits — and one difference: where its money comes from.</p>
+<p>In the first village, money is what it is for us today. It comes into being when a bank makes a loan and disappears again when the loan is paid back. Every euro in someone's pocket is a euro that someone else owes. The government pays for a few public jobs and a small benefit for people without work, out of taxes and, when the taxes fall short, out of borrowing.</p>
+<p>In the second village, every person receives a fixed sum of new money every month, whether they work or not. Money that sits idle above a modest cushion pays a parking fee — a small percentage each month simply disappears. On top of the fee a smaller percentage of the same idle money goes to the government, and that is the government's income. Nobody owes anyone for the money in their pocket. This second arrangement has a name, SuMSy, and it is the alternative this report is about.</p>
+<p>The report builds the village up one piece at a time. First there is nothing but fields, ovens and hungry people. Then a government is added, then interest on savings, then a theatre, then the possibility for the government to borrow from its own citizens, then a second theatre, then shareholders and a market where shares change hands, then a set of price rules that make the village's markets behave more like real ones, then a public reserve, and finally a tax policy that tries to keep the government's books in order. At every step both villages get the same addition, and at every step we look at the same things: who is alive, who is hungry, what a loaf costs, and how much the government owes.</p>
+<p>At the end we do something unkind: we make some of the villagers greedy and see which village breaks.</p>
+<h2>2. Two kinds of money, in plain words</h2>
+<p><strong>Money as debt.</strong> Two banks lend to the farms, the bakeries, the theatres, the households and the government. A loan puts money into the world; paying it back takes it out again. Interest is how the banks live. The government taxes wages at fifteen percent, pays wages for about a tenth of the village's work, gives two loaves a month to anyone without a job, and borrows whatever it is short. Nothing stops it borrowing more.</p>
+<p><strong>Money as a guaranteed income.</strong> A money authority puts five units into every living person's account each month. Whatever anyone holds above a cushion of thirty pays a parking fee of two percent a month — it is not taxed, it is gone. On top of the fee, a further one percent of that same idle money goes to the government each month: a parking tax next to the parking fee, and the government's only income. Nobody's wages are taxed. Because of how it is made and unmade, the total amount of money in this village settles at a level set by those two numbers, the guaranteed income and the parking fee, and nothing else can move it — not prices, not lending, not the government. Banks exist but only pass existing money between savers and borrowers. Land is paid for in instalments.</p>
+<p>Both villages start from the same prices and with the same habits. Everything that differs afterwards, differs because of the money.</p>
+<aside class="frame">
+<p><strong>The parameters behind the two villages.</strong><br />
+Debt village: wage tax 15 %, capital income tax 15 %, public employment 10 % of total labour, unemployment benefit two loaves (never less than two), bank lending rate cost-covering and capped at 5 % a month, government borrowing unlimited, bonds from rung 5.<br />
+SuMSy village: guaranteed income 5 a month, parking-fee-free buffer 30, parking fee (demurrage) 2 % a month on balances above it, a parking tax of 1 % a month on the same base, on top of the fee, to the government, no income tax, bank rate −1 %, land bought on instalment.<br />
+Both: one price vector at the start (bread 5, grain 5.2, wage 3.92, rent 0.75, ticket 2), chosen so that each link in the chain can pay a worker one meal a month; the scripts refuse to compare villages that start from different prices.</p>
+</aside>
+
+<h2>3. Who lives there</h2>
+<p>Sixty-four people, each able to do up to four units of work a month. Sixteen of them own the land, a unit and a half a head. Two farms rent that land and hire workers to grow grain. Two bakeries buy the grain and hire workers to bake it — two loaves to a grain. Two theatres, from the seventh step up, hire workers to put on shows; one worker can entertain two and a half people. Two banks. A government. And, in the second village, the money authority.</p>
+<p>Later in the story the farms, bakeries and theatres get owners: four founders each, whose shares can be bought and sold. On one side step the village gets four farms, four bakeries and four theatres, and half of each become cooperatives instead.</p>
+<h2>4. A month in the village</h2>
+<p>The month starts with the banks setting their rates and the landowners letting their fields. The farms and the theatres hire. The grain comes in; the bakeries buy it and hire their bakers. Bread is baked. The government hires whoever is still without work, up to its tenth. Then everyone who has not yet got a meal goes to the cheapest bakery, and whoever has money left over after keeping a cushion for lean times buys a theatre ticket.</p>
+<p>Then comes a step that matters more than it sounds: all the promises to pay made during the month are settled at once, netted against each other. A bakery that has sold bread can pay for the grain it bought with the money it is about to receive. Without this step — the report comes back to it — the debt village's bakeries go under in the first weeks.</p>
+<p>After settlement, debts are serviced, taxes paid, profits handed to owners. In the SuMSy village the parking fee falls due on idle money. The government puts its reserve aside and, in the later steps, adjusts its taxes. Everyone eats. Whoever ate too little works less next month; whoever ate nothing for three months is buried. Old bread goes stale; prices and plans adjust for the month to come.</p>
+<h2>5. How the villagers decide</h2>
+<p>The villagers are not clever. They follow simple rules, the same in both villages, and the point of the exercise is to see what those rules do when they all run at once.</p>
+<p>A baker bakes what sold last month plus a little extra. A seller asks a price and a buyer offers one, and they meet somewhere in between. A hungry person will pay more. Nobody sells for less than it cost to make. Everyone offers all the work they can, and asks for a wage that buys a meal. Everyone keeps a cushion of three meals' worth of money if they can, and borrows or dips into the cushion when they must.</p>
+<p>Two of the rules deserve a closer look, because the first version of this report got them wrong and the whole story changed when they were put right.</p>
+<p><strong>When does a price go up?</strong> A bakery raises its price only when it has turned away at least one customer in twenty, and lowers it only when at least one loaf in twenty has stayed on the shelf. The first version of this report had prices rise the moment a single customer found no bread — one missed loaf in a hundred and up went the price by six percent — which no real market does, and which on its own starved a village that has nothing wrong with it (see the next section). That rule is gone.</p>
+<p><strong>Who does a cooperative serve first?</strong> Cooperatives now come in three kinds — owned by their customers, owned by their workers, or open to anyone with money to spare — and a worker-owned firm gives its own members the work first, sharing it out among them when there is not enough to go round. That is how real worker cooperatives behave, and it changes what cooperatives do for the village.</p>
+<aside class="frame">
+<p><strong>The behaviour rules, for the reader who wants them.</strong><br />
+<em>Production:</em> target = last month's demand + 10 % (from rung 1); a theatre plans on expected ticket demand and may be capped at a number of shows with a seat for every villager.<br />
+<em>Prices:</em> seller's ask and buyer's bid concede toward each other in six steps. A buyer's ceiling for bread is 1.3 × the recent price, higher when hungry; the seller's floor is unit cost, falling as bread ages. The ask rises 6 % when ≥ 5 % of demand went unserved, falls 6 % when ≥ 5 % of the offer stayed unsold; from rung 10 the posted ask never falls below unit cost (+5 % while the seller's reserve is short).<br />
+<em>Work:</em> full capacity offered; reservation wage = one meal net of tax, lowered by hunger; employers hire one unit at a time in turns. Worker co-ops allocate to members first, in proportion to remaining capacity.<br />
+<em>Money:</em> three meals' cushion; borrow or spend the cushion on a coin flip; land at a multiple of its rent.<br />
+<em>Government (rungs 11–12):</em> a reserve of three months' expected spending; surplus above it lowers taxes; on a shortfall taxes rise to cover half of it, at most 2 % of revenue a month, with a lever per tax family deciding which taxes carry the change (the debt village's endpoint relieves wages entirely and lets a consumption tax carry the raise, up to twice its rate). Under SuMSy the "income" family is the parking tax; SuMSy never taxes income.<br />
+<em>Eating:</em> two loaves a meal; one loaf costs a third of next month's capacity; three months with nothing is death.<br />
+<em>Ownership:</em> shareholder firms pay dividends above a working reserve; shares trade at a forward valuation; founders keep 51 %. Co-ops: member (open membership at par, equal dividend), worker (membership through employment, surplus by hours worked, taxed as wages, a quarter locked in an indivisible reserve), consumer (membership through purchases, surplus rebated on what each member bought). Under SuMSy a member may pledge part of the demurrage-free buffer instead of paying money.</p>
+</aside>
+
+<h2>6. Why the rules matter more than the money — at first</h2>
+<p>Before the two kinds of money can be compared, the village has to work at all. Three things learned on the way are worth telling.</p>
+<p><strong>The one missed loaf.</strong> The first report's bare SuMSy village — no government, no theatre, nothing but the guaranteed income — lost about one person in six, and the report read this as a weakness of SuMSy. It was a weakness of a rule: the price rose on a single missed loaf, so it ratcheted upward for a hundred months, and in a bigger village, where someone misses a loaf every month, it would have starved half the people. With the price reacting to one customer in twenty, nobody dies. The rule was a defect and has been removed from the model rather than kept as a step; the bare debt village loses three people in four either way, because its problem is that money only comes through work, and there is not enough work.</p>
+<p><strong>Rolling the dice properly.</strong> A simulation with chance in it has to be run many times. The first report ran each village three times; this one runs it ten, and it draws its chance events from separate sources for each part of the model, so that switching on a feature in one corner of the village does not change the luck in another. Several of the first report's claims turned out to be one lucky run out of three. Where the ten runs disagree — some villages whole, some dead — the text says how many survived rather than giving an average that describes none of them.</p>
+<p><strong>How much money a SuMSy village has.</strong> The amount is fixed by the guaranteed income and the parking fee. A village that starts with everyone holding only their cushion takes about five years to fill up to that level, and prices rise on the way — inflation, of the ordinary kind: more money for the same bread. What SuMSy does with it is put a ceiling on it. Once the money stock reaches the level the two rates fix, it cannot grow further, and the rise in prices stops with it. Section 10 starts a village at the full level directly, which turns out to be the fairer test.</p>
+<aside class="frame">
+<p><strong>Rung 0 in numbers, ten runs.</strong><br />
+For the record, step 0 under the one-miss rule (ten runs): SuMSy 53 of 64 alive (worst 40), bread 20.7, wealth Gini 0.88; at 128 villagers 65 alive (worst 49). Under the 5 % triggers: 64 alive in every run, bread 5.1, wealth Gini 0.16. Debt village: about 15 alive either way. Random draws: eleven separate streams, one per subsystem, each seeded from the run seed and the subsystem's name. SuMSy money stock: each balance converges to buffer + income ÷ (parking fee + parking tax) = 197; the village's total to about 14,700; prices to about 1.35 × the starting vector.</p>
+</aside>
+
+<h2>7. The ladder</h2>
+<figure class="chart"><svg viewBox="0 0 760 330" role="img" aria-label="Alive at the end, of 64" style="width:100%;height:auto;font-family:inherit">
+<text x="48" y="18" font-size="14" font-weight="600" fill="currentColor">Alive at the end, of 64</text>
+<line x1="48" x2="744" y1="266.0" y2="266.0" stroke="currentColor" stroke-opacity="0.15"/>
+<text x="42" y="270.0" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">0</text>
+<line x1="48" x2="744" y1="208.0" y2="208.0" stroke="currentColor" stroke-opacity="0.15"/>
+<text x="42" y="212.0" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">17</text>
+<line x1="48" x2="744" y1="150.0" y2="150.0" stroke="currentColor" stroke-opacity="0.15"/>
+<text x="42" y="154.0" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">34</text>
+<line x1="48" x2="744" y1="92.0" y2="92.0" stroke="currentColor" stroke-opacity="0.15"/>
+<text x="42" y="96.0" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">51</text>
+<line x1="48" x2="744" y1="34.0" y2="34.0" stroke="currentColor" stroke-opacity="0.15"/>
+<text x="42" y="38.0" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">68</text>
+<rect x="53.4" y="213.8" width="19.4" height="52.2" fill="#b8541c"><title>Debt money, 0 bare: 15.3</title></rect>
+<rect x="106.9" y="210.7" width="19.4" height="55.3" fill="#b8541c"><title>Debt money, 1 plan: 16.2</title></rect>
+<rect x="160.4" y="47.6" width="19.4" height="218.4" fill="#b8541c"><title>Debt money, 2 gov: 64</title></rect>
+<rect x="214.0" y="47.6" width="19.4" height="218.4" fill="#b8541c"><title>Debt money, 3 int: 64</title></rect>
+<rect x="267.5" y="47.6" width="19.4" height="218.4" fill="#b8541c"><title>Debt money, 4 theatre: 64</title></rect>
+<rect x="321.0" y="50.4" width="19.4" height="215.6" fill="#b8541c"><title>Debt money, 5 bonds: 63.2</title></rect>
+<rect x="374.6" y="49.7" width="19.4" height="216.3" fill="#b8541c"><title>Debt money, 6 charge: 63.4</title></rect>
+<rect x="428.1" y="48.7" width="19.4" height="217.3" fill="#b8541c"><title>Debt money, 7 2nd th.: 63.7</title></rect>
+<rect x="481.7" y="49.0" width="19.4" height="217.0" fill="#b8541c"><title>Debt money, 8 shares: 63.6</title></rect>
+<rect x="535.2" y="49.0" width="19.4" height="217.0" fill="#b8541c"><title>Debt money, 9 co-ops: 63.6</title></rect>
+<rect x="588.7" y="48.3" width="19.4" height="217.7" fill="#b8541c"><title>Debt money, 10 prices: 63.8</title></rect>
+<rect x="642.3" y="48.3" width="19.4" height="217.7" fill="#b8541c"><title>Debt money, 11 reserve: 63.8</title></rect>
+<rect x="695.8" y="84.8" width="19.4" height="181.2" fill="#b8541c"><title>Debt money, 12 fiscal: 53.1</title></rect>
+<rect x="74.8" y="84.8" width="19.4" height="181.2" fill="#2a7f62"><title>SuMSy, 0 bare: 53.1</title></rect>
+<rect x="128.3" y="47.6" width="19.4" height="218.4" fill="#2a7f62"><title>SuMSy, 1 plan: 64</title></rect>
+<rect x="181.8" y="47.6" width="19.4" height="218.4" fill="#2a7f62"><title>SuMSy, 2 gov: 64</title></rect>
+<rect x="235.4" y="47.6" width="19.4" height="218.4" fill="#2a7f62"><title>SuMSy, 3 int: 64</title></rect>
+<rect x="288.9" y="47.6" width="19.4" height="218.4" fill="#2a7f62"><title>SuMSy, 4 theatre: 64</title></rect>
+<rect x="342.5" y="47.6" width="19.4" height="218.4" fill="#2a7f62"><title>SuMSy, 5 bonds: 64</title></rect>
+<rect x="396.0" y="47.6" width="19.4" height="218.4" fill="#2a7f62"><title>SuMSy, 6 charge: 64</title></rect>
+<rect x="449.5" y="47.6" width="19.4" height="218.4" fill="#2a7f62"><title>SuMSy, 7 2nd th.: 64</title></rect>
+<rect x="503.1" y="47.6" width="19.4" height="218.4" fill="#2a7f62"><title>SuMSy, 8 shares: 64</title></rect>
+<rect x="556.6" y="47.6" width="19.4" height="218.4" fill="#2a7f62"><title>SuMSy, 9 co-ops: 64</title></rect>
+<rect x="610.2" y="47.6" width="19.4" height="218.4" fill="#2a7f62"><title>SuMSy, 10 prices: 64</title></rect>
+<rect x="663.7" y="48.0" width="19.4" height="218.0" fill="#2a7f62"><title>SuMSy, 11 reserve: 63.9</title></rect>
+<rect x="717.2" y="47.6" width="19.4" height="218.4" fill="#2a7f62"><title>SuMSy, 12 fiscal: 64</title></rect>
+<text x="74.8" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">0 bare</text>
+<text x="128.3" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">1 plan</text>
+<text x="181.8" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">2 gov</text>
+<text x="235.4" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">3 int</text>
+<text x="288.9" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">4 theatre</text>
+<text x="342.5" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">5 bonds</text>
+<text x="396.0" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">6 charge</text>
+<text x="449.5" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">7 2nd th.</text>
+<text x="503.1" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">8 shares</text>
+<text x="556.6" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">9 co-ops</text>
+<text x="610.2" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">10 prices</text>
+<text x="663.7" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">11 reserve</text>
+<text x="717.2" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">12 fiscal</text>
+<rect x="48" y="312" width="12" height="12" fill="#b8541c"/><text x="64" y="322" font-size="11" fill="currentColor">Debt money</text>
+<rect x="156" y="312" width="12" height="12" fill="#2a7f62"/><text x="172" y="322" font-size="11" fill="currentColor">SuMSy</text>
+<text x="744" y="322" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">ten runs, mean</text>
+</svg><figcaption>Figure 1. Who is alive after a hundred months, step by step. Debt money needs a government (step 2); SuMSy needs only a planning margin (step 1). Step 12 costs the debt village eleven people.</figcaption></figure>
+<p>Now the village is built up, one step at a time. At each step the same thing is added to both villages, and the same questions are asked. The frame at the end of each step has the figures.</p>
+<h3>Step 0. Bare bones</h3>
+<div class="wrap"><table class="whatis"><thead><tr><th>Debt money</th><th>SuMSy</th></tr></thead><tbody><tr><td><b>128 villagers</b>, 32 of them landowners · 4 farms, 4 bakeries · no owners<br>Money: created by bank loans; banks start at 5 % a month, capped at 5 %; the government borrows at 0.5 %<br>Government: none<br>Starting prices: bread 5, grain 5.2, wage 3.92 a unit (a full month's work 15.68), rent 0.75, ticket 2; a buyer pays up to 1.3 × last month's bread price</td><td><b>128 villagers</b>, 32 of them landowners · 4 farms, 4 bakeries · no owners<br>Money: guaranteed income 5 a month; cushion 30; parking fee 2 % a month above it; banks at −1 %<br>Government: none<br>Starting prices: bread 5, grain 5.2, wage 3.92 a unit (a full month's work 15.68), rent 0.75, ticket 2; a buyer pays up to 1.3 × last month's bread price</td></tr></tbody></table></div>
+<p>Fields, ovens, hungry people. No government, no benefit for the workless, no theatre.</p>
+<p>In the debt village three people in four are dead within the hundred months. There is no work for most of them, and without work there is no money, and without money there is no bread. In the SuMSy village everyone lives: the guaranteed income is enough for a meal.</p>
+<aside class="frame">
+<p>Figures pending the 128-villager ladder. (At 64 villagers with the 5 % triggers: debt 15 alive, SuMSy 64, bread 5.1.)</p>
+</aside>
+
+<h3>Step 1. Planning ahead</h3>
+<div class="wrap"><table class="whatis"><thead><tr><th>Debt money</th><th>SuMSy</th></tr></thead><tbody><tr><td><b>128 villagers</b>, 32 of them landowners · 4 farms, 4 bakeries · no owners<br>Money: created by bank loans; banks start at 5 % a month, capped at 5 %; the government borrows at 0.5 %<br>Government: none<br>Starting prices: bread 5, grain 5.2, wage 3.92 a unit (a full month's work 15.68), rent 0.75, ticket 2; a buyer pays up to 1.3 × last month's bread price</td><td><b>128 villagers</b>, 32 of them landowners · 4 farms, 4 bakeries · no owners<br>Money: guaranteed income 5 a month; cushion 30; parking fee 2 % a month above it; banks at −1 %<br>Government: none<br>Starting prices: bread 5, grain 5.2, wage 3.92 a unit (a full month's work 15.68), rent 0.75, ticket 2; a buyer pays up to 1.3 × last month's bread price</td></tr></tbody></table></div>
+<p>Farmers and bakers now plan for a tenth more than last month's demand.</p>
+<p>It does nothing for the debt village, whose problem is not supply. In the SuMSy village nobody dies from here to the end of the story. A lot of people are without work, because there is nothing to do in this village but grow and bake.</p>
+<aside class="frame">
+<p>Debt: 16 alive, bread 4.94. SuMSy: 64 alive, unemployment 29.7, bread 3.39, cash Gini 0.09.</p>
+</aside>
+
+<h3>Step 2. A government</h3>
+<div class="wrap"><table class="whatis"><thead><tr><th>Debt money</th><th>SuMSy</th></tr></thead><tbody><tr><td><b>128 villagers</b>, 32 of them landowners · 4 farms, 4 bakeries · no owners<br>Money: created by bank loans; banks start at 5 % a month, capped at 5 %; the government borrows at 0.5 %<br>Government: public jobs for 10 % of the village's work, 2 loaves for the workless; taxes: wages 15 %, capital income 15 %, dividends 30 %, borrows from the banks<br>Starting prices: bread 5, grain 5.2, wage 3.92 a unit (a full month's work 15.68), rent 0.75, ticket 2; a buyer pays up to 1.3 × last month's bread price</td><td><b>128 villagers</b>, 32 of them landowners · 4 farms, 4 bakeries · no owners<br>Money: guaranteed income 5 a month; cushion 30; parking fee 2 % a month above it; banks at −1 %<br>Government: public jobs for 10 % of the village's work; no benefit, no tax on income; parking tax 1 % a month on idle money<br>Starting prices: bread 5, grain 5.2, wage 3.92 a unit (a full month's work 15.68), rent 0.75, ticket 2; a buyer pays up to 1.3 × last month's bread price</td></tr></tbody></table></div>
+<p>Public jobs for a tenth of the village's work, two loaves a month for anyone without a job. The debt village pays for this with a fifteen-percent tax on wages; the SuMSy village with a parking tax of one percent a month on idle money, charged on top of the two-percent parking fee.</p>
+<p>This is the step that changes everything on the debt side. Everyone lives. But the government spends far more than the tax brings in, and borrows the rest — about three quarters of what it spends. Its debt reaches three times the village's yearly output. Everything that follows on this side of the ladder rests on that fact: <strong>the debt village lives because its government goes into debt.</strong></p>
+<p>On the SuMSy side the government has the opposite problem. Its parking tax brings in far more than the few public jobs cost, and the surplus piles up on its account — where, since it is idle money, it pays the fee too. Nobody minds yet.</p>
+<aside class="frame">
+<p>Debt: 64 alive, unemployment 22.8, bread 4.37, public debt 21,354 (305 % of yearly output), the government spending 170 a month against revenue of about 45. SuMSy: 64 alive, bread 3.19, no debt, government surplus 72 a month, cash Gini 0.09.</p>
+</aside>
+
+<h3>Step 3. Interest on savings</h3>
+<div class="wrap"><table class="whatis"><thead><tr><th>Debt money</th><th>SuMSy</th></tr></thead><tbody><tr><td><b>128 villagers</b>, 32 of them landowners · 4 farms, 4 bakeries · no owners<br>Money: created by bank loans; banks start at 5 % a month, capped at 5 %; the government borrows at 0.5 %; savings earn 1 % a year<br>Government: public jobs for 10 % of the village's work, 2 loaves for the workless; taxes: wages 15 %, capital income 15 %, dividends 30 %, borrows from the banks<br>Starting prices: bread 5, grain 5.2, wage 3.92 a unit (a full month's work 15.68), rent 0.75, ticket 2; a buyer pays up to 1.3 × last month's bread price</td><td><b>128 villagers</b>, 32 of them landowners · 4 farms, 4 bakeries · no owners<br>Money: guaranteed income 5 a month; cushion 30; parking fee 2 % a month above it; banks at −1 %<br>Government: public jobs for 10 % of the village's work; no benefit, no tax on income; parking tax 1 % a month on idle money<br>Starting prices: bread 5, grain 5.2, wage 3.92 a unit (a full month's work 15.68), rent 0.75, ticket 2; a buyer pays up to 1.3 × last month's bread price</td></tr></tbody></table></div>
+<p>A small interest on deposits in the debt village. No visible effect at this size. SuMSy deposits earn nothing, and nothing changes.</p>
+<h3>Step 4. A theatre</h3>
+<div class="wrap"><table class="whatis"><thead><tr><th>Debt money</th><th>SuMSy</th></tr></thead><tbody><tr><td><b>128 villagers</b>, 32 of them landowners · 4 farms, 4 bakeries, 2 theatres; 1 show a month, 80 seats a theatre · no owners<br>Money: created by bank loans; banks start at 5 % a month, capped at 5 %; the government borrows at 0.5 %; savings earn 1 % a year<br>Government: public jobs for 10 % of the village's work, 2 loaves for the workless; taxes: wages 15 %, capital income 15 %, dividends 30 %, borrows from the banks<br>Starting prices: bread 5, grain 5.2, wage 3.92 a unit (a full month's work 15.68), rent 0.75, ticket 2; a buyer pays up to 1.3 × last month's bread price</td><td><b>128 villagers</b>, 32 of them landowners · 4 farms, 4 bakeries, 2 theatres; 1 show a month, 80 seats a theatre · no owners<br>Money: guaranteed income 5 a month; cushion 30; parking fee 2 % a month above it; banks at −1 %<br>Government: public jobs for 10 % of the village's work; no benefit, no tax on income; parking tax 1 % a month on idle money<br>Starting prices: bread 5, grain 5.2, wage 3.92 a unit (a full month's work 15.68), rent 0.75, ticket 2; a buyer pays up to 1.3 × last month's bread price</td></tr></tbody></table></div>
+<figure class="chart"><svg viewBox="0 0 760 330" role="img" aria-label="Without work, of 64" style="width:100%;height:auto;font-family:inherit">
+<text x="48" y="18" font-size="14" font-weight="600" fill="currentColor">Without work, of 64</text>
+<line x1="48" x2="744" y1="266.0" y2="266.0" stroke="currentColor" stroke-opacity="0.15"/>
+<text x="42" y="270.0" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">0</text>
+<line x1="48" x2="744" y1="208.0" y2="208.0" stroke="currentColor" stroke-opacity="0.15"/>
+<text x="42" y="212.0" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">8.0136</text>
+<line x1="48" x2="744" y1="150.0" y2="150.0" stroke="currentColor" stroke-opacity="0.15"/>
+<text x="42" y="154.0" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">16.0272</text>
+<line x1="48" x2="744" y1="92.0" y2="92.0" stroke="currentColor" stroke-opacity="0.15"/>
+<text x="42" y="96.0" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">24.0408</text>
+<line x1="48" x2="744" y1="34.0" y2="34.0" stroke="currentColor" stroke-opacity="0.15"/>
+<text x="42" y="38.0" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">32.0544</text>
+<rect x="53.4" y="216.7" width="19.4" height="49.3" fill="#b8541c"><title>Debt money, 0 bare: 6.81</title></rect>
+<rect x="106.9" y="215.6" width="19.4" height="50.4" fill="#b8541c"><title>Debt money, 1 plan: 6.96</title></rect>
+<rect x="160.4" y="100.8" width="19.4" height="165.2" fill="#b8541c"><title>Debt money, 2 gov: 22.82</title></rect>
+<rect x="214.0" y="100.4" width="19.4" height="165.6" fill="#b8541c"><title>Debt money, 3 int: 22.88</title></rect>
+<rect x="267.5" y="151.1" width="19.4" height="114.9" fill="#b8541c"><title>Debt money, 4 theatre: 15.88</title></rect>
+<rect x="321.0" y="136.7" width="19.4" height="129.3" fill="#b8541c"><title>Debt money, 5 bonds: 17.87</title></rect>
+<rect x="374.6" y="139.0" width="19.4" height="127.0" fill="#b8541c"><title>Debt money, 6 charge: 17.55</title></rect>
+<rect x="428.1" y="137.8" width="19.4" height="128.2" fill="#b8541c"><title>Debt money, 7 2nd th.: 17.71</title></rect>
+<rect x="481.7" y="127.0" width="19.4" height="139.0" fill="#b8541c"><title>Debt money, 8 shares: 19.2</title></rect>
+<rect x="535.2" y="138.3" width="19.4" height="127.7" fill="#b8541c"><title>Debt money, 9 co-ops: 17.64</title></rect>
+<rect x="588.7" y="124.6" width="19.4" height="141.4" fill="#b8541c"><title>Debt money, 10 prices: 19.54</title></rect>
+<rect x="642.3" y="124.6" width="19.4" height="141.4" fill="#b8541c"><title>Debt money, 11 reserve: 19.54</title></rect>
+<rect x="695.8" y="133.3" width="19.4" height="132.7" fill="#b8541c"><title>Debt money, 12 fiscal: 18.34</title></rect>
+<rect x="74.8" y="71.2" width="19.4" height="194.8" fill="#2a7f62"><title>SuMSy, 0 bare: 26.91</title></rect>
+<rect x="128.3" y="51.2" width="19.4" height="214.8" fill="#2a7f62"><title>SuMSy, 1 plan: 29.68</title></rect>
+<rect x="181.8" y="100.9" width="19.4" height="165.1" fill="#2a7f62"><title>SuMSy, 2 gov: 22.81</title></rect>
+<rect x="235.4" y="100.9" width="19.4" height="165.1" fill="#2a7f62"><title>SuMSy, 3 int: 22.81</title></rect>
+<rect x="288.9" y="194.9" width="19.4" height="71.1" fill="#2a7f62"><title>SuMSy, 4 theatre: 9.83</title></rect>
+<rect x="342.5" y="194.9" width="19.4" height="71.1" fill="#2a7f62"><title>SuMSy, 5 bonds: 9.83</title></rect>
+<rect x="396.0" y="194.6" width="19.4" height="71.4" fill="#2a7f62"><title>SuMSy, 6 charge: 9.86</title></rect>
+<rect x="449.5" y="194.6" width="19.4" height="71.4" fill="#2a7f62"><title>SuMSy, 7 2nd th.: 9.86</title></rect>
+<rect x="503.1" y="138.4" width="19.4" height="127.6" fill="#2a7f62"><title>SuMSy, 8 shares: 17.63</title></rect>
+<rect x="556.6" y="190.7" width="19.4" height="75.3" fill="#2a7f62"><title>SuMSy, 9 co-ops: 10.41</title></rect>
+<rect x="610.2" y="137.0" width="19.4" height="129.0" fill="#2a7f62"><title>SuMSy, 10 prices: 17.82</title></rect>
+<rect x="663.7" y="143.2" width="19.4" height="122.8" fill="#2a7f62"><title>SuMSy, 11 reserve: 16.97</title></rect>
+<rect x="717.2" y="135.2" width="19.4" height="130.8" fill="#2a7f62"><title>SuMSy, 12 fiscal: 18.07</title></rect>
+<text x="74.8" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">0 bare</text>
+<text x="128.3" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">1 plan</text>
+<text x="181.8" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">2 gov</text>
+<text x="235.4" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">3 int</text>
+<text x="288.9" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">4 theatre</text>
+<text x="342.5" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">5 bonds</text>
+<text x="396.0" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">6 charge</text>
+<text x="449.5" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">7 2nd th.</text>
+<text x="503.1" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">8 shares</text>
+<text x="556.6" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">9 co-ops</text>
+<text x="610.2" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">10 prices</text>
+<text x="663.7" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">11 reserve</text>
+<text x="717.2" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">12 fiscal</text>
+<rect x="48" y="312" width="12" height="12" fill="#b8541c"/><text x="64" y="322" font-size="11" fill="currentColor">Debt money</text>
+<rect x="156" y="312" width="12" height="12" fill="#2a7f62"/><text x="172" y="322" font-size="11" fill="currentColor">SuMSy</text>
+<text x="744" y="322" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">mean over the run</text>
+</svg><figcaption>Figure 5. Unemployment. The theatre (step 4) is the biggest employer in both villages; SuMSy's falls to ten, the debt village's to sixteen.</figcaption></figure>
+<p>Somewhere to spend money on something other than bread.</p>
+<p>In the debt village the theatre halves the government's monthly shortfall: it gives work to people who had none, and their wages are taxed. It also doubles the gap between the villagers who have money and those who do not — the theatre's owner is doing well. In the SuMSy village the theatre sells twice as many tickets, unemployment drops to a third, and the money stays as evenly spread as before, because it is everyone's guaranteed income being spent, not a few people's profits.</p>
+<aside class="frame">
+<p>Debt: 64 alive, unemployment 15.9, tickets 68.5 a month, bread 3.81, debt 12,269 (173 % of output), shortfall 87 a month, cash Gini 0.61. SuMSy: 64 alive, unemployment 9.8, tickets 126, bread 3.21, surplus 73, cash Gini 0.09.</p>
+</aside>
+
+<h3>Step 5. Government bonds</h3>
+<div class="wrap"><table class="whatis"><thead><tr><th>Debt money</th><th>SuMSy</th></tr></thead><tbody><tr><td><b>128 villagers</b>, 32 of them landowners · 4 farms, 4 bakeries, 2 theatres; 1 show a month, 80 seats a theatre · no owners<br>Money: created by bank loans; banks start at 5 % a month, capped at 5 %; the government borrows at 0.5 %; savings earn 1 % a year<br>Government: public jobs for 10 % of the village's work, 2 loaves for the workless; taxes: wages 15 %, capital income 15 %, dividends 30 %, borrows by bonds<br>Starting prices: bread 5, grain 5.2, wage 3.92 a unit (a full month's work 15.68), rent 0.75, ticket 2; a buyer pays up to 1.3 × last month's bread price</td><td><b>128 villagers</b>, 32 of them landowners · 4 farms, 4 bakeries, 2 theatres; 1 show a month, 80 seats a theatre · no owners<br>Money: guaranteed income 5 a month; cushion 30; parking fee 2 % a month above it; banks at −1 %<br>Government: public jobs for 10 % of the village's work; no benefit, no tax on income; parking tax 1 % a month on idle money<br>Starting prices: bread 5, grain 5.2, wage 3.92 a unit (a full month's work 15.68), rent 0.75, ticket 2; a buyer pays up to 1.3 × last month's bread price</td></tr></tbody></table></div>
+<p>The debt government can now borrow from its own citizens and not only from the banks.</p>
+<p>Who lends changes; how much does not. Households put cash into bonds instead of tickets, ticket sales drop by a third, and in the worst of the ten runs a few people die. The SuMSy village has no borrowing to do.</p>
+<aside class="frame">
+<p>Debt: 63 alive (worst 58), tickets 47.6, debt 12,302 (208 %), shortfall 95, cash Gini 0.33. SuMSy unchanged.</p>
+</aside>
+
+<h3>Step 6. A charge on idle money</h3>
+<div class="wrap"><table class="whatis"><thead><tr><th>Debt money</th><th>SuMSy</th></tr></thead><tbody><tr><td><b>128 villagers</b>, 32 of them landowners · 4 farms, 4 bakeries, 2 theatres; 1 show a month, 80 seats a theatre · no owners<br>Money: created by bank loans; banks start at 5 % a month, capped at 5 %; the government borrows at 0.5 %; savings earn 1 % a year; charge on firms' idle balances 2 % a month<br>Government: public jobs for 10 % of the village's work, 2 loaves for the workless; taxes: wages 15 %, capital income 15 %, dividends 30 %, borrows by bonds<br>Starting prices: bread 5, grain 5.2, wage 3.92 a unit (a full month's work 15.68), rent 0.75, ticket 2; a buyer pays up to 1.3 × last month's bread price</td><td><b>128 villagers</b>, 32 of them landowners · 4 farms, 4 bakeries, 2 theatres; 1 show a month, 80 seats a theatre · no owners<br>Money: guaranteed income 5 a month; cushion 30; parking fee 2 % a month above it; banks at −1 %; charge on firms' idle balances 2 % a month<br>Government: public jobs for 10 % of the village's work; no benefit, no tax on income; parking tax 1 % a month on idle money<br>Starting prices: bread 5, grain 5.2, wage 3.92 a unit (a full month's work 15.68), rent 0.75, ticket 2; a buyer pays up to 1.3 × last month's bread price</td></tr></tbody></table></div>
+<p>A small monthly charge on the money that firms hold beyond what they need to operate — the debt village's version of the SuMSy parking fee.</p>
+<p>It trims the government's debt by a few percent and its monthly shortfall by a sixth. The SuMSy village barely notices a second parking fee.</p>
+<aside class="frame">
+<p>Debt: 63 alive (worst 62), tickets 50, bread 3.12, debt 11,627 (211 %), shortfall 79. SuMSy: 64 alive, tickets 126, surplus 89. The first report charged 10 % a month on all a firm's cash; at ten runs that closed every bakery in the debt village by month 51, so the step was redefined as 2 % a month above the working reserve.</p>
+</aside>
+
+<h3>Step 7. A second theatre</h3>
+<div class="wrap"><table class="whatis"><thead><tr><th>Debt money</th><th>SuMSy</th></tr></thead><tbody><tr><td><b>128 villagers</b>, 32 of them landowners · 4 farms, 4 bakeries, 4 theatres; 1 show a month, 40 seats a theatre · no owners<br>Money: created by bank loans; banks start at 5 % a month, capped at 5 %; the government borrows at 0.5 %; savings earn 1 % a year<br>Government: public jobs for 10 % of the village's work, 2 loaves for the workless; taxes: wages 15 %, capital income 15 %, dividends 30 %, borrows by bonds<br>Starting prices: bread 5, grain 5.2, wage 3.92 a unit (a full month's work 15.68), rent 0.75, ticket 2; a buyer pays up to 1.3 × last month's bread price</td><td><b>128 villagers</b>, 32 of them landowners · 4 farms, 4 bakeries, 4 theatres; 1 show a month, 40 seats a theatre · no owners<br>Money: guaranteed income 5 a month; cushion 30; parking fee 2 % a month above it; banks at −1 %<br>Government: public jobs for 10 % of the village's work; no benefit, no tax on income; parking tax 1 % a month on idle money<br>Starting prices: bread 5, grain 5.2, wage 3.92 a unit (a full month's work 15.68), rent 0.75, ticket 2; a buyer pays up to 1.3 × last month's bread price</td></tr></tbody></table></div>
+<p>Two theatres compete, and tickets get cheaper in both villages. The debt village does not buy more of them: the money to do so is not there.</p>
+<aside class="frame">
+<p>Debt: 64 alive (worst 62), tickets 48.7, bread 3.41, debt 12,490 (201 %), shortfall 94, cash Gini 0.28. SuMSy: 64 alive, tickets 126, bread 3.82, cash Gini 0.11.</p>
+</aside>
+
+<h3>Step 8. Owners and a stock market</h3>
+<div class="wrap"><table class="whatis"><thead><tr><th>Debt money</th><th>SuMSy</th></tr></thead><tbody><tr><td><b>128 villagers</b>, 32 of them landowners · 4 farms, 4 bakeries, 4 theatres; 1 show a month, 40 seats a theatre · 48 founders hold shares, shares trade<br>Money: created by bank loans; banks start at 5 % a month, capped at 5 %; the government borrows at 0.5 %; savings earn 1 % a year<br>Government: public jobs for 10 % of the village's work, 2 loaves for the workless; taxes: wages 15 %, capital income 15 %, dividends 30 %, borrows by bonds<br>Starting prices: bread 5, grain 5.2, wage 3.92 a unit (a full month's work 15.68), rent 0.75, ticket 2; a buyer pays up to 1.3 × last month's bread price</td><td><b>128 villagers</b>, 32 of them landowners · 4 farms, 4 bakeries, 4 theatres; 1 show a month, 40 seats a theatre · 48 founders hold shares, shares trade<br>Money: guaranteed income 5 a month; cushion 30; parking fee 2 % a month above it; banks at −1 %<br>Government: public jobs for 10 % of the village's work; no benefit, no tax on income; parking tax 1 % a month on idle money<br>Starting prices: bread 5, grain 5.2, wage 3.92 a unit (a full month's work 15.68), rent 0.75, ticket 2; a buyer pays up to 1.3 × last month's bread price</td></tr></tbody></table></div>
+<figure class="chart"><svg viewBox="0 0 760 330" role="img" aria-label="Theatre tickets sold a month" style="width:100%;height:auto;font-family:inherit">
+<text x="48" y="18" font-size="14" font-weight="600" fill="currentColor">Theatre tickets sold a month</text>
+<line x1="48" x2="744" y1="266.0" y2="266.0" stroke="currentColor" stroke-opacity="0.15"/>
+<text x="42" y="270.0" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">0</text>
+<line x1="48" x2="744" y1="208.0" y2="208.0" stroke="currentColor" stroke-opacity="0.15"/>
+<text x="42" y="212.0" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">34.0578</text>
+<line x1="48" x2="744" y1="150.0" y2="150.0" stroke="currentColor" stroke-opacity="0.15"/>
+<text x="42" y="154.0" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">68.1156</text>
+<line x1="48" x2="744" y1="92.0" y2="92.0" stroke="currentColor" stroke-opacity="0.15"/>
+<text x="42" y="96.0" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">102.173</text>
+<line x1="48" x2="744" y1="34.0" y2="34.0" stroke="currentColor" stroke-opacity="0.15"/>
+<text x="42" y="38.0" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">136.231</text>
+<rect x="53.4" y="266.0" width="19.4" height="0.0" fill="#b8541c"><title>Debt money, 0 bare: 0</title></rect>
+<rect x="106.9" y="266.0" width="19.4" height="0.0" fill="#b8541c"><title>Debt money, 1 plan: 0</title></rect>
+<rect x="160.4" y="266.0" width="19.4" height="0.0" fill="#b8541c"><title>Debt money, 2 gov: 0</title></rect>
+<rect x="214.0" y="266.0" width="19.4" height="0.0" fill="#b8541c"><title>Debt money, 3 int: 0</title></rect>
+<rect x="267.5" y="149.3" width="19.4" height="116.7" fill="#b8541c"><title>Debt money, 4 theatre: 68.53</title></rect>
+<rect x="321.0" y="184.9" width="19.4" height="81.1" fill="#b8541c"><title>Debt money, 5 bonds: 47.6</title></rect>
+<rect x="374.6" y="180.9" width="19.4" height="85.1" fill="#b8541c"><title>Debt money, 6 charge: 49.98</title></rect>
+<rect x="428.1" y="183.0" width="19.4" height="83.0" fill="#b8541c"><title>Debt money, 7 2nd th.: 48.74</title></rect>
+<rect x="481.7" y="206.6" width="19.4" height="59.4" fill="#b8541c"><title>Debt money, 8 shares: 34.87</title></rect>
+<rect x="535.2" y="180.0" width="19.4" height="86.0" fill="#b8541c"><title>Debt money, 9 co-ops: 50.5</title></rect>
+<rect x="588.7" y="211.8" width="19.4" height="54.2" fill="#b8541c"><title>Debt money, 10 prices: 31.83</title></rect>
+<rect x="642.3" y="211.8" width="19.4" height="54.2" fill="#b8541c"><title>Debt money, 11 reserve: 31.83</title></rect>
+<rect x="695.8" y="239.2" width="19.4" height="26.8" fill="#b8541c"><title>Debt money, 12 fiscal: 15.72</title></rect>
+<rect x="74.8" y="266.0" width="19.4" height="0.0" fill="#2a7f62"><title>SuMSy, 0 bare: 0</title></rect>
+<rect x="128.3" y="266.0" width="19.4" height="0.0" fill="#2a7f62"><title>SuMSy, 1 plan: 0</title></rect>
+<rect x="181.8" y="266.0" width="19.4" height="0.0" fill="#2a7f62"><title>SuMSy, 2 gov: 0</title></rect>
+<rect x="235.4" y="266.0" width="19.4" height="0.0" fill="#2a7f62"><title>SuMSy, 3 int: 0</title></rect>
+<rect x="288.9" y="51.2" width="19.4" height="214.8" fill="#2a7f62"><title>SuMSy, 4 theatre: 126.14</title></rect>
+<rect x="342.5" y="51.2" width="19.4" height="214.8" fill="#2a7f62"><title>SuMSy, 5 bonds: 126.14</title></rect>
+<rect x="396.0" y="51.6" width="19.4" height="214.4" fill="#2a7f62"><title>SuMSy, 6 charge: 125.88</title></rect>
+<rect x="449.5" y="51.7" width="19.4" height="214.3" fill="#2a7f62"><title>SuMSy, 7 2nd th.: 125.82</title></rect>
+<rect x="503.1" y="180.8" width="19.4" height="85.2" fill="#2a7f62"><title>SuMSy, 8 shares: 50.04</title></rect>
+<rect x="556.6" y="60.0" width="19.4" height="206.0" fill="#2a7f62"><title>SuMSy, 9 co-ops: 120.98</title></rect>
+<rect x="610.2" y="180.5" width="19.4" height="85.5" fill="#2a7f62"><title>SuMSy, 10 prices: 50.2</title></rect>
+<rect x="663.7" y="165.0" width="19.4" height="101.0" fill="#2a7f62"><title>SuMSy, 11 reserve: 59.31</title></rect>
+<rect x="717.2" y="183.9" width="19.4" height="82.1" fill="#2a7f62"><title>SuMSy, 12 fiscal: 48.2</title></rect>
+<text x="74.8" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">0 bare</text>
+<text x="128.3" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">1 plan</text>
+<text x="181.8" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">2 gov</text>
+<text x="235.4" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">3 int</text>
+<text x="288.9" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">4 theatre</text>
+<text x="342.5" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">5 bonds</text>
+<text x="396.0" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">6 charge</text>
+<text x="449.5" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">7 2nd th.</text>
+<text x="503.1" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">8 shares</text>
+<text x="556.6" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">9 co-ops</text>
+<text x="610.2" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">10 prices</text>
+<text x="663.7" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">11 reserve</text>
+<text x="717.2" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">12 fiscal</text>
+<rect x="48" y="312" width="12" height="12" fill="#b8541c"/><text x="64" y="322" font-size="11" fill="currentColor">Debt money</text>
+<rect x="156" y="312" width="12" height="12" fill="#2a7f62"/><text x="172" y="322" font-size="11" fill="currentColor">SuMSy</text>
+<text x="744" y="322" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">last twelve months, mean</text>
+</svg><figcaption>Figure 3. Tickets — the village's only spending beyond bread. The stock market (step 8) halves them in both villages; the cooperatives (side step 9) restore them on the SuMSy side.</figcaption></figure>
+<p>Every farm, bakery and theatre now belongs to four founders, and their shares can be bought and sold.</p>
+<p>In the debt village, household money that used to buy tickets now buys shares, and ticket sales fall by a third. In the SuMSy village this is the biggest change on the whole ladder: ticket sales drop from 126 to 50, unemployment nearly doubles, and the money — spread almost evenly until now — gathers in the hands of whoever holds shares. Shares crowd out the theatre. Section 8 looks at why, and at how much of it depends on the settlement step described in Section 4.</p>
+<aside class="frame">
+<p>Debt: 64 alive (worst 61), unemployment 19.2, tickets 34.9, bread 3.35, debt 13,637 (237 %), shortfall 96, cash Gini 0.34. SuMSy: 64 alive, unemployment 17.6, tickets 50, bread 6.69, cash Gini 0.45 (from 0.11).</p>
+</aside>
+
+<h3>Step 9, a side step. Cooperatives</h3>
+<div class="wrap"><table class="whatis"><thead><tr><th>Debt money</th><th>SuMSy</th></tr></thead><tbody><tr><td><b>128 villagers</b>, 32 of them landowners · 4 farms, 4 bakeries, 4 theatres (6 of them cooperatives); 1 show a month, 40 seats a theatre · 24 founders hold shares, shares trade<br>Money: created by bank loans; banks start at 5 % a month, capped at 5 %; the government borrows at 0.5 %; savings earn 1 % a year<br>Government: public jobs for 10 % of the village's work, 2 loaves for the workless; taxes: wages 15 %, capital income 15 %, dividends 30 %, borrows by bonds<br>Starting prices: bread 5, grain 5.2, wage 3.92 a unit (a full month's work 15.68), rent 0.75, ticket 2; a buyer pays up to 1.3 × last month's bread price</td><td><b>128 villagers</b>, 32 of them landowners · 4 farms, 4 bakeries, 4 theatres (6 of them cooperatives); 1 show a month, 40 seats a theatre · 24 founders hold shares, shares trade<br>Money: guaranteed income 5 a month; cushion 30; parking fee 2 % a month above it; banks at −1 %<br>Government: public jobs for 10 % of the village's work; no benefit, no tax on income; parking tax 1 % a month on idle money<br>Starting prices: bread 5, grain 5.2, wage 3.92 a unit (a full month's work 15.68), rent 0.75, ticket 2; a buyer pays up to 1.3 × last month's bread price</td></tr></tbody></table></div>
+<p>For this step the village has four farms, four bakeries and four theatres instead of two of each, so that half of every kind can change hands and each cooperative has a rival of its own kind as well as of the other: two farms, two bakeries and two theatres become cooperatives; the other half keep their shareholders, and the share market keeps running. Doubling the producers also doubles the number of founders who hold shares, which is itself a change; two control runs — the doubled village with no cooperatives, and the original village with one cooperative of each kind — separate the two effects and are reported in Section 9.</p>
+<p>The cooperatives, and the cooperative theatre most of all, undo most of what the stock market did on the SuMSy side: tickets back up to 121, unemployment back down to ten, money spread nearly as evenly as before. Section 9 takes the different kinds of cooperative apart, because they do not all do this for the same reason.</p>
+<aside class="frame">
+<p>Debt: 64 alive (worst 60), tickets 50.5, debt 12,318 (196 %), cash Gini 0.29. SuMSy: 64 alive, unemployment 10.4, tickets 121, bread 4.85, cash Gini 0.27.</p>
+</aside>
+
+<h3>Step 10. Prices that respond</h3>
+<div class="wrap"><table class="whatis"><thead><tr><th>Debt money</th><th>SuMSy</th></tr></thead><tbody><tr><td><b>128 villagers</b>, 32 of them landowners · 4 farms, 4 bakeries, 4 theatres; 1 show a month, 40 seats a theatre · 48 founders hold shares, shares trade<br>Money: created by bank loans; banks start at 5 % a month, capped at 5 %; the government borrows at 0.5 %; savings earn 1 % a year<br>Government: public jobs for 10 % of the village's work, 2 loaves for the workless; taxes: wages 15 %, capital income 15 %, dividends 30 %, borrows by bonds<br>Starting prices: bread 5, grain 5.2, wage 3.92 a unit (a full month's work 15.68), rent 0.75, ticket 2; a buyer pays up to 2 × last month's bread price, never below cost</td><td><b>128 villagers</b>, 32 of them landowners · 4 farms, 4 bakeries, 4 theatres; 1 show a month, 40 seats a theatre · 48 founders hold shares, shares trade<br>Money: guaranteed income 5 a month; cushion 30; parking fee 2 % a month above it; banks at −1 %<br>Government: public jobs for 10 % of the village's work; no benefit, no tax on income; parking tax 1 % a month on idle money<br>Starting prices: bread 5, grain 5.2, wage 3.92 a unit (a full month's work 15.68), rent 0.75, ticket 2; a buyer pays up to 2 × last month's bread price, never below cost</td></tr></tbody></table></div>
+<figure class="chart"><svg viewBox="0 0 760 330" role="img" aria-label="How unevenly the cash is spread (Gini, 0 = equal)" style="width:100%;height:auto;font-family:inherit">
+<text x="48" y="18" font-size="14" font-weight="600" fill="currentColor">How unevenly the cash is spread (Gini, 0 = equal)</text>
+<line x1="48" x2="744" y1="266.0" y2="266.0" stroke="currentColor" stroke-opacity="0.15"/>
+<text x="42" y="270.0" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">0.00</text>
+<line x1="48" x2="744" y1="208.0" y2="208.0" stroke="currentColor" stroke-opacity="0.15"/>
+<text x="42" y="212.0" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">0.25</text>
+<line x1="48" x2="744" y1="150.0" y2="150.0" stroke="currentColor" stroke-opacity="0.15"/>
+<text x="42" y="154.0" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">0.50</text>
+<line x1="48" x2="744" y1="92.0" y2="92.0" stroke="currentColor" stroke-opacity="0.15"/>
+<text x="42" y="96.0" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">0.75</text>
+<line x1="48" x2="744" y1="34.0" y2="34.0" stroke="currentColor" stroke-opacity="0.15"/>
+<text x="42" y="38.0" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">1.00</text>
+<polyline fill="none" stroke="#b8541c" stroke-width="2.5" points="74.8,187.1 128.3,203.4 181.8,157.0 235.4,159.3 288.9,124.5 342.5,189.4 396.0,187.1 449.5,201.0 503.1,187.1 556.6,198.7 610.2,189.4 663.7,189.4 717.2,154.6"/>
+<circle cx="74.8" cy="187.1" r="3.5" fill="#b8541c"><title>Debt money: 0.34</title></circle>
+<circle cx="128.3" cy="203.4" r="3.5" fill="#b8541c"><title>Debt money: 0.27</title></circle>
+<circle cx="181.8" cy="157.0" r="3.5" fill="#b8541c"><title>Debt money: 0.47</title></circle>
+<circle cx="235.4" cy="159.3" r="3.5" fill="#b8541c"><title>Debt money: 0.46</title></circle>
+<circle cx="288.9" cy="124.5" r="3.5" fill="#b8541c"><title>Debt money: 0.61</title></circle>
+<circle cx="342.5" cy="189.4" r="3.5" fill="#b8541c"><title>Debt money: 0.33</title></circle>
+<circle cx="396.0" cy="187.1" r="3.5" fill="#b8541c"><title>Debt money: 0.34</title></circle>
+<circle cx="449.5" cy="201.0" r="3.5" fill="#b8541c"><title>Debt money: 0.28</title></circle>
+<circle cx="503.1" cy="187.1" r="3.5" fill="#b8541c"><title>Debt money: 0.34</title></circle>
+<circle cx="556.6" cy="198.7" r="3.5" fill="#b8541c"><title>Debt money: 0.29</title></circle>
+<circle cx="610.2" cy="189.4" r="3.5" fill="#b8541c"><title>Debt money: 0.33</title></circle>
+<circle cx="663.7" cy="189.4" r="3.5" fill="#b8541c"><title>Debt money: 0.33</title></circle>
+<circle cx="717.2" cy="154.6" r="3.5" fill="#b8541c"><title>Debt money: 0.48</title></circle>
+<polyline fill="none" stroke="#2a7f62" stroke-width="2.5" points="74.8,182.5 128.3,245.1 181.8,245.1 235.4,245.1 288.9,245.1 342.5,245.1 396.0,245.1 449.5,240.5 503.1,161.6 556.6,203.4 610.2,126.8 663.7,115.2 717.2,115.2"/>
+<circle cx="74.8" cy="182.5" r="3.5" fill="#2a7f62"><title>SuMSy: 0.36</title></circle>
+<circle cx="128.3" cy="245.1" r="3.5" fill="#2a7f62"><title>SuMSy: 0.09</title></circle>
+<circle cx="181.8" cy="245.1" r="3.5" fill="#2a7f62"><title>SuMSy: 0.09</title></circle>
+<circle cx="235.4" cy="245.1" r="3.5" fill="#2a7f62"><title>SuMSy: 0.09</title></circle>
+<circle cx="288.9" cy="245.1" r="3.5" fill="#2a7f62"><title>SuMSy: 0.09</title></circle>
+<circle cx="342.5" cy="245.1" r="3.5" fill="#2a7f62"><title>SuMSy: 0.09</title></circle>
+<circle cx="396.0" cy="245.1" r="3.5" fill="#2a7f62"><title>SuMSy: 0.09</title></circle>
+<circle cx="449.5" cy="240.5" r="3.5" fill="#2a7f62"><title>SuMSy: 0.11</title></circle>
+<circle cx="503.1" cy="161.6" r="3.5" fill="#2a7f62"><title>SuMSy: 0.45</title></circle>
+<circle cx="556.6" cy="203.4" r="3.5" fill="#2a7f62"><title>SuMSy: 0.27</title></circle>
+<circle cx="610.2" cy="126.8" r="3.5" fill="#2a7f62"><title>SuMSy: 0.60</title></circle>
+<circle cx="663.7" cy="115.2" r="3.5" fill="#2a7f62"><title>SuMSy: 0.65</title></circle>
+<circle cx="717.2" cy="115.2" r="3.5" fill="#2a7f62"><title>SuMSy: 0.65</title></circle>
+<text x="74.8" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">0 bare</text>
+<text x="128.3" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">1 plan</text>
+<text x="181.8" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">2 gov</text>
+<text x="235.4" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">3 int</text>
+<text x="288.9" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">4 theatre</text>
+<text x="342.5" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">5 bonds</text>
+<text x="396.0" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">6 charge</text>
+<text x="449.5" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">7 2nd th.</text>
+<text x="503.1" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">8 shares</text>
+<text x="556.6" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">9 co-ops</text>
+<text x="610.2" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">10 prices</text>
+<text x="663.7" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">11 reserve</text>
+<text x="717.2" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">12 fiscal</text>
+<rect x="48" y="312" width="12" height="12" fill="#b8541c"/><text x="64" y="322" font-size="11" fill="currentColor">Debt money</text>
+<rect x="156" y="312" width="12" height="12" fill="#2a7f62"/><text x="172" y="322" font-size="11" fill="currentColor">SuMSy</text>
+</svg><figcaption>Figure 4. SuMSy's money stays almost evenly spread until shares arrive at step 8; the responsive prices of step 10 spread it further apart.</figcaption></figure>
+<p>From here on prices behave more like real ones: they move only when bread really runs short or really piles up, nobody sells below cost, and a buyer who finds bread scarce will pay up to double last month's price for it instead of a third more. These are rules about how people behave, not choices a government makes, and they are the ones every later step and every stress test runs under; the first version of this report used the more timid set, and Section 10 shows what that did.</p>
+<p>Bread gets cheaper in the debt village and the government's debt gets larger: firms that no longer sell at a loss employ fewer people and pay less tax. In the SuMSy village the money gathers further — these rules reward whoever holds stock when it is scarce. They are what will save the village from greed in Section 10, and they are not free.</p>
+<aside class="frame">
+<p>Debt: 64 alive (worst 63), tickets 31.8, bread 2.96, debt 16,091 (320 %), shortfall 95, cash Gini 0.33. SuMSy: 64 alive, tickets 50.2, bread 5.69, cash Gini 0.60 (from 0.45).</p>
+</aside>
+
+<h3>Step 11. A public reserve</h3>
+<div class="wrap"><table class="whatis"><thead><tr><th>Debt money</th><th>SuMSy</th></tr></thead><tbody><tr><td><b>128 villagers</b>, 32 of them landowners · 4 farms, 4 bakeries, 4 theatres; 1 show a month, 40 seats a theatre · 48 founders hold shares, shares trade<br>Money: created by bank loans; banks start at 5 % a month, capped at 5 %; the government borrows at 0.5 %; savings earn 1 % a year<br>Government: public jobs for 10 % of the village's work, 2 loaves for the workless; taxes: wages 15 %, capital income 15 %, dividends 30 %, borrows by bonds<br>Public finance: reserve of 3 months of spending<br>Starting prices: bread 5, grain 5.2, wage 3.92 a unit (a full month's work 15.68), rent 0.75, ticket 2; a buyer pays up to 2 × last month's bread price, never below cost</td><td><b>128 villagers</b>, 32 of them landowners · 4 farms, 4 bakeries, 4 theatres; 1 show a month, 40 seats a theatre · 48 founders hold shares, shares trade<br>Money: guaranteed income 5 a month; cushion 30; parking fee 2 % a month above it; banks at −1 %<br>Government: public jobs for 10 % of the village's work; no benefit, no tax on income; parking tax 1 % a month on idle money<br>Public finance: reserve of 3 months of spending<br>Starting prices: bread 5, grain 5.2, wage 3.92 a unit (a full month's work 15.68), rent 0.75, ticket 2; a buyer pays up to 2 × last month's bread price, never below cost</td></tr></tbody></table></div>
+<p>The government keeps three months of expected spending in reserve, and whatever it holds above that it gives back by lowering taxes.</p>
+<p>The debt government never has a surplus to give back, so nothing changes. <strong>This is the best-surviving debt village on the ladder</strong>: everyone alive, at the cost of a government spending almost twice what it earns and owing three times a year's output.</p>
+<p>The SuMSy government, which had been hoarding a fifth of the village's money, finds that its parking tax only needs to be a twelfth of what it was. It cuts it, on its own, and the money it used to hold gets spent: more tickets.</p>
+<aside class="frame">
+<p>Debt: as step 10 — 64 alive (worst 63), shortfall 95, debt 320 % of output. SuMSy: 64 alive (worst 63), tickets 59, the parking tax scaled to 0.08 of its statutory rate, reserve on target at 344, cash Gini 0.65.</p>
+</aside>
+
+<h3>Step 12. A tax policy and a tax on bread</h3>
+<div class="wrap"><table class="whatis"><thead><tr><th>Debt money</th><th>SuMSy</th></tr></thead><tbody><tr><td><b>128 villagers</b>, 32 of them landowners · 4 farms, 4 bakeries, 4 theatres; 1 show a month, 40 seats a theatre · 48 founders hold shares, shares trade<br>Money: created by bank loans; banks start at 5 % a month, capped at 5 %; the government borrows at 0.5 %; savings earn 1 % a year<br>Government: public jobs for 10 % of the village's work, 2 loaves for the workless; taxes: wages 15 %, capital income 15 %, dividends 30 %, bread and tickets 6 %, borrows by bonds<br>Public finance: reserve of 3 months of spending; tax policy, levers income -3.0, consumption 0.0, wealth 0.0<br>Starting prices: bread 5, grain 5.2, wage 3.92 a unit (a full month's work 15.68), rent 0.75, ticket 2; a buyer pays up to 2 × last month's bread price, never below cost</td><td><b>128 villagers</b>, 32 of them landowners · 4 farms, 4 bakeries, 4 theatres; 1 show a month, 40 seats a theatre · 48 founders hold shares, shares trade<br>Money: guaranteed income 5 a month; cushion 30; parking fee 2 % a month above it; banks at −1 %<br>Government: public jobs for 10 % of the village's work; no benefit, no tax on income; parking tax 1 % a month on idle money; bread and tickets 6 %<br>Public finance: reserve of 3 months of spending; tax policy, levers income -3.0, consumption 0.0, wealth 0.0<br>Starting prices: bread 5, grain 5.2, wage 3.92 a unit (a full month's work 15.68), rent 0.75, ticket 2; a buyer pays up to 2 × last month's bread price, never below cost</td></tr></tbody></table></div>
+<p>Two things are added. A six-percent tax on bread and tickets, paid by the buyer at the counter. And a rule for the government's taxes: each month it looks at its books, and when it is short it raises its taxes a little — by at most two percent of what they bring in, so that nothing changes suddenly — aiming to close half the gap; when it has more than its reserve it lowers them the same way.</p>
+<p>The rule also decides <em>which</em> taxes move, and this is where the village makes a choice. Every tax has a lever. A lever at zero means the tax simply moves with the others; a positive lever makes it move further in the same direction; a negative lever makes it move the other way. The village on this step sets the wage tax's lever to minus three: each time the government raises taxes, the wage tax is cut three times as fast as the others rise, so that month by month the burden slides off wages and onto the tax on bread, which climbs until it reaches a ceiling of twice its starting rate. Why that choice? Because Section 11 tried the others first. Raising the wage tax kills the village at thirty-five percent and hardly closes the gap on the way, since the government's own wages and the bread benefit are measured in loaves and rise with every wage increase; the tax on bread is the one tax that does not feed on itself. Sliding the burden onto it is the setting that keeps the most people alive while still reducing the debt.</p>
+<p>Over a hundred months the wage tax slides to nothing; the bread tax doubles to twelve percent; the debt shrinks by a sixth and the monthly shortfall by a third. And eleven people who were alive at the previous step are now dead, because a tax on bread reaches exactly the person who could only just afford bread. <strong>This is the least-indebted debt village that still survives</strong>, and it is not the same village as the best-surviving one. Nothing found in this study gives both at once.</p>
+<p>For the SuMSy village the step is meaningless: it has a surplus, so its policy cuts its parking tax to nothing and the bread tax to a quarter, and life goes on.</p>
+<aside class="frame">
+<p>Rule: <code>tax_policy = :scale</code>, coverage 50 % of the shortfall, step 2 % of revenue a month, ceiling twice the statutory rate; levers (income −3, consumption 0, wealth 0): on a move of r every tax first shifts by r × its lever and then moves by r, so the wage tax goes (1 − 3r)(1 + r) ≈ 1 − 2r a month while the others go 1 + r. Under SuMSy the "income" lever acts on the parking tax, the only income-side tax it has.<br />
+Debt: 53 alive (worst 46), tickets 15.7, bread 2.13, wage tax scaled to 0.01, consumption tax to 12 %, debt 13,488, shortfall 66, cash Gini 0.48. SuMSy: 64 alive, tickets 48, parking tax scaled to 0, consumption tax to 0.24 × 6 %.</p>
+</aside>
+
+<h3>What the ladder says</h3>
+<figure class="chart"><svg viewBox="0 0 760 330" role="img" aria-label="Public debt, % of yearly output" style="width:100%;height:auto;font-family:inherit">
+<text x="48" y="18" font-size="14" font-weight="600" fill="currentColor">Public debt, % of yearly output</text>
+<line x1="48" x2="744" y1="266.0" y2="266.0" stroke="currentColor" stroke-opacity="0.15"/>
+<text x="42" y="270.0" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">0 %</text>
+<line x1="48" x2="744" y1="208.0" y2="208.0" stroke="currentColor" stroke-opacity="0.15"/>
+<text x="42" y="212.0" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">125 %</text>
+<line x1="48" x2="744" y1="150.0" y2="150.0" stroke="currentColor" stroke-opacity="0.15"/>
+<text x="42" y="154.0" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">250 %</text>
+<line x1="48" x2="744" y1="92.0" y2="92.0" stroke="currentColor" stroke-opacity="0.15"/>
+<text x="42" y="96.0" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">375 %</text>
+<line x1="48" x2="744" y1="34.0" y2="34.0" stroke="currentColor" stroke-opacity="0.15"/>
+<text x="42" y="38.0" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">500 %</text>
+<rect x="53.4" y="266.0" width="40.8" height="0.0" fill="#b8541c"><title>Debt money, 0 bare: 0 %</title></rect>
+<rect x="106.9" y="266.0" width="40.8" height="0.0" fill="#b8541c"><title>Debt money, 1 plan: 0 %</title></rect>
+<rect x="160.4" y="124.6" width="40.8" height="141.4" fill="#b8541c"><title>Debt money, 2 gov: 305 %</title></rect>
+<rect x="214.0" y="121.9" width="40.8" height="144.1" fill="#b8541c"><title>Debt money, 3 int: 311 %</title></rect>
+<rect x="267.5" y="185.8" width="40.8" height="80.2" fill="#b8541c"><title>Debt money, 4 theatre: 173 %</title></rect>
+<rect x="321.0" y="169.3" width="40.8" height="96.7" fill="#b8541c"><title>Debt money, 5 bonds: 208 %</title></rect>
+<rect x="374.6" y="168.3" width="40.8" height="97.7" fill="#b8541c"><title>Debt money, 6 charge: 211 %</title></rect>
+<rect x="428.1" y="172.9" width="40.8" height="93.1" fill="#b8541c"><title>Debt money, 7 2nd th.: 201 %</title></rect>
+<rect x="481.7" y="156.0" width="40.8" height="110.0" fill="#b8541c"><title>Debt money, 8 shares: 237 %</title></rect>
+<rect x="535.2" y="174.9" width="40.8" height="91.1" fill="#b8541c"><title>Debt money, 9 co-ops: 196 %</title></rect>
+<rect x="588.7" y="117.5" width="40.8" height="148.5" fill="#b8541c"><title>Debt money, 10 prices: 320 %</title></rect>
+<rect x="642.3" y="117.5" width="40.8" height="148.5" fill="#b8541c"><title>Debt money, 11 reserve: 320 %</title></rect>
+<rect x="695.8" y="51.2" width="40.8" height="214.8" fill="#b8541c"><title>Debt money, 12 fiscal: 463 %</title></rect>
+<text x="74.8" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">0 bare</text>
+<text x="128.3" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">1 plan</text>
+<text x="181.8" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">2 gov</text>
+<text x="235.4" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">3 int</text>
+<text x="288.9" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">4 theatre</text>
+<text x="342.5" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">5 bonds</text>
+<text x="396.0" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">6 charge</text>
+<text x="449.5" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">7 2nd th.</text>
+<text x="503.1" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">8 shares</text>
+<text x="556.6" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">9 co-ops</text>
+<text x="610.2" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">10 prices</text>
+<text x="663.7" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">11 reserve</text>
+<text x="717.2" y="280" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">12 fiscal</text>
+<rect x="48" y="312" width="12" height="12" fill="#b8541c"/><text x="64" y="322" font-size="11" fill="currentColor">Debt money</text>
+<text x="744" y="322" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">SuMSy: none at any step</text>
+</svg><figcaption>Figure 2. What the debt village's government owes, as a share of what the village produces in a year. It never falls below 170 %; the SuMSy government owes nothing.</figcaption></figure>
+<p>The debt village needs a government that borrows. From the moment it has one, it lives on a shortfall of a third to three quarters of what the government spends, and every tax it can bear closes at most half of that gap (Section 12 sets out why). The SuMSy village needs nothing but its guaranteed income, its parking fee and the small parking tax beside it: nobody dies from step 1 on, and there is no public debt at all. Its trouble is the reverse — a government that collects seven times what it spends until a rule tells it to stop. The two villages look most alike at step 8, when shares arrive: inequality, which had been high in the debt village all along, rises in the SuMSy village to meet it. Cooperatives undo most of that.</p>
+<h3>Two things that turned out to matter more than they should</h3>
+<p><strong>Settling accounts.</strong> The step in Section 4 where all promises are netted keeps the debt village's bakeries alive: without it a bakery must pay for grain before it has sold bread, and goes under. In the SuMSy village the same step does something else. Without it, firms are refused credit twice as often, hold less cash, and pay no dividends for the first ten months — so the stock market barely trades, the village sells three times as many tickets, and the money stays spread. A bookkeeping rule is deciding who ends up rich.</p>
+<p><strong>Inherited money.</strong> A debt village whose starting cash is not owed to anyone behaves like the ordinary one at every step. Inheritance changes who owes the banks, not what the village does.</p>
+<aside class="frame">
+<p>SuMSy without clearing: credit refusals 1,157 by month 10 against 583; enterprise cash ~550 instead of 900–1,300; dividends 0 in months 5–10; share trades 0–8 a month after month 6 against 60–80; tickets 125 against 38 at month 100; cash Gini 0.18 against 0.44.</p>
+</aside>
+
+<h2>8. What a stock market does</h2>
+<p>Step 8 gave every firm owners and let the shares trade. To see which part of the market does the damage, it was rebuilt five ways: with and without a spread in what people expect shares to yield, with and without buying on credit, with and without the hope of selling on at a profit. It made no difference. Once households can hold shares, ticket sales halve and the money gathers, whichever way the market is built.</p>
+<p>Three things are new since the first report. The effect needs the settlement step — without it firms cannot build up the profits from which dividends are paid, and the market goes quiet. The responsive prices of step 10 make the gathering worse. And a tax on wealth, which one might expect to spread the money again, does so only by eating the wealth it taxes: the shares lose their value faster than the tax brings anything in.</p>
+<aside class="frame">
+<p>Five market variants, SuMSy, ten runs each: tickets 47–52 a month and cash Gini 0.49–0.52 in all of them, against 126 and 0.11 without a market. Responsive prices: SuMSy cash Gini 0.45 → 0.60 with the market; 0.44 → 0.71 in a no-greed village with the buyer ceiling raised as well. Wealth tax at 25 % a year on the debt village: wealth Gini 0.70 → 0.43, base 3,800 → 1,300, revenue never above 27 a month.</p>
+</aside>
+
+<h2>9. Cooperatives</h2>
+<p>The first report's cooperative was the simplest kind: anyone with money to spare could join any co-op, and every member got the same share of the profit. Within a year or so nearly everyone was a member of every co-op, and the equal dividend was, in effect, a second guaranteed income paid out of the firms' profits. Most of what cooperatives did for the SuMSy village at step 9 came from that.</p>
+<p>Real cooperatives are not usually like that, so this version adds two more kinds. A worker cooperative belongs to the people who work in it: you join by being hired, you pay for your share out of your wages, the members get the work first and share it out among themselves when there is not enough, and the profit is divided by hours worked. A consumer cooperative belongs to its customers: you join by shopping there, the profit comes back as a rebate on what you bought, and members go to their own co-op first because they know the rebate is coming.</p>
+<p>Does it matter which kind? Some. With the simple kind and a cooperative theatre, the SuMSy village recovers almost all the tickets it lost to the stock market. With worker-owned farms and bakeries and a customer-owned theatre it recovers most of them. A worker-owned theatre is the one bad idea on the list: a theatre needs only a dozen workers, and dividing its profit among them makes those twelve rich. A customer-owned theatre spreads the same profit across sixty.</p>
+<aside class="frame">
+<p>SuMSy, step-8 village, ten runs. Member co-ops with a co-op theatre: tickets 119, cash Gini 0.32. Worker farms and bakeries with a consumer theatre: tickets 88, Gini 0.38. Worker theatre: Gini 0.59. Whether members are served first changes little at this size. Buffer-pledge membership (SuMSy): 101 members against 84 for money, the exemption conserved, distributional effect within noise. A shareholder firm short of capital makes its founders borrow personally without an affordability test; a cooperative must borrow itself and is tested — <code>cooperative_founding = :symmetric</code> removes the asymmetry and is not used above.</p>
+</aside>
+
+<h2>10. Greed</h2>
+<figure class="chart"><svg viewBox="0 0 760 360" role="img" aria-label="Greedy SuMSy villages: runs (of ten) that stayed whole" style="width:100%;height:auto;font-family:inherit">
+<text x="48" y="18" font-size="14" font-weight="600" fill="currentColor">Greedy SuMSy villages: runs (of ten) that stayed whole</text>
+<line x1="48" x2="744" y1="296.0" y2="296.0" stroke="currentColor" stroke-opacity="0.15"/>
+<text x="42" y="300.0" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">0</text>
+<line x1="48" x2="744" y1="230.5" y2="230.5" stroke="currentColor" stroke-opacity="0.15"/>
+<text x="42" y="234.5" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">2.5</text>
+<line x1="48" x2="744" y1="165.0" y2="165.0" stroke="currentColor" stroke-opacity="0.15"/>
+<text x="42" y="169.0" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">5</text>
+<line x1="48" x2="744" y1="99.5" y2="99.5" stroke="currentColor" stroke-opacity="0.15"/>
+<text x="42" y="103.5" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">7.5</text>
+<line x1="48" x2="744" y1="34.0" y2="34.0" stroke="currentColor" stroke-opacity="0.15"/>
+<text x="42" y="38.0" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">10</text>
+<rect x="59.6" y="269.8" width="90.8" height="26.2" fill="#2a7f62"><title>runs whole, everyone, report prices: 1</title></rect>
+<rect x="175.6" y="34.0" width="90.8" height="262.0" fill="#2a7f62"><title>runs whole, everyone, responsive: 10</title></rect>
+<rect x="291.6" y="296.0" width="90.8" height="0.0" fill="#2a7f62"><title>runs whole, everyone, responsive, full money: 0</title></rect>
+<rect x="407.6" y="217.4" width="90.8" height="78.6" fill="#2a7f62"><title>runs whole, quarter, report prices: 3</title></rect>
+<rect x="639.6" y="34.0" width="90.8" height="262.0" fill="#2a7f62"><title>runs whole, quarter, responsive, full money: 10</title></rect>
+<text x="106.0" y="310" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">everyone, report prices</text>
+<text x="222.0" y="310" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">everyone, responsive</text>
+<text x="338.0" y="310" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">everyone, responsive, full money</text>
+<text x="454.0" y="310" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">quarter, report prices</text>
+<text x="570.0" y="310" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">quarter, responsive</text>
+<text x="686.0" y="310" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">quarter, responsive, full money</text>
+<rect x="48" y="342" width="12" height="12" fill="#2a7f62"/><text x="64" y="352" font-size="11" fill="currentColor">runs whole</text>
+</svg><figcaption>Figure 6. Greed in the SuMSy village. "Everyone" and "quarter" say who is greedy; "report prices" are the first report's rules, "responsive" the rules of step 10 with a higher ceiling for bread; "full money" starts the village with its money at the level the guaranteed income and parking fee imply.</figcaption></figure>
+<p>So far the villagers have been modest: they eat, they go to the theatre now and then, they keep a cushion. Now some of them are made greedy. A greedy villager spends everything above the cushion, every month — half the time on land, shares or plain hoarding, half the time on loaves and tickets, up to ten loaves at a time. This is a rule, not an observation; nobody has measured how greedy people are. The point is to find out what breaks.</p>
+<p>The first report put greed into the whole village and found that the SuMSy village died and the debt village did not — its greedy simply had no money to be greedy with. That still holds at ten runs. What was wrong was the explanation.</p>
+<p><strong>How the greedy SuMSy village dies.</strong> The first report said: the price of bread runs away from the fixed guaranteed income. It does not — people go hungry while bread is still cheap. What happens is this. The greedy owners of the theatres get rich on dividends and spend them on tickets. The theatres hire more and more; a theatre can pay a worker three times what a bakery can, because one worker entertains two and a half people while one baker feeds two. By the twentieth month every pair of hands in the village is employed and nearly half of them are at the theatre. The bakeries cannot get workers, bread runs short, the hungry work less, less bread still, and the village starves in a hall full of shows. And the bakeries cannot buy the workers back, because nobody will pay more than a third above last month's price for bread, so scarcity never reaches the price, and the price never reaches the wage.</p>
+<p>Giving the village more hands or more land does not help: the theatre takes the extra in the same proportion. Capping the theatres — one show a night, a seat for everyone — stops the drain and uncovers a second death underneath. Now the greedy buy bread instead, the bakeries bake for it, not all of it sells, and the price falls a little every month until a loaf sells for less than the grain in it. Then the bakeries stop buying grain, and a village with full fields and full ovens has no bread at all within a month. Two ways to die, one cause: nobody responds to what the price is saying.</p>
+<p><strong>Prices that respond.</strong> Let a hungry buyer pay up to double last month's price, let no one sell below cost, and let prices move only on real shortages and real gluts — and the greedy village lives, in every one of ten runs, with as many theatres as you like. The village with only its richest quarter greedy lives too. And when the village is started with its money at the full level (Section 6), the greedy quarter still lives, without a single hungry month — but a village where <em>everyone</em> is greedy dies of exactly the price spiral the first report described: every villager starts with money to burn, bread is short every month, the price climbs by six percent a month for years, and a guaranteed income of five faces a loaf at eighty-five.</p>
+<p>So the honest sentence is this. Greed in a quarter of the village is survivable if prices are allowed to move. Greed in the whole village, where everyone wants ten loaves and endless tickets forever, is not — and that is the strongest assumption in this model, not a property of the money.</p>
+<p><strong>What helps and what does not.</strong> Rationing — two loaves for everyone before anyone gets a third — keeps the greedy village fed. A ceiling on wages does not (the first report's one lucky run out of three). Two prices for bread do not. More capacity does not. Where the government puts its surplus matters: give it back as a tax cut and the greedy village lives; hand it out equally to everyone and most of it goes straight back to the greedy, and the village dies in six runs of ten. A tax on bread does nothing against greed and, above about ten percent, kills on its own. A tax on wealth is the one tax that helps: with the richest quarter greedy, it lifts the number of surviving runs from two or three in ten to seven, and the rest of the village goes to the theatre more, not less — but only because the government sits on the proceeds. Paid out, they would return to the greedy.</p>
+<aside class="frame">
+<p>Universal mixed greed (hoarding 0.5), SuMSy, step-8 village, ten runs, survived: report prices 1; capacity 5 or 6, land 2: 0–1; theatre capped at one show: 0 (deflation death), two shows: 4; responsive prices (thresholds, cost floor, ceiling 2.0): 10 at any theatre capacity; from the equilibrium start: 0. Richest quarter greedy: report prices 2–3; two shows with thresholds and floor 10; responsive from the equilibrium start 10, no hunger. Measures: rationing 64 alive; wage ceiling 0 of 10; two prices 0; land + capacity 0–1. Public surplus on the responsive greedy village: tax cut 10 of 10, per capita 4 of 10. VAT: scaled away by the tax-cut rule; kept, 20 % kills the no-greed village (2.4 alive) through the buyer ceiling. Wealth tax on the greedy quarter: 2 % → 3 of 10, 10 % → 5, 25 % → 7, tickets 44 → 76. Indexing the guaranteed income to bread: harmless without greed, a spiral with it (money 22–33 thousand and rising).</p>
+</aside>
+
+<h2>11. Taxes, and why the debt village's books do not balance</h2>
+<p>The debt village's government spends nearly twice what it earns from the first month it exists. Can that be fixed? A good part of this study went into trying.</p>
+<p>Raising the wage tax works up to about thirty percent and then kills. Worse, it hardly helps even where it works, because most of what the government pays for — its own workers' wages, the bread benefit for the workless — is measured in loaves, and a higher tax on wages pushes up the price of everything, loaves included. Belgium's actual income-tax schedule, applied to the village, kills it within two years.</p>
+<p>A tax on bread and tickets does better, for a reason worth understanding: it does not push up the government's own wage bill. Shift the burden from wages to bread, and the shortfall falls by two thirds. But every point of tax on bread reaches the people who can only just afford it; six percent costs about two lives in sixty-four, twelve percent fifteen.</p>
+<p>A tax on land and shares brings in almost nothing — the village's wealth is small, and the tax shrinks it — while it does make the village more equal.</p>
+<p>Four different ways of combining the taxes were tried, with the government raising and lowering them a little each month as its books required. They all found the same frontier. Take the tax off wages and everyone lives, with a government spending half again what it earns. Balance the books and fourteen people are left. There is no setting that does both.</p>
+<aside class="frame">
+<p>Debt village, ten runs. Wage-tax ceiling sweep: 30 % → 60.5 alive, shortfall 82 → 48; 35 % → 33.6 (worst 0); 45 % → 3.8. Progressive schedule (25/40/45/50 %, 13 % social contribution, 7 % municipal): 3.9 alive, deaths from month 5. VAT 6 % alone: 59.1 alive (worst 54), shortfall 37; 12 %: 49.1; policy shifting the burden to consumption (lever −3 on income): 60.9 alive, wage tax 0, VAT 12 %, shortfall 66. Wealth tax: revenue ≤ 27 a month at any rate, alive 61 → 51 at 25 %. The one balanced budget found (all taxes raised together): 14 alive. Combining mechanisms tried: revenue-weighted scaling, six-way sliders, a share target, per-family levers with shift-then-move.</p>
+</aside>
+
+<h2>12. What this shows, and what it cannot</h2>
+<p>It shows that a village on debt money needs a government willing to go deep into debt, and that no tax the village can bear will get it out. It shows that a village on a guaranteed income and a parking fee needs no such thing: nobody starves and nothing is owed, though its government has to be told to stop collecting. It shows that a stock market gathers money in both villages, that cooperatives spread it again, and that the piece of plumbing which settles the month's accounts has more to do with who gets rich than it should. And it shows that greed breaks the SuMSy village only when prices are not allowed to move or when every single villager is insatiable.</p>
+<p>It cannot show what people would actually do. The villagers follow rules; the greedy are greedy by decree; hunger is a number. Demand for bread is fixed at two loaves, and what people will pay is tied to what they paid last month, so every statement about prices here is a statement about a rationing rule. The government of the debt village can borrow without limit, which no real one can. Ten runs tell apart outcomes that differ by a few people, and no finer. And the whole thing is sixty-four people and two bakeries.</p>
+<h2>13. The stress test: greed on the best villages</h2>
+<figure class="chart"><svg viewBox="0 0 760 360" role="img" aria-label="Alive at the end under greed, of 64" style="width:100%;height:auto;font-family:inherit">
+<text x="48" y="18" font-size="14" font-weight="600" fill="currentColor">Alive at the end under greed, of 64</text>
+<line x1="48" x2="744" y1="296.0" y2="296.0" stroke="currentColor" stroke-opacity="0.15"/>
+<text x="42" y="300.0" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">0</text>
+<line x1="48" x2="744" y1="230.5" y2="230.5" stroke="currentColor" stroke-opacity="0.15"/>
+<text x="42" y="234.5" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">17</text>
+<line x1="48" x2="744" y1="165.0" y2="165.0" stroke="currentColor" stroke-opacity="0.15"/>
+<text x="42" y="169.0" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">34</text>
+<line x1="48" x2="744" y1="99.5" y2="99.5" stroke="currentColor" stroke-opacity="0.15"/>
+<text x="42" y="103.5" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">51</text>
+<line x1="48" x2="744" y1="34.0" y2="34.0" stroke="currentColor" stroke-opacity="0.15"/>
+<text x="42" y="38.0" font-size="10" text-anchor="end" fill="currentColor" fill-opacity="0.7">68</text>
+<rect x="71.2" y="50.2" width="44.4" height="245.8" fill="#b8541c"><title>debt, best surviving (11), no greed: 63.8</title></rect>
+<rect x="303.2" y="50.2" width="44.4" height="245.8" fill="#b8541c"><title>debt, best surviving (11), richest quarter: 63.8</title></rect>
+<rect x="535.2" y="49.4" width="44.4" height="246.6" fill="#b8541c"><title>debt, best surviving (11), everyone: 64</title></rect>
+<rect x="117.6" y="91.4" width="44.4" height="204.6" fill="#e0a070"><title>debt, least indebted (12), no greed: 53.1</title></rect>
+<rect x="349.6" y="82.9" width="44.4" height="213.1" fill="#e0a070"><title>debt, least indebted (12), richest quarter: 55.3</title></rect>
+<rect x="581.6" y="77.2" width="44.4" height="218.8" fill="#e0a070"><title>debt, least indebted (12), everyone: 56.8</title></rect>
+<rect x="164.0" y="49.8" width="44.4" height="246.2" fill="#2a7f62"><title>SuMSy, step 11, no greed: 63.9</title></rect>
+<rect x="396.0" y="49.4" width="44.4" height="246.6" fill="#2a7f62"><title>SuMSy, step 11, richest quarter: 64</title></rect>
+<rect x="628.0" y="74.1" width="44.4" height="221.9" fill="#2a7f62"><title>SuMSy, step 11, everyone: 57.6</title></rect>
+<rect x="210.4" y="49.4" width="44.4" height="246.6" fill="#8fc7b1"><title>SuMSy, step 12, no greed: 64</title></rect>
+<rect x="442.4" y="64.4" width="44.4" height="231.6" fill="#8fc7b1"><title>SuMSy, step 12, richest quarter: 60.1</title></rect>
+<rect x="674.4" y="74.1" width="44.4" height="221.9" fill="#8fc7b1"><title>SuMSy, step 12, everyone: 57.6</title></rect>
+<text x="164.0" y="310" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">no greed</text>
+<text x="396.0" y="310" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">richest quarter</text>
+<text x="628.0" y="310" font-size="10" text-anchor="middle" fill="currentColor" fill-opacity="0.8">everyone</text>
+<rect x="48" y="342" width="12" height="12" fill="#b8541c"/><text x="64" y="352" font-size="11" fill="currentColor">debt, best surviving (11)</text>
+<rect x="261" y="342" width="12" height="12" fill="#e0a070"/><text x="277" y="352" font-size="11" fill="currentColor">debt, least indebted (12)</text>
+<rect x="474" y="342" width="12" height="12" fill="#2a7f62"/><text x="490" y="352" font-size="11" fill="currentColor">SuMSy, step 11</text>
+<rect x="610" y="342" width="12" height="12" fill="#8fc7b1"/><text x="626" y="352" font-size="11" fill="currentColor">SuMSy, step 12</text>
+</svg><figcaption>Figure 7. The stress test. The best-surviving villages survive greed; the least-indebted ones are the fragile ones.</figcaption></figure>
+<p>The ladder ended on two debt villages — the one where everyone lives, and the one that owes the least — and their SuMSy twins. A word on the twins: they are the SuMSy village with the <em>same</em> rules as the debt village at that step, kept for comparison — the public reserve at step 11, the tax policy and the tax on bread at step 12. "Least indebted" is a label for the debt village only; a SuMSy village never owes anything, and its policy at step 12 has nothing to do but cut its own parking tax. A SuMSy village has its own measure of "best": nobody hungry and the money spread as evenly as possible. On the ladder that is the cooperative village of side step 9 (four of each kind, half of them cooperatives), under the price rules of step 10 and with the public reserve of step 11 returning the surplus; it is stress-tested below as well. (The price rules are how people behave, not a policy, so the same realistic set is used in every village here; a village kept equal by buyers who refuse to pay for scarce bread would not be worth defending.)</p>
+<p>Into each village, greed is introduced twice: first the richest quarter, then everyone.</p>
+<p>The debt village where everyone lives keeps everyone alive under both doses, and so does its SuMSy twin. The debt village pays with its theatres: in every greedy run they close, because the greedy buy shares rather than tickets, and the dividends that would have bought tickets buy more shares. The village is fed and has nothing to do in the evening. The SuMSy village does the opposite with the greedy quarter: tickets double and almost nobody is without work, because its prices let the bakeries hold their workers and its guaranteed income lets everyone else keep going out. With the whole village greedy it loses one run in ten — the price spiral of Section 10 arriving late — and keeps the other nine whole. On the first report's village the same greed killed nine in ten.</p>
+<p>The debt village that owes the least is the fragile one, and so is its SuMSy twin under the same rules. Each loses a run in ten to the greedy quarter — with twenty-odd survivors in the run that goes wrong — and the debt version loses seven more people to universal greed than its better-fed neighbour does. A budget squeezed toward balance, with no wage tax and a twelve-percent tax on bread, has no slack left when the greedy pull workers and money out of the food chain.</p>
+<p>So the two ends of the ladder are a trade-off twice over: the village that owes the least is also the one greed breaks first.</p>
+<aside class="frame">
+<p>Ten runs; alive of 64 (worst) · runs whole · tickets · cash Gini.<br />
+Debt, step 11: no greed 64 (63) · 10 · 32 · 0.33; greedy quarter 64 (63) · 10 · 0 · 0.27; everyone 64 · 10 · 0 · 0.36.<br />
+Debt, step 12: no greed 53 (46) · 3 · 16 · 0.48; greedy quarter 55 (21) · 4 · 0 · 0.40; everyone 57 (45) · 3 · 0 · 0.45.<br />
+SuMSy twin of step 11 (same rules, for comparison): no greed 64 (63) · 10 · 59 · 0.65; greedy quarter 64 · 10 · 113 · 0.28; everyone 58 (0) · 9 · 37 · 0.32.<br />
+SuMSy twin of step 12: no greed 64 · 10 · 48 · 0.65; greedy quarter 60 (25) · 9 · 111 · 0.33; everyone 58 (0) · 9 · 36 · 0.30.<br />
+Best SuMSy village (co-ops + prices + reserve): pending — run after the 21 September fixes.</p>
+</aside>
+
+<h2>Glossary</h2>
+<p><strong>Guaranteed income.</strong> The five units every living villager receives each month under SuMSy.</p>
+<p><strong>Cushion (buffer).</strong> The thirty units a villager may hold before the parking fee starts; also the three meals' worth of money the villagers try to keep.</p>
+<p><strong>Parking fee (demurrage).</strong> The two percent a month that disappears from any balance above the cushion.</p>
+<p><strong>Parking tax (demurrage tax).</strong> A further one percent a month on the same idle money, charged on top of the fee and paid to the government: its only income under SuMSy.</p>
+<p><strong>Round.</strong> A month.</p>
+<p><strong>Run.</strong> One hundred rounds with one roll of the dice; every figure is the average of ten.</p>
+<p><strong>Settlement (clearing).</strong> The step in which all the month's promises to pay are netted and settled at once.</p>
+<p><strong>Shortfall (deficit).</strong> What the government spends in a month beyond what it takes in.</p>
+<p><strong>Step (rung).</strong> One addition to the village on the ladder of Section 7.</p>
+<p class="colophon">Built 2026-09-21 from the results directory of BreadEconomySim.jl (second ladder, ten runs per configuration). Charts are drawn from the data at build time.</p>
+</main></body></html>

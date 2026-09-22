@@ -1,15 +1,33 @@
+"""
+Gini coefficient. Negative values (a villager under water) are kept, not clamped to zero (review 1, §5.2): with any
+negative entry the coefficient is the mean absolute difference over twice the mean, which can exceed 1; with a
+non-positive total it is undefined and returns NaN. `negative_wealth_persons` in the round data says how many were negative.
+"""
 function gini(values)
-    x = sort(max.(Float64.(values), 0.0)); n = length(x)
+    x = sort(Float64.(values)); n = length(x)
     n == 0 && return 0.0
-    s = sum(x); s <= 0 && return 0.0
+    s = sum(x); s <= 0 && return NaN
     return (2 * sum(i * x[i] for i in 1:n) / (n * s)) - (n + 1) / n
+end
+
+"""
+    decile_ends(values) → (bottom, top)
+
+Mean of the poorest tenth and of the richest tenth of `values` (at least one person each). Works with zeros and negatives,
+unlike any ratio of the two (22 September: the report measures the rich–poor gap as a difference, in meals).
+"""
+function decile_ends(values)
+    x = sort(Float64.(collect(values))); n = length(x)
+    n == 0 && return (NaN, NaN)
+    k = max(1, round(Int, n / 10))
+    return (sum(x[1:k]) / k, sum(x[end-k+1:end]) / k)
 end
 
 net_wealth(model, a::Agent) = cash(a) + a.land * land_price(model) - debt_of(a) - peer_debt_of(model, a) + peer_claims(model, a) + bond_holdings(model, a) +
                               (a isa Person ? share_wealth(model, a) : (a isa Enterprise && a.ownership != :none) ? -book_value(model, a) : 0.0) +
                               (a isa Person ? a.buffer_lent : 0.0) - (is_bank(a) ? a.buffer_received : 0.0) +
 
-                              (is_bank(a) ? loans_held(a) - deposits_created(a) + a.retained_interest : 0.0)
+                              (is_bank(a) ? loans_held(a) - deposits_created(a) : 0.0)   # retained interest is already in the bank's cash (review 1, §4.1)
 group_of(a::Agent) = a isa Person ? (a.land > 0 ? :landowners : :workers) : a.kind
 function group_wealth(model, g::Symbol)
     as = [a for a in alive_agents(model) if group_of(a) == g]
@@ -61,7 +79,7 @@ function record!(model)
         farms_open = length(enterprises(model, :farm)),
         bakeries_open = length(enterprises(model, :bakery)),
         money_in_circulation = sum(cash(a) for a in alive; init = 0.0),
-        money_in_dead_balances = sum(cash(a) for a in allagents(model) if !a.alive; init = 0.0),
+        money_in_dead_balances = sum(cash(a) for a in agents_by_id(model) if !a.alive; init = 0.0),
         outstanding_debt = sum(debt_of(a) + peer_debt_of(model, a) for a in alive; init = 0.0),
         peer_lent = model.peer_lent_this_round,
         government_debt = debt_of(gov) + government_rest_interest(model) + bonds_outstanding(model) + government_trade_arrears(model), government_bank_debt = debt_of(gov) + government_rest_interest(model), bonds_outstanding = bonds_outstanding(model), government_arrears = government_trade_arrears(model),
@@ -71,6 +89,21 @@ function record!(model)
         government_outlay = model.government_outlay_this_round, tax_shortfall = model.tax_shortfall, tax_policy_step = model.tax_policy_step,
         consumption_tax = model.consumption_tax_this_round, consumption_tax_scale = model.consumption_tax_scale,
         wealth_tax = model.wealth_tax_this_round, wealth_tax_base = model.wealth_tax_base, wealth_tax_scale = model.wealth_tax_scale,
+        clearing_residue = model.clearing_residue, negative_wealth_persons = count(w -> net_wealth(model, w) < 0, ps),
+        zero_cash_persons = count(w -> cash(w) <= 1e-6, ps),
+        # the rich–poor gap: richest tenth minus poorest tenth of the living, in meals (two loaves at this month's price),
+        # so that it works with zero and negative holdings and compares across villages with different price levels; the
+        # poorest tenth's own holding is reported too, since the gap can also narrow because the top falls
+        (let meal = max(meal_price(model), 1e-9), (wb, wt) = decile_ends(net_wealth(model, w) for w in ps), (cb, ct) = decile_ends(cash(w) for w in ps)
+            (; wealth_gap_meals = (wt - wb) / meal, wealth_bottom10_meals = wb / meal, wealth_top10_meals = wt / meal,
+               cash_gap_meals = (ct - cb) / meal, cash_bottom10_meals = cb / meal, cash_top10_meals = ct / meal)
+        end)...,
+        invoices_issued = model.invoices_issued_this_round, invoices_paid = model.invoices_paid_this_round,
+        invoices_open = sum(iv.amount for iv in model.invoices; init = 0.0),
+        invoices_overdue = sum(iv.amount for iv in model.invoices if current_round(model) - iv.round_issued >= 3; init = 0.0),
+        liquidations = model.liquidations, refoundings = model.refoundings, bad_debt = model.cumulative_bad_debt, bank_bailouts = model.cumulative_bailouts,
+        profit_tax = model.profit_tax_this_round, profit_tax_scale = model.profit_tax_scale, parking_tax_scale = model.parking_tax_scale,
+        income_tax_accrued = sum(w.income_tax_accrued for w in ps; init = 0.0), income_tax_charged = model.income_tax_charged_this_round,
         wealth_tax_arrears = sum(w.wealth_tax_arrears for w in ps; init = 0.0),
         consumption_tax_rate_now = consumption_tax_rate(model),
         bracket_top_rate = maximum(model.bracket_rates), bracket_bottom_rate = minimum(model.bracket_rates),
@@ -179,7 +212,7 @@ function record!(model)
         n_banks = group_wealth(model, :bank)[1], wealth_banks = group_wealth(model, :bank)[2],
         wealth_government = group_wealth(model, :government)[2],
         land_price = land_price(model),
-        deaths = count(a -> a isa Person && !a.alive && a.death_round == r, allagents(model)),
+        deaths = count(a -> a isa Person && !a.alive && a.death_round == r, agents_by_id(model)),
         closures = model.closures,
         production_target_farms = sum(a.production_target for a in enterprises(model, :farm); init = 0),
         production_target_bakeries = sum(a.production_target for a in enterprises(model, :bakery); init = 0),
@@ -254,7 +287,7 @@ function agent_end_state(model)
              production_target = a isa Enterprise ? a.production_target : 0, interest_rate = a isa Enterprise ? a.interest_rate : NaN,
              retained_interest = a isa Enterprise ? a.retained_interest : NaN,
              ask_wage = get(a.ask, :wage, NaN), bid_wage = get(a.bid, :wage, NaN), ask_bread = get(a.ask, :bread, NaN), ask_grain = get(a.ask, :grain, NaN), ask_rent = get(a.ask, :rent, NaN))
-            for a in sort(collect(allagents(model)); by = a -> a.id)]
+            for a in agents_by_id(model)]
     return DataFrame(rows)
 end
 
@@ -263,7 +296,7 @@ government_trade_arrears(model) = sum(pr.amount for pr in model.promises if pr.f
 
 """Σ deposit assets − Σ bank deposit liabilities + money lost (should be 0)."""
 function money_identity_gap(model)
-    assets = sum(cash(a) for a in allagents(model); init = 0.0)
-    liabilities = sum(deposits_created(a) for a in allagents(model); init = 0.0)
+    assets = sum(cash(a) for a in agents_by_id(model); init = 0.0)
+    liabilities = sum(deposits_created(a) for a in agents_by_id(model); init = 0.0)
     return assets - liabilities + model.cumulative_money_lost
 end

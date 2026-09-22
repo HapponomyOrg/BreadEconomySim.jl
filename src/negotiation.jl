@@ -82,7 +82,7 @@ function negotiate(model, seller::Agent, buyer::Agent, good::Symbol; age::Int = 
         ask -= f_s * (ask - seller_floor)
         bid += f_b * (buyer_ceiling - bid)
     end
-    price === nothing && buyer_ceiling >= seller_floor && (price = (ask + bid) / 2)
+    price === nothing && buyer_ceiling >= seller_floor && (price = clamp((ask + bid) / 2, seller_floor, buyer_ceiling))   # never outside the zone (review 1, §5.1)
     price === nothing && return nothing
     price = round(price, digits = 4)
     seller.negotiated[key] = price

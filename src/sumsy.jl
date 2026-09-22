@@ -83,7 +83,7 @@ function apply_demurrage!(model)
         model.demurrage_this_round += dem
         a isa Person && (model.demurrage_persons_this_round += dem)
         if p.demurrage_tax_rate > 0 && a !== gov
-            tax = round(min(p.demurrage_tax_rate * model.tax_scale * excess, cash(a)), digits = 4)
+            tax = round(min(p.demurrage_tax_rate * model.parking_tax_scale * excess, cash(a)), digits = 4)
             if tax > 0
                 transfer!(model, a, gov, tax, :demurrage_tax)
                 gov.tax_collected += tax; model.tax_this_round += tax; model.demurrage_tax_this_round += tax
@@ -157,8 +157,8 @@ function request_peer_loan!(model, borrower::Agent, amount::Float64, purpose::Sy
         return false
     end
     lenders = [a for a in alive_agents(model) if a.id != borrower.id && !is_authority(a) && !is_government(a)]
-    shuffle!(rng, lenders)
-    avail = Dict(a.id => lendable(model, a) for a in lenders)
+    stable_shuffle!(rng, lenders)
+    avail = OrderedDict(a.id => lendable(model, a) for a in lenders)
     filter!(a -> avail[a.id] >= 0.01, lenders)
     sort!(lenders; by = a -> -avail[a.id])
     disc = (borrower isa Person && borrower.buffer_lender) ? p.buffer_lender_spread_discount : 0.0
@@ -212,7 +212,7 @@ function service_peer_loans!(model)
             l.in_arrears = false; l.arrears_rounds = 0
         end
         pay > 0 && log_event!(model, :payment; from = borrower.id, to = lender.id, amount = to_lender, purpose = :peer_loan_service)
-        if l.insured && p.default_insurance
+        if (l.insured && p.default_insurance) || p.peer_loan_insurance
             prem = round(p.insurance_premium_rate * to_lender, digits = 4)
             prem > 0 && cash(lender) >= prem && (transfer!(model, lender, bank, prem, :insurance_premium); bank.insurance_premiums += prem)
             short = round(due - pay, digits = 4)
@@ -256,6 +256,11 @@ function seize_land_peer!(model, l::PeerLoan)
 end
 
 function seize_enterprise_peer!(model, l::PeerLoan)
+    b = model[l.borrower_id]
+    if parameters(model).settlement == :invoicing && b isa Enterprise && b.kind in (:farm, :bakery, :theatre)
+        liquidate!(model, b, :loan_arrears)                           # one procedure: sale as a going concern first
+        return nothing
+    end
     borrower = model[l.borrower_id]; lender = model[l.lender_id]
     pay = round(min(cash(borrower), l.outstanding), digits = 4)
     pay > 0 && (transfer!(model, borrower, lender, pay, :seizure); l.outstanding = round(l.outstanding - pay, digits = 4))

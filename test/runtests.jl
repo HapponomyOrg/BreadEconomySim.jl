@@ -4,7 +4,7 @@
 # Golden values: two sets since 18 September 2026 (per-subsystem random streams; the single-stream set is the 15 September one). Regenerated 15 September 2026 after the government's explicit debt roll-over at a policy rate (debt references)
 # and 13 September 2026 after the land-valuation rule (a villager buys land only below its
 # rent-stream value to them); earlier values were verified byte-identical to the pre-refactor package. if a deliberate rule change moves them, regenerate both sets with scripts/golden.jl and say so in HANDOFF.md.
-using Test, BreadEconomySim, DataFrames, Statistics
+using Test, Statistics, BreadEconomySim, DataFrames
 const B = BreadEconomySim
 
 # The behavioural rule set used in the report (random tie-breaking off so runs are reproducible across refactors).
@@ -15,7 +15,7 @@ const BEH = (; demand_based_targets = true, wage_ceiling_from_own_ask = true, ex
               wage_reservation_net_of_tax = true, minimum_fee_in_breads = 2.0, partial_unemployment_fee = true,
               initial_endowment = :norm, startup_loan_term = 50, land_sales = :reservation, plan_for_gluttony = true,
               stop_when_half_dead = false, stop_when_stationary = false)
-const SUM = (; monetary_system = :sumsy, wage_tax_rate = 0.0, capital_tax_rate = 0.0, unemployment_fee_in_breads = 0.0,
+const SUM = (; monetary_system = :sumsy, dividend_tax_rate = 0.0, wage_tax_rate = 0.0, capital_tax_rate = 0.0, unemployment_fee_in_breads = 0.0,
               minimum_fee_in_breads = 0.0, partial_unemployment_fee = false, government_employment_share = 0.0,
               account_fee_person = 0.5, account_fee_enterprise = 1.5, demurrage_rate = 0.02,
               instalment_purchases = true, land_price_rent_multiple = 50.0)
@@ -116,7 +116,7 @@ end
     d = round_data(run(; seed = 2, maximum_rounds = 40, OWN...))
     @test sum(d.share_trades) > 0
     ds = round_data(run(; seed = 2, maximum_rounds = 40, SUMSY_OWN...))
-    @test sum(ds.share_trades) == 0                                       # founders never short of a meal under SuMSy
+    @test sum(ds.share_trades) < sum(d.share_trades) && sum(ds.share_trades) <= 10   # under SuMSy only a rare distress sale (credit on the margin since 21 Sept can leave a founder short of a meal)
     @test all(0 .<= filter(!isnan, d.share_price_mean))
 end
 
@@ -312,17 +312,33 @@ end
     @test d.deposit_interest[12] > 0 && all(d.deposit_interest[[1:11; 13]] .== 0)
 end
 
+
+@testset "statistical regression: ten runs of the reference villages behave as before (23 September 2026)" begin
+    # Survives any change that only reshuffles the draws (a Julia release, a reordered loop); fails when the behaviour moves.
+    # Bands are roughly three standard errors of a ten-run mean around the values of 23 September; the SuMSy money stock is
+    # set by the guaranteed income and the parking fee alone, so its band is narrow.
+    for (name, kw, bread, money, gini, money_band) in (("debt", BEH, 6.65, 2917.0, 0.475, 200.0), ("sumsy", (; BEH..., SUM...), 5.75, 2984.5, 0.524, 15.0))
+        rows = [round_data(run(; seed = s, maximum_rounds = 40, kw...))[end, :] for s in 1:10]
+        @test all(r.persons_alive == 16 for r in rows)                                        # nobody dies in either reference village
+        @test abs(mean(r.price_bread for r in rows) - bread) <= 0.2 * bread
+        @test abs(mean(r.money_in_circulation for r in rows) - money) <= money_band
+        @test abs(mean(r.gini_net_wealth_persons for r in rows) - gini) <= 0.08
+    end
+end
+
 @testset "golden regression: three reference configurations, seed 3, round 25" begin
-    # Two sets. `single` are the 15 September values, reproduced with the single shared random stream
-    # (`random_streams = false`) — they pin every rule of the model. `streams` are the same configurations under
-    # the per-subsystem streams introduced on 18 September (scripts/golden.jl regenerates both).
+    # Version-stable since 23 September 2026 (StableRNGs, fixed stream seeds, ordered dictionaries): these values must be
+    # reproduced to the last digit on any Julia version and processor. Two sets, first regenerated 21 September after the six review-1 defects were fixed (credit affordability on the operating
+    # margin instead of turnover moves every trajectory; the Gini no longer clamps negatives). `single` = the single shared
+    # random stream (`random_streams = false`), `streams` = per-subsystem streams. scripts/golden.jl regenerates both; the
+    # 15 September values are superseded and kept only in git history.
     golden = Dict(
-        ("single", "debt")       => (; price_bread = 10.341650000000001, price_wage = 8.496565966386557, money = 3343.3054, debt = 3479.9816999999994, gov_debt = 1671.1629, gini = 0.4909144544995363, cash_persons = 2183.7604, tax = 62.40420000000001),
-        ("single", "debt_bonds") => (; price_bread = 13.5533125, price_wage = 11.608659512867648, money = 2618.7219999999998, debt = 2866.6173000000003, gov_debt = 1728.8779999999997, gini = 0.5427750932785462, cash_persons = 1171.5859999999998, tax = 79.3876),
-        ("single", "sumsy")      => (; price_bread = 5.59341, price_wage = 4.3970382352941195, money = 2483.7348, debt = 219.1551, gov_debt = 0.0, gini = 0.31784422803863843, cash_persons = 1681.4892, tax = 0.0),
-        ("streams", "debt")       => (; price_bread = 9.182139393939394, price_wage = 7.509551369485296, money = 2990.4571999999994, debt = 3104.4931, gov_debt = 1589.7893, gini = 0.4779300422969981, cash_persons = 2041.6322, tax = 53.0059),
-        ("streams", "debt_bonds") => (; price_bread = 12.89620303030303, price_wage = 10.99115597426471, money = 2580.9275000000002, debt = 2815.4759000000004, gov_debt = 1694.9814999999999, gini = 0.4982773624362766, cash_persons = 1136.9422, tax = 76.24039999999994),
-        ("streams", "sumsy")      => (; price_bread = 4.8844666666666665, price_wage = 3.8839382352941185, money = 2483.682599999999, debt = 190.53699999999998, gov_debt = 0.0, gini = 0.29290288733073977, cash_persons = 1720.3856, tax = 0.0))
+        ("single", "debt") => (; price_bread = 6.697468750000001, price_wage = 5.135262435661766, money = 2170.5721, debt = 2221.6540000000005, gov_debt = 1586.9236, gini = 0.47531052055054035, cash_persons = 1814.6455999999996, tax = 36.290299999999995),
+        ("single", "debt_bonds") => (; price_bread = 6.122283333333333, price_wage = 4.292304999999999, money = 773.5304000000001, debt = 655.5259999999997, gov_debt = 1402.2599999999998, gini = 0.47102167038944676, cash_persons = 621.2942, tax = 31.032899999999977),
+        ("single", "sumsy") => (; price_bread = 4.390394117647059, price_wage = 3.1772416666666636, money = 2483.5527, debt = 38.0576, gov_debt = 0.0, gini = 0.5232599210512905, cash_persons = 1702.4912, tax = 0.0),
+        ("streams", "debt") => (; price_bread = 6.277878787878789, price_wage = 4.860122984068625, money = 2123.5373, debt = 2174.5474999999997, gov_debt = 1556.7314, gini = 0.46629970833940027, cash_persons = 1814.5340999999999, tax = 34.911999999999985),
+        ("streams", "debt_bonds") => (; price_bread = 6.121823529411764, price_wage = 4.34168069698468, money = 825.9959, debt = 709.4689, gov_debt = 1435.9048999999998, gini = 0.46427811536851094, cash_persons = 629.2376, tax = 32.96249999999998),
+        ("streams", "sumsy") => (; price_bread = 4.470093939393939, price_wage = 3.2976382352941167, money = 2483.6186, debt = 52.8591, gov_debt = 0.0, gini = 0.5106809127665535, cash_persons = 1700.8167999999998, tax = 0.0))
     configs = Dict("debt" => BEH, "sumsy" => (; BEH..., SUM...),
                    "debt_bonds" => (; BEH..., government_bonds = true, deposit_interest_period = 12, deposit_interest_rate = 0.01, loyalty_bonus_rate = 0.02))
     for (mode, streams) in (("single", false), ("streams", true)), (name, kw) in configs
@@ -350,7 +366,7 @@ end
     @test B.forward_value_per_unit(m, e, 0.01; growth = 0.005) >= B.forward_value_per_unit(m, e, 0.01)   # the resale term raises it
     # no spread → identical valuations → no voluntary trades under SuMSy (debt founders still sell to retire dearer loans)
     ds = round_data(run(; seed = 2, maximum_rounds = 25, MK..., SUM..., government_employment_share = 0.1, demurrage_tax_rate = 0.01))
-    @test sum(ds.share_trades) == 0
+    @test sum(ds.share_trades) <= 10                                      # no voluntary trades; a distress sale or two is possible since credit moved to the margin
     dd = round_data(run(; seed = 2, maximum_rounds = 25, MK...))
     @test sum(dd.share_trades) > 0 && dd.founder_debt[end] < dd.founder_debt[1]
     # a spread makes a market, and the founders never fall below the control floor
@@ -461,8 +477,10 @@ end
     @test B.ticket_capacity(m, t) == Inf                                   # default: unlimited, as before
     m1 = create_bread_economy(SimulationParameters(; seed = 1, ENT..., shows_per_round = 1, maximum_rounds = 1))
     t1 = first(B.enterprises(m1, :theatre))
-    @test B.ticket_capacity(m1, t1) == 16.0                                # one show, a seat for everyone
-    @test B.theatre_labour_cap(m1, t1) == ceil(16 / B.parameters(m1).customers_per_labour_unit)
+    @test B.ticket_capacity(m1, t1) == 10.0                                # one show; two theatres seat 16 × 1.25 = 20 between them, 10 each
+    @test B.theatre_labour_cap(m1, t1) == ceil(10 / B.parameters(m1).customers_per_labour_unit)
+    m1b = create_bread_economy(SimulationParameters(; seed = 1, ENT..., shows_per_round = 1, theatre_seat_margin = 0.0, maximum_rounds = 1))
+    @test B.ticket_capacity(m1b, first(B.enterprises(m1b, :theatre))) == 8.0   # no margin: exactly the village, shared
     m2 = create_bread_economy(SimulationParameters(; seed = 1, ENT..., shows_per_round = 3, seats_per_show = 10, maximum_rounds = 1))
     @test B.ticket_capacity(m2, first(B.enterprises(m2, :theatre))) == 30.0
     # in a run the cap binds: no theatre ever offers more tickets or plans more labour than its seats take
@@ -472,7 +490,7 @@ end
         @test t.market[:ticket].offered <= B.ticket_capacity(m3, t) + 1e-9
     end
     d = round_data(m3)
-    @test maximum(d.theatre_labour) <= 2 * ceil(16 / B.parameters(m3).customers_per_labour_unit) + 1e-9   # both theatres may have closed by then
+    @test maximum(d.theatre_labour) <= 2 * ceil(10 / B.parameters(m3).customers_per_labour_unit) + 1e-9   # both theatres may have closed by then
     @test abs(money_identity_gap(m3)) < 1e-6
     # the default reproduces the previous behaviour exactly
     a = round_data(run(; seed = 3, maximum_rounds = 20, ENT...))
@@ -542,21 +560,22 @@ end
     SU = (; BEH..., SUM..., government_employment_share = 0.1, demurrage_tax_rate = 0.01)
     # off: the government hoards (the rule until now)
     d0 = round_data(run(; seed = 1, maximum_rounds = 60, SU...))
-    @test d0.government_cash[end] > 10 * d0.government_outlay[end]
+    @test d0.government_cash[end] > d0.government_outlay[end] * 0.5 && all(d0.tax_scale .== 1.0)   # it accumulates what it does not spend (the hoard is smaller since credit moved to the margin)
     @test all(d0.tax_scale .== 1.0) && sum(d0.surplus_redistributed) == 0.0
     # redistribution only: the reserve tracks the target, the surplus reaches the villagers
     d1 = round_data(run(; seed = 1, maximum_rounds = 60, SU..., government_reserve_in_rounds = 3, surplus_redistribution_share = 1.0))
     late = d1[d1.round .> 20, :]
     @test all(late.government_cash .<= late.government_reserve_target .+ late.government_outlay .* 1.5 .+ 1e-6)   # never far above target
     @test sum(d1.surplus_redistributed) > 0 && all(d1.tax_scale .== 1.0)
-    @test d1.government_cash[end] < 0.5 * d0.government_cash[end]
+    late(d) = sum(d.government_cash[d.round .> 20]) / count(d.round .> 20)
+    @test late(d1) < late(d0)                                                            # the rule keeps less on the public balance than no rule (a rule, not one run's number)
     # tax reduction only: the scale falls, the reserve still tracks the target
     d2 = round_data(run(; seed = 1, maximum_rounds = 60, SU..., government_reserve_in_rounds = 3, surplus_tax_reduction_share = 1.0))
     @test minimum(d2.tax_scale) < 1.0 && sum(d2.surplus_redistributed) == 0.0
-    @test d2.government_cash[end] < 0.5 * d0.government_cash[end]
+    @test late(d2) < late(d0)
     # both halves: still bounded
     d3 = round_data(run(; seed = 1, maximum_rounds = 60, SU..., government_reserve_in_rounds = 3, surplus_redistribution_share = 0.5, surplus_tax_reduction_share = 0.5))
-    @test d3.government_cash[end] < 0.5 * d0.government_cash[end] && sum(d3.surplus_redistributed) > 0 && minimum(d3.tax_scale) < 1.0
+    @test late(d3) < late(d0) && sum(d3.surplus_redistributed) > 0 && minimum(d3.tax_scale) < 1.0
     # the mechanics on a prepared state: 100 above target, half redistributed equally to the living
     m = create_bread_economy(SimulationParameters(; seed = 1, SU..., government_reserve_in_rounds = 1, surplus_redistribution_share = 0.5, maximum_rounds = 1))
     gov = B.government(m); B.book_asset!(gov.balance, B.DEPOSIT, 100.0)
@@ -756,6 +775,227 @@ end
     @test a.price_bread == c.price_bread && a.money_in_circulation == c.money_in_circulation
 end
 
+
+@testset "settlement ways: cash, end-of-round wages and rent, invoices, clearing among banks (22 September 2026)" begin
+    give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
+    W = (; BEH..., settlement = :invoicing)
+    m = create_bread_economy(SimulationParameters(; seed = 1, W..., maximum_rounds = 1))
+    w = first(B.persons(m)); b = first(B.enterprises(m, :bakery)); f = first(B.enterprises(m, :farm)); bank = first(B.enterprises(m, :bank)); gov = B.government(m)
+    # the router
+    @test B.settlement_way(m, w, b, :bread, :none) == :cash                  # a person is party: cash
+    @test B.settlement_way(m, b, w, :wage, :wage) == :endround               # wages: end of the round
+    @test B.settlement_way(m, f, w, :rent, :rent) == :endround               # rent too
+    @test B.settlement_way(m, b, f, :grain, :none) == :invoice               # firm to firm: an invoice
+    @test B.settlement_way(m, b, bank, :account_fee, :none) == :invoice      # a bakery may invoice a bank
+    @test B.settlement_way(m, bank, bank, :x, :none) == :clearing            # banks clear among themselves
+    @test B.settlement_way(m, gov, w, :unemployment_fee, :fee) == :clearing  # the government keeps its financing at clearing
+    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., maximum_rounds = 1))
+    @test B.settlement_way(m0, b, f, :grain, :none) == :clearing             # the old rule: everything clears
+    # a grain sale is an invoice: nothing moves at the sale, the bill is open, it is paid at the end of the next round
+    give!(b, 1_000.0); give!(f, 0.0); fc = B.cash(f)
+    B.pay!(m, b, f, 50.0, :grain)
+    @test B.cash(f) == fc && length(m.invoices) == 1 && m.invoices[1].amount == 50.0 && m.invoices[1].round_issued == B.current_round(m)
+    B.settle_invoices!(m); @test B.cash(f) == fc                               # not yet due
+    m.invoices[1].round_issued -= 1; B.settle_invoices!(m)
+    @test isapprox(B.cash(f) - fc, 50.0; atol = 1e-9) && isempty(m.invoices)
+    # wages are paid at the end of the round from takings, not at hiring
+    wc = B.cash(w); B.pay_income!(m, b, w, 20.0, :wage)
+    @test B.cash(w) == wc && length(m.end_round_obligations) >= 1
+    B.settle_end_of_round!(m)
+    @test B.cash(w) > wc && isempty(m.end_round_obligations) && w.labour_income > 0
+    # an unpaid invoice ages and is reported
+    give!(b, -B.cash(b)); B.pay!(m, b, f, 30.0, :grain); m.invoices[end].round_issued -= 4
+    @test isapprox(B.invoices_overdue(m, b, 3), 30.0; atol = 1e-9) && B.invoices_owed(m, b) >= 30.0 - 1e-9   # the wage tax withheld is an invoice to the government too
+    # whole runs: the identity holds in both villages; the default reproduces the old behaviour exactly
+    for kw in ((; W...), (; W..., SUM..., government_employment_share = 0.1, demurrage_tax_rate = 0.01))
+        mr = run(; seed = 1, maximum_rounds = 30, kw...)
+        @test abs(money_identity_gap(mr)) < 1e-6
+        d = round_data(mr); @test sum(d.invoices_issued) > 0 && sum(d.invoices_paid) > 0
+    end
+    a = round_data(run(; seed = 3, maximum_rounds = 20, BEH...)); c = round_data(run(; seed = 3, maximum_rounds = 20, BEH..., settlement = :clearing_all))
+    @test a.price_bread == c.price_bread && a.money_in_circulation == c.money_in_circulation && sum(a.invoices_issued) == 0.0
+end
+
+
+@testset "liquidation: trigger, refounding, asset liquidation, write-offs, bailout, insurance (22 September 2026)" begin
+    give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
+    round_data_money(m) = sum(B.cash(a) for a in B.alive_agents(m) if !B.is_bank(a); init = 0.0)   # deposits held by everyone but the banks
+    W = (; BEH..., settlement = :invoicing, ownership = :shareholders, share_market = true, startup_financing = :paid_in_capital)
+    function prepared()
+        m = create_bread_economy(SimulationParameters(; seed = 1, W..., maximum_rounds = 1))
+        b = first(B.enterprises(m, :bakery)); f = first(B.enterprises(m, :farm))
+        return m, b, f
+    end
+    # the trigger: 10 % of book three rounds overdue fires; 9 % or two rounds does not
+    m, b, f = prepared(); give!(b, 100.0 - B.cash(b))
+    book = B.book_value_net(m, b)
+    push!(m.invoices, B.Invoice(b.id, f.id, 0.09 * book, 0.09 * book, :grain, :none, B.current_round(m) - 3))
+    @test !B.insolvent(m, b)
+    m.invoices[end].amount = 0.11 * book; m.invoices[end].original = 0.11 * book
+    @test B.insolvent(m, b)
+    m.invoices[end].round_issued = B.current_round(m) - 2
+    @test !B.insolvent(m, b)
+    # refounding: buyers with spare cash take the firm, pay the overdue invoice first, hold shares pro rata; target and staff stay
+    m, b, f = prepared(); give!(b, 100.0 - B.cash(b))
+    for a in B.alive_agents(m); a === b || give!(a, -B.cash(a)); end                        # nobody else can buy: only the two below
+    rich = [w for w in B.persons(m) if !haskey(b.shares, w.id)][1:2]                        # two who do not already own the bakery
+    give!(rich[1], 3_000.0); give!(rich[2], 1_000.0)
+    push!(m.invoices, B.Invoice(b.id, f.id, 40.0, 40.0, :grain, :none, B.current_round(m) - 3))
+    target = b.production_target; fc = B.cash(f); old_owners = Set(keys(b.shares))
+    @test B.insolvent(m, b) && B.refound!(m, b)
+    @test Set(keys(b.shares)) == Set([rich[1].id, rich[2].id]) && isdisjoint(keys(b.shares), old_owners)
+    @test isapprox(b.shares[rich[1].id] / b.shares[rich[2].id], 3.0; rtol = 0.05)      # pro rata to what they put in
+    @test isapprox(B.cash(f) - fc, 40.0; atol = 1e-6) && !any(iv -> iv.from_id == b.id, m.invoices)
+    @test b.production_target == target && b.alive && b.refoundings == 1 && m.refoundings == 1
+    # asset liquidation: nobody can pay → the firm closes, the supplier writes the invoice off
+    m, b, f = prepared(); give!(b, 20.0 - B.cash(b))
+    for a in B.alive_agents(m); a === b || give!(a, -B.cash(a)); end
+    push!(m.invoices, B.Invoice(b.id, f.id, 500.0, 500.0, :grain, :none, B.current_round(m) - 3))
+    B.liquidate_insolvent_firms!(m)
+    @test !b.alive && m.liquidations == 1 && m.refoundings == 0
+    @test m.cumulative_bad_debt > 0 && !any(iv -> iv.from_id == b.id, m.invoices)
+    # a struck bank loan: the deposits stay, the loan is written off, the bank is recapitalised if it goes under water
+    m, b, f = prepared(); give!(b, -B.cash(b))
+    bank = first(B.enterprises(m, :bank)); give!(bank, -B.cash(bank)); bank.retained_interest = 0.0
+    B.make_loan!(m, bank, b, 400.0, :test)                                                 # a bank loan to the bakery, granted directly (a bank may refuse a request)
+    @test B.debt_of(b) >= 400.0 - 1e-6
+    for a in B.alive_agents(m); a === b || a === f || give!(a, -B.cash(a)); end
+    B.transfer!(m, b, f, 400.0, :grain)                                                    # the bakery spends the loan: the money now sits with the farm
+    push!(m.invoices, B.Invoice(b.id, f.id, 500.0, 500.0, :grain, :none, B.current_round(m) - 3))
+    money_before = B.cash(f); w0 = m.cumulative_write_offs
+    B.liquidate_insolvent_firms!(m)
+    @test !b.alive && m.cumulative_write_offs >= 400.0 - 1e-6                              # the loan is struck
+    @test isapprox(B.cash(f), money_before; atol = 1e-6)                                  # the money the loan created is still out there
+    @test m.cumulative_bailouts > 0 && any(pr -> pr.purpose == :bank_bailout, m.promises)  # the government pays in at its clearing
+    # (no identity check here: `give!` books money without a counterpart; the identity is checked on whole runs below)
+    # no bailout when the switch is off
+    m2, b2, f2 = prepared()
+    @test B.parameters(m2).bank_bailout
+    # peer-loan insurance under SuMSy: a struck peer loan is covered from the pool up to the pool
+    SU = (; BEH..., SUM..., settlement = :invoicing, government_employment_share = 0.1, demurrage_tax_rate = 0.01, peer_loan_insurance = true)
+    ms = create_bread_economy(SimulationParameters(; seed = 1, SU..., maximum_rounds = 1))
+    bs = first(B.enterprises(ms, :bakery)); fs = first(B.enterprises(ms, :farm)); banks = first(B.enterprises(ms, :bank)); lender = B.persons(ms)[1]
+    give!(lender, 500.0); give!(banks, 30.0); banks.insurance_premiums = 30.0
+    push!(ms.peer_loans, B.PeerLoan(length(ms.peer_loans) + 1, lender.id, bs.id, banks.id, 100.0, 100.0, 10.0, 0.0, 0.0, false, B.current_round(ms) - 1, 0, false, false, 0.0))
+    for a in B.alive_agents(ms); a === lender || a === banks || give!(a, -B.cash(a)); end
+    push!(ms.invoices, B.Invoice(bs.id, fs.id, 500.0, 500.0, :grain, :none, B.current_round(ms) - 3))
+    lc = B.cash(lender)
+    B.liquidate_insolvent_firms!(ms)
+    @test !bs.alive
+    @test isapprox(B.cash(lender) - lc, 30.0; atol = 1e-6)                                # the pool covers 30 of the 100
+    @test ms.cumulative_write_offs >= 70.0 - 1e-6
+    # whole runs: identity, both villages
+    for kw in ((; W...), (; SU...))
+        mr = run(; seed = 2, maximum_rounds = 40, kw...)
+        @test abs(money_identity_gap(mr)) < 1e-6
+    end
+end
+
+
+@testset "tax families: profit tax, collection periods, five scales and levers (22 September 2026)" begin
+    give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
+    # profit base: revenue − materials × 1.0 − labour × 0.5, never below zero
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., profit_tax_rate = 0.10, maximum_rounds = 1))
+    b = first(B.enterprises(m, :bakery))
+    b.revenue_period = 100.0; b.materials_period = 30.0; b.labour_period = 40.0
+    @test isapprox(B.profit_tax_base(m, b), 100 - 30 - 20; atol = 1e-9)
+    b.revenue_period = 10.0; @test B.profit_tax_base(m, b) == 0.0
+    # collection: period 1 charges every round; period 12 charges only in round 12, on the whole year's profit
+    d1 = round_data(run(; seed = 1, maximum_rounds = 24, BEH..., profit_tax_rate = 0.10))
+    @test sum(d1.profit_tax .> 0) > 12
+    d12 = round_data(run(; seed = 1, maximum_rounds = 24, BEH..., profit_tax_rate = 0.10, profit_tax_period = 12))
+    @test all(d12.profit_tax[[r for r in 1:24 if r % 12 != 0]] .== 0.0) && d12.profit_tax[12] > 0
+    # income tax accrued through the year and charged in round 12; the worker is paid gross meanwhile
+    mi = create_bread_economy(SimulationParameters(; seed = 1, BEH..., wage_tax_rate = 0.2, income_tax_period = 12, clearing = false, maximum_rounds = 1))
+    e = first(B.enterprises(mi, :bakery)); w = first(B.persons(mi)); give!(e, 1_000.0)
+    c0 = B.cash(w); B.pay_income!(mi, e, w, 100.0, :wage)
+    @test isapprox(B.cash(w) - c0, 100.0; atol = 1e-6) && isapprox(w.income_tax_accrued, 20.0; atol = 1e-6)
+    di = round_data(run(; seed = 1, maximum_rounds = 24, BEH..., income_tax_period = 12))
+    @test all(di.income_tax_charged[[r for r in 1:24 if r % 12 != 0]] .== 0.0) && di.income_tax_charged[12] > 0
+    # five families: a lever on each moves its own scale; the parking fee is never touched
+    function levered(levers)
+        mm = create_bread_economy(SimulationParameters(; seed = 1, BEH..., government_reserve_in_rounds = 3, tax_policy = :scale, tax_response_coverage = 1.0, tax_response_step = 0.02, tax_levers = levers, maximum_rounds = 1))
+        mm.government_outlay_this_round = 100.0; mm.tax_this_round = 50.0
+        B.manage_government_reserve!(mm); return mm
+    end
+    ml = levered((profit = -1.0, parking = 1.0))
+    @test isapprox(ml.profit_tax_scale, 0.98 * 1.02; atol = 1e-9) && isapprox(ml.parking_tax_scale, 1.02 * 1.02; atol = 1e-9)
+    @test isapprox(ml.tax_scale, 1.02; atol = 1e-9) && B.parameters(ml).demurrage_rate == 0.02
+    @test isapprox(levered((income = -3.0,)).tax_scale, 0.94 * 1.02; atol = 1e-9)        # a partial tuple: the others are 0
+    @test_throws ArgumentError run(; seed = 1, maximum_rounds = 1, BEH..., tax_levers = (land = 1.0,))
+    # the parking tax follows its own scale under SuMSy
+    ms = create_bread_economy(SimulationParameters(; seed = 1, BEH..., SUM..., demurrage_tax_rate = 0.01, maximum_rounds = 1))
+    for w in B.persons(ms); give!(w, 200.0); end
+    ms.parking_tax_scale = 0.0; g0 = B.cash(B.government(ms)); B.apply_demurrage!(ms)
+    @test B.cash(B.government(ms)) == g0                                                   # parking tax scaled to zero: nothing collected
+    # whole runs: identity, both settlement systems; defaults bit-identical
+    for kw in ((; BEH..., profit_tax_rate = 0.1, income_tax_period = 12), (; BEH..., settlement = :invoicing, profit_tax_rate = 0.1, income_tax_period = 12, profit_tax_period = 12))
+        @test abs(money_identity_gap(run(; seed = 2, maximum_rounds = 30, kw...))) < 1e-6
+    end
+end
+
+
+@testset "one liquidation procedure and invoice financing (22 September 2026)" begin
+    give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
+    W = (; BEH..., settlement = :invoicing, ownership = :shareholders, share_market = true, startup_financing = :paid_in_capital)
+    # a loan covered by 80 % of the firm's receivables is affordable even with no income to speak of
+    m = create_bread_economy(SimulationParameters(; seed = 1, W..., maximum_rounds = 1))
+    f = first(B.enterprises(m, :farm)); b = first(B.enterprises(m, :bakery)); f.production_target = 0
+    push!(m.invoices, B.Invoice(b.id, f.id, 100.0, 100.0, :grain, :none, B.current_round(m)))
+    @test B.receivables(m, f) == 100.0
+    @test B.affordable(m, f, 80.0, 0.01) && !B.affordable(m, f, 81.0, 0.01)
+    m0 = create_bread_economy(SimulationParameters(; seed = 1, W..., receivables_advance_rate = 0.0, maximum_rounds = 1))
+    f0 = first(B.enterprises(m0, :farm)); b0 = first(B.enterprises(m0, :bakery)); f0.production_target = 0
+    push!(m0.invoices, B.Invoice(b0.id, f0.id, 100.0, 100.0, :grain, :none, B.current_round(m0)))
+    @test !B.affordable(m0, f0, 80.0, 0.01)                                                 # switched off: the income test alone
+    # loan-arrears seizure goes through the same procedure: offered for sale first
+    m2 = create_bread_economy(SimulationParameters(; seed = 1, W..., maximum_rounds = 1))
+    b2 = first(B.enterprises(m2, :bakery)); bank = first(B.enterprises(m2, :bank))
+    for w in B.persons(m2); give!(w, -B.cash(w)); end
+    give!(B.persons(m2)[1], 5_000.0)
+    B.make_loan!(m2, bank, b2, 200.0, :test); loan = last(m2.loans)
+    give!(b2, -B.cash(b2))                                                                   # the loan has been spent: the bakery owes 200 and holds nothing
+    B.seize_enterprise!(m2, loan)
+    @test b2.alive && b2.refoundings == 1 && m2.liquidations == 1                          # sold as a going concern, not closed
+    @test haskey(b2.shares, B.persons(m2)[1].id)
+    # whole runs, both villages: identity
+    for kw in ((; W...), (; W..., SUM..., government_employment_share = 0.1, demurrage_tax_rate = 0.01))
+        @test abs(money_identity_gap(run(; seed = 2, maximum_rounds = 40, kw...))) < 1e-6
+    end
+end
+
+
+@testset "rich–poor gap: richest tenth against poorest tenth, in meals (22 September 2026)" begin
+    @test B.decile_ends(1:100) == (5.5, 95.5)
+    @test B.decile_ends([-50.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 200.0]) == (-50.0, 200.0)   # works with negatives and zeros
+    @test B.decile_ends([3.0]) == (3.0, 3.0)
+    d = round_data(run(; seed = 1, maximum_rounds = 12, BEH...))
+    r = d[end, :]
+    @test r.wealth_gap_meals ≈ r.wealth_top10_meals - r.wealth_bottom10_meals
+    @test r.cash_gap_meals ≈ r.cash_top10_meals - r.cash_bottom10_meals
+    @test r.cash_gap_meals >= 0 && r.zero_cash_persons >= 0
+end
+
+
+@testset "banks do not fail: interbank arrears are recapitalised, and settled loans are skipped (22 September 2026)" begin
+    give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., settlement = :invoicing, maximum_rounds = 1))
+    a, b = B.enterprises(m, :bank)[1:2]
+    B.make_loan!(m, b, a, 100.0, :test); loan = last(m.loans)
+    give!(a, -B.cash(a)); loan.in_arrears = true; loan.arrears_rounds = 9
+    B.seize_enterprise!(m, loan)
+    @test a.alive && m.cumulative_bailouts > 0 && !loan.in_arrears
+    @test any(pr -> pr.purpose == :bank_bailout && pr.to_id == a.id, vcat(m.promises, m.trade_arrears))
+    # a loan paid off outside its schedule is closed by the service loop instead of crashing EconoSim
+    m2 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., maximum_rounds = 3))
+    f = first(B.enterprises(m2, :farm)); bank = first(B.enterprises(m2, :bank))
+    B.make_loan!(m2, bank, f, 50.0, :test); l2 = last(m2.loans); l2.created = -1
+    B.repay_extra!(m2, l2, B.total_due(l2))
+    l2.settled = false                                                                   # as a refounding could leave it
+    B.service_debt!(m2)
+    @test l2.settled
+end
+
 @testset "cooperative forms (14 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     params(m) = B.parameters(m)
@@ -840,7 +1080,7 @@ end
         ws = B.persons(m)[1:3]
         for (k, w) in enumerate(ws)                            # 1, 2 and 3 hours in the window
             e.members[w.id] = 1; e.member_since[w.id] = 1
-            push!(e.patronage_log, Dict(w.id => Float64(k)))
+            push!(e.patronage_log, B.OrderedDict(w.id => Float64(k)))
         end
         give!(e, 1000.0)
         before = [B.cash(w) for w in ws]
@@ -859,7 +1099,7 @@ end
         mw = create_bread_economy(pw)
         ew = first(x for x in B.alive_agents(mw) if x isa Enterprise && B.coop_form(mw, x) == :worker)
         w = first(B.persons(mw)); ew.members[w.id] = 1; ew.member_since[w.id] = 1
-        push!(ew.patronage_log, Dict(w.id => 1.0))
+        push!(ew.patronage_log, B.OrderedDict(w.id => 1.0))
         give!(ew, 1000.0)
         gov_before = B.cash(B.government(mw)); before = B.cash(w)
         B.distribute_patronage!(mw, ew, 100.0)
@@ -871,7 +1111,7 @@ end
         mc = create_bread_economy(pc)
         ec = first(x for x in B.alive_agents(mc) if x isa Enterprise && B.coop_form(mc, x) == :consumer)
         c = first(B.persons(mc)); ec.members[c.id] = 1; ec.member_since[c.id] = 1
-        push!(ec.patronage_log, Dict(c.id => 1.0))
+        push!(ec.patronage_log, B.OrderedDict(c.id => 1.0))
         give!(ec, 1000.0)
         gov_before = B.cash(B.government(mc)); before = B.cash(c)
         B.distribute_patronage!(mc, ec, 100.0)
@@ -928,7 +1168,7 @@ end
         end
         e.paid_in_capital = 2 * params(m).membership_share_price
         give!(e, 5_000.0)                                     # enough to redeem out of cash above the reserve
-        for _ in 1:3; push!(e.patronage_log, Dict(busy.id => 2.0)); end
+        for _ in 1:3; push!(e.patronage_log, B.OrderedDict(busy.id => 2.0)); end
         B.manage_new_form_membership!(m)
         @test !haskey(e.members, idle.id)                     # no hours over the window: redeemed
         @test haskey(e.members, busy.id)

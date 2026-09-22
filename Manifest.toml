@@ -2,7 +2,7 @@
 
 julia_version = "1.13.0"
 manifest_format = "2.0"
-project_hash = "4eea1d92f972b3ed0bf146c1e3c84c04aca5d778"
+project_hash = "6ea091f5a8db42b1ef3cce8bb75403cb8768f7e3"
 
 [[deps.AbstractTrees]]
 git-tree-sha1 = "2d9c9a55f9c93e8887ad391fbae72f8ef55e1177"
@@ -829,6 +829,12 @@ version = "2.9.0"
 
     [deps.SpecialFunctions.weakdeps]
     ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
+
+[[deps.StableRNGs]]
+deps = ["Random"]
+git-tree-sha1 = "4f96c596b8c8258cc7d3b19797854d368f243ddc"
+uuid = "860ef19b-820b-49d6-a774-d7a799459cd3"
+version = "1.0.4"
 
 [[deps.StaticArrays]]
 deps = ["LinearAlgebra", "PrecompileTools", "Random", "StaticArraysCore"]

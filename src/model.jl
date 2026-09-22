@@ -23,6 +23,17 @@ mutable struct Promise
     paid::Float64
 end
 
+"""A bill between firms: issued in `round_issued`, payable at the end of the next round; `amount` is what is still open."""
+mutable struct Invoice
+    from_id::Int
+    to_id::Int
+    amount::Float64
+    original::Float64
+    purpose::Symbol
+    income_kind::Symbol
+    round_issued::Int
+end
+
 const ROUND_BEHAVIORS = Function[]
 
 # One random stream per subsystem (18 September 2026). Every draw the model makes goes through `stream(model, name)`.
@@ -33,22 +44,24 @@ const ROUND_BEHAVIORS = Function[]
 const RANDOM_STREAMS = (:negotiation, :land, :labour, :grain, :bread, :tickets, :greed, :credit, :estates, :shares, :cooperatives)
 
 """The random generator of a subsystem; the model's single generator when `random_streams` is off."""
-stream(model, name::Symbol) = parameters(model).random_streams ? model.streams[name] : abmrng(model)
+stream(model, name::Symbol) = parameters(model).random_streams ? model.streams[name] : model.single_stream
 
 function create_bread_economy(parameters::SimulationParameters = SimulationParameters())
     validate_cooperatives(parameters)
     model = create_econo_model(Agent, copy(ROUND_BEHAVIORS))
     Random.seed!(abmrng(model), parameters.seed)
     props = abmproperties(model)
-    props[:streams] = Dict{Symbol, Random.Xoshiro}(name => Random.Xoshiro(hash(name, UInt(parameters.seed))) for name in RANDOM_STREAMS)
+    # version-stable streams (23 September 2026): StableRNGs seeded by a fixed rule — see stable_random.jl
+    props[:streams] = OrderedDict{Symbol, StableRNG}(name => StableRNG(stream_seed(parameters.seed, name)) for name in RANDOM_STREAMS)
+    props[:single_stream] = StableRNG(stream_seed(parameters.seed, :single))    # random_streams = false: one stream for everything
     props[:parameters] = parameters
     props[:loans] = Loan[]
     props[:wage_contracts] = WageContract[]
     props[:promises] = Promise[]
     props[:trade_arrears] = Promise[]
     props[:cumulative_trade_arrears] = 0.0
-    props[:expected_prices] = Dict{Symbol, Float64}(k => v * parameters.initial_price_multiplier for (k, v) in parameters.initial_prices)
-    props[:transactions] = Dict{Symbol, Vector{Tuple{Float64, Float64}}}(g => Tuple{Float64, Float64}[] for g in GOODS)
+    props[:expected_prices] = OrderedDict{Symbol, Float64}(k => v * parameters.initial_price_multiplier for (k, v) in parameters.initial_prices)
+    props[:transactions] = OrderedDict{Symbol, Vector{Tuple{Float64, Float64}}}(g => Tuple{Float64, Float64}[] for g in GOODS)
     props[:credit_demand_this_round] = 0.0
     props[:credit_demand_previous_round] = 0.0
     props[:cumulative_interest_paid] = 0.0
@@ -79,6 +92,15 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
     props[:wealth_revenue_history] = Float64[]
     props[:consumption_tax_this_round] = 0.0
     props[:wealth_tax_this_round] = 0.0
+    props[:clearing_residue] = 0.0
+    props[:end_round_obligations] = Promise[]                        # wages and rent, settled at the end of the round (settlement = :invoicing)
+    props[:invoices] = Invoice[]                                     # open invoices, oldest first
+    props[:invoices_issued_this_round] = 0.0
+    props[:invoices_paid_this_round] = 0.0
+    props[:liquidations] = 0; props[:refoundings] = 0; props[:cumulative_bad_debt] = 0.0; props[:cumulative_bailouts] = 0.0
+    props[:profit_tax_scale] = 1.0; props[:parking_tax_scale] = 1.0
+    props[:profit_tax_this_round] = 0.0; props[:income_tax_charged_this_round] = 0.0
+    props[:after_clearing] = false                                    # true once clear! has run this round: later promises go to next round's clearing                                  # cumulative: net positions that could not be booked at clearing
     props[:wealth_tax_base] = 0.0
     props[:consumption_revenue_history] = Float64[]
     props[:government_outlay_this_round] = 0.0
@@ -91,10 +113,10 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
     props[:surplus_redistributed_this_round] = 0.0
     props[:peer_loans] = PeerLoan[]
     props[:bonds] = Bond[]
-    props[:share_collateral] = Dict{Int, Tuple{Int, Float64}}()   # peer loan id → (enterprise id, share units pledged)
-    props[:clearing_obligations] = Dict{Int, Float64}()
-    props[:clearing_receipts] = Dict{Int, Float64}()
-    props[:clearing_debt_service] = Dict{Int, Float64}()
+    props[:share_collateral] = OrderedDict{Int, Tuple{Int, Float64}}()   # peer loan id → (enterprise id, share units pledged)
+    props[:clearing_obligations] = OrderedDict{Int, Float64}()
+    props[:clearing_receipts] = OrderedDict{Int, Float64}()
+    props[:clearing_debt_service] = OrderedDict{Int, Float64}()
     props[:agent_list] = Agent[]
     props[:person_list] = Person[]
     props[:enterprise_list] = Enterprise[]
@@ -111,7 +133,7 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
     props[:bank_rate_history] = Float64[]
     props[:bonds_issued_this_round] = 0.0
     props[:coupons_this_round] = 0.0
-    props[:balance_history] = Dict{Int, Vector{Float64}}()
+    props[:balance_history] = OrderedDict{Int, Vector{Float64}}()
     props[:deposit_interest_this_round] = 0.0
     props[:gi_this_round] = 0.0
     props[:demurrage_this_round] = 0.0
@@ -119,25 +141,31 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
     props[:account_fees_this_round] = 0.0
     props[:peer_lent_this_round] = 0.0
 
-    prices = Dict{Symbol, Float64}(k => v * parameters.initial_price_multiplier for (k, v) in parameters.initial_prices)
+    prices = OrderedDict{Symbol, Float64}(k => v * parameters.initial_price_multiplier for (k, v) in parameters.initial_prices)
     sumsy = parameters.monetary_system == :sumsy
-    sumsy && add_agent!(Enterprise, model; kind = :authority, balance = Balance(), ask = Dict{Symbol, Float64}(prices), bid = Dict{Symbol, Float64}(prices))
+    sumsy && add_agent!(Enterprise, model; kind = :authority, balance = Balance(), ask = OrderedDict{Symbol, Float64}(prices), bid = OrderedDict{Symbol, Float64}(prices))
     for k in 1:parameters.number_of_banks
         # A bank's deposit liability may go negative: repayments made with deposits another bank created (or made to a bank
         # that has closed) then book as an interbank claim instead of leaking out of the accounting (EconoSim process_debt!).
         bank_balance = Balance(); min_liability!(bank_balance, DEPOSIT, typemin(Currency))
         add_agent!(Enterprise, model; kind = :bank, balance = bank_balance, interest_rate = sumsy ? 0.0 : parameters.initial_interest_rate,
-                   ask = Dict{Symbol, Float64}(prices), bid = Dict{Symbol, Float64}(prices))
+                   ask = OrderedDict{Symbol, Float64}(prices), bid = OrderedDict{Symbol, Float64}(prices))
+    end
+    if parameters.bank_customers_per_labour_unit > 0                    # bank staff in proportion to the customers it serves
+        bks = [a for a in agents_by_id(model) if a isa Enterprise && a.kind == :bank]
+        for b in bks
+            b.staff_target = max(1.0, parameters.number_of_persons / (length(bks) * parameters.bank_customers_per_labour_unit))
+        end
     end
     for k in 1:parameters.number_of_farms
         add_agent!(Enterprise, model; kind = :farm, balance = Balance(), production_target = parameters.initial_production_target,
-                   ask = Dict{Symbol, Float64}(prices), bid = Dict{Symbol, Float64}(prices))
+                   ask = OrderedDict{Symbol, Float64}(prices), bid = OrderedDict{Symbol, Float64}(prices))
     end
     for k in 1:parameters.number_of_bakeries
         add_agent!(Enterprise, model; kind = :bakery, balance = Balance(), production_target = parameters.initial_production_target,
-                   ask = Dict{Symbol, Float64}(prices), bid = Dict{Symbol, Float64}(prices))
+                   ask = OrderedDict{Symbol, Float64}(prices), bid = OrderedDict{Symbol, Float64}(prices))
     end
-    add_agent!(Enterprise, model; kind = :government, balance = Balance(), ask = Dict{Symbol, Float64}(prices), bid = Dict{Symbol, Float64}(prices))
+    add_agent!(Enterprise, model; kind = :government, balance = Balance(), ask = OrderedDict{Symbol, Float64}(prices), bid = OrderedDict{Symbol, Float64}(prices))
 
     land = land_units_per_landowner(parameters)
     for k in 1:parameters.number_of_persons
@@ -145,21 +173,21 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
         add_agent!(Person, model; balance = Balance(), capacity = parameters.maximum_capacity,
                    land = landowner ? land : 0, initial_landowner = landowner,
                    bread = parameters.initial_breads_per_person > 0 ? [StockItem(parameters.initial_breads_per_person, 0)] : StockItem[],
-                   ask = Dict{Symbol, Float64}(prices), bid = Dict{Symbol, Float64}(prices))
+                   ask = OrderedDict{Symbol, Float64}(prices), bid = OrderedDict{Symbol, Float64}(prices))
     end
     if parameters.entertainment
         target0 = max(ceil(Int, parameters.number_of_persons * parameters.entertainment_propensity / parameters.customers_per_labour_unit / parameters.number_of_theatres), 1)
         for k in 1:parameters.number_of_theatres
             add_agent!(Enterprise, model; kind = :theatre, balance = Balance(), production_target = target0,
-                       ask = Dict{Symbol, Float64}(prices), bid = Dict{Symbol, Float64}(prices))
+                       ask = OrderedDict{Symbol, Float64}(prices), bid = OrderedDict{Symbol, Float64}(prices))
         end
     end
     if parameters.ownership != :none
-        ps = sort([a for a in allagents(model) if a isa Person]; by = a -> a.id)
+        ps = sort([a for a in agents_by_id(model) if a isa Person]; by = a -> a.id)
         units_total = parameters.shares_per_person > 0 ? float(parameters.shares_per_person * parameters.number_of_persons) : 100.0
         holders = ps[1:min(parameters.shareholder_count, length(ps))]
         for kind in (:farm, :bakery, :theatre)
-            es = sort([a for a in allagents(model) if a isa Enterprise && a.kind == kind]; by = a -> a.id)
+            es = sort([a for a in agents_by_id(model) if a isa Enterprise && a.kind == kind]; by = a -> a.id)
             ncoop = parameters.ownership == :cooperative ? length(es) : parameters.ownership == :shareholders ? 0 :
                     kind == :farm ? parameters.cooperative_farms : kind == :bakery ? parameters.cooperative_bakeries : parameters.cooperative_theatres
             for (k, e) in enumerate(es)
@@ -178,7 +206,7 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
             end
         end
     end
-    for a in allagents(model)
+    for a in agents_by_id(model)
         push!(model.agent_list, a)
         a isa Person ? push!(model.person_list, a) : push!(model.enterprise_list, a)
     end
@@ -193,8 +221,8 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
     end
     if parameters.greed
         ps = collect(persons(model)); n = round(Int, parameters.greed_share * length(ps))
-        wealth(w) = cash(w) + w.land * parameters.land_price_rent_multiple * prices[:rent] + sum(get(e.shares, w.id, 0.0) for e in allagents(model) if e isa Enterprise; init = 0.0)
-        chosen = parameters.greed_selection == :rich ? sort(ps; by = w -> (-wealth(w), w.id))[1:n] : shuffle(stream(model, :greed), ps)[1:n]
+        wealth(w) = cash(w) + w.land * parameters.land_price_rent_multiple * prices[:rent] + sum(get(e.shares, w.id, 0.0) for e in agents_by_id(model) if e isa Enterprise; init = 0.0)
+        chosen = parameters.greed_selection == :rich ? sort(ps; by = w -> (-wealth(w), w.id))[1:n] : stable_shuffle(stream(model, :greed), ps)[1:n]
         for w in chosen; w.greed = :greedy; end
     end
     if sumsy && parameters.start_at_saturation != :none
@@ -366,6 +394,8 @@ function begin_round!(model)
     model.membership_capital_this_round = 0.0; model.reserved_labour_this_round = 0.0
     model.government_outlay_this_round = 0.0; model.surplus_redistributed_this_round = 0.0
     model.consumption_tax_this_round = 0.0; model.wealth_tax_this_round = 0.0
+    model.invoices_issued_this_round = 0.0; model.invoices_paid_this_round = 0.0
+    model.profit_tax_this_round = 0.0; model.income_tax_charged_this_round = 0.0; model.after_clearing = false
     for e in model.enterprise_list; empty!(e.patronage_this_round); end
     model.gi_this_round = 0.0; model.demurrage_this_round = 0.0; model.demurrage_tax_this_round = 0.0
     model.account_fees_this_round = 0.0; model.peer_lent_this_round = 0.0

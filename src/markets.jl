@@ -18,7 +18,7 @@ at a time from the owner with the lowest rent ask, paid up front; rent income is
 """
 function land_market!(model)
     rng = stream(model, :land)
-    farms = shuffle(rng, enterprises(model, :farm))
+    farms = stable_shuffle(rng, enterprises(model, :farm))
     price = land_price(model)
     sellers_cache = Agent[]; sellers_dirty = Ref(true)
     function sellers()
@@ -35,7 +35,7 @@ function land_market!(model)
         f.market[:rent].wanted = max(f.production_target - f.land, 0)
     end
     # purchases: enterprises first, then persons
-    buyers = vcat(farms, shuffle(rng, persons(model)))
+    buyers = vcat(farms, stable_shuffle(rng, persons(model)))
     for b in buyers
         while true
             # a farm wants land it will work; a person wants land only below the value of its rent stream to them
@@ -79,7 +79,7 @@ function land_market!(model)
     # distress sales (seller-initiated, immediate settlement)
     if parameters(model).distress_land_sales
         dprice = round(price * parameters(model).distress_land_discount, digits = 4)
-        for o in shuffle(rng, [o for o in persons(model) if land_to_let(o) > 0 && (o.hunger > 0 || has_arrears(model, o) || cash(o) < meal_price(model))])
+        for o in stable_shuffle(rng, [o for o in persons(model) if land_to_let(o) > 0 && (o.hunger > 0 || has_arrears(model, o) || cash(o) < meal_price(model))])
             buyers = [b for b in alive_agents(model) if b.id != o.id && !is_government(b) &&
                       (b isa Person ? cash(b) - buffer_target(model, b) : (is_farm(b) ? available_cash(b) : 0.0)) >= dprice]
             isempty(buyers) && continue
@@ -105,6 +105,7 @@ function land_market!(model)
                 rent === nothing && continue
                 fund!(model, f, rent, :rent) || continue
                 o isa Person ? pay_income!(model, f, o, rent, :rent) : pay!(model, f, o, rent, :rent)
+                f.materials_period += rent
                 o.land_let += 1; o.market[:rent].sold += 1
                 f.rented_land += 1; f.market[:rent].got += 1
                 record_transaction!(model, :rent, rent, 1.0)
@@ -141,7 +142,8 @@ end
 function ticket_capacity(model, t::Enterprise)
     p = parameters(model)
     p.shows_per_round <= 0 && return Inf
-    seats = p.seats_per_show > 0 ? p.seats_per_show : p.number_of_persons
+    seats = p.seats_per_show > 0 ? p.seats_per_show :
+            ceil(p.number_of_persons / max(count(x -> x.kind == :theatre, model.enterprise_list), 1) * (1 + p.theatre_seat_margin))
     return Float64(p.shows_per_round * seats)
 end
 
@@ -149,7 +151,7 @@ end
 theatre_labour_cap(model, t::Enterprise) = ceil(ticket_capacity(model, t) / parameters(model).customers_per_labour_unit)
 
 labour_need(e::Enterprise) = e.kind == :farm ? max(min(e.production_target, e.land + e.rented_land), 0) :
-                            e.kind == :bakery ? max(min(e.production_target, floor(grain_units(e) + 1e-9)), 0) : e.kind == :bank ? 1.0 : e.kind == :theatre ? Float64(max(e.production_target, 0)) : 0.0
+                            e.kind == :bakery ? max(min(e.production_target, floor(grain_units(e) + 1e-9)), 0) : e.kind == :bank ? e.staff_target : e.kind == :theatre ? Float64(max(e.production_target, 0)) : 0.0
 
 """
     hire!(model, e, w, units, wage)
@@ -160,6 +162,7 @@ part of the net wage towards the membership share.
 """
 function hire!(model, e::Enterprise, w::Person, units::Float64, wage::Float64)
     e.wage_bill += units * wage
+    e.labour_period += units * wage
     w.labour_available -= units; w.labour_sold += units; w.market[:wage].sold += units
     e.hired_labour += units; e.market[:wage].got += units
     net = pay_income!(model, e, w, units * wage, :wage)
@@ -194,14 +197,14 @@ function labour_market!(model, kinds)
         release_reserved_labour!(model, kinds)
     end
     allocate_cooperative_labour!(model, kinds)                # members first, the work spread over them
-    employers = shuffle(rng, reduce(vcat, [enterprises(model, k) for k in kinds]; init = Enterprise[]))
+    employers = stable_shuffle(rng, reduce(vcat, [enterprises(model, k) for k in kinds]; init = Enterprise[]))
     for e in employers
         e.market[:wage].wanted = labour_need(e)
     end
     active = [e for e in employers if e.market[:wage].wanted > 1e-9]
     # the pool is sorted once: asks do not change within the market and exhausted workers are skipped
     pool = [w for w in persons(model) if w.labour_available > 1e-9]
-    parameters(model).random_hiring_ties && shuffle!(rng, pool)
+    parameters(model).random_hiring_ties && stable_shuffle!(rng, pool)
     sort!(pool; by = w -> w.ask[:wage])
     while !isempty(active)
         for e in copy(active)
@@ -275,7 +278,7 @@ end
 
 function grain_market!(model)
     rng = stream(model, :grain)
-    bakeries = shuffle(rng, enterprises(model, :bakery))
+    bakeries = stable_shuffle(rng, enterprises(model, :bakery))
     for b in bakeries
         b.market[:grain].wanted = max(b.production_target - grain_units(b), 0.0)
     end
@@ -300,6 +303,7 @@ function grain_market!(model)
                 price === nothing && continue
                 fund!(model, b, price, :grain) || continue
                 pay!(model, b, f, price, :grain)
+                b.materials_period += price; f.revenue_period += price
                 take_stock!(f.grain, 1.0); push!(b.grain, StockItem(1.0, 0))
                 f.market[:grain].sold += 1; b.market[:grain].got += 1
                 record_transaction!(model, :grain, price, 1.0)
@@ -379,7 +383,7 @@ function bread_market!(model)
         alive_n = max(length(persons(model)), 1)
         model.ration_this_round = max(p.breads_per_meal, min(p.ration_breads_per_person, floor(Int, sum(b.market[:bread].offered for b in enterprises(model, :bakery); init = 0.0) / alive_n)))
     end
-    for buyer in shuffle(rng, persons(model))
+    for buyer in stable_shuffle(rng, persons(model))
         if bread_units(buyer) >= meal - 1e-9
             gluttony_and_stocking!(model, buyer); continue
         end
@@ -438,13 +442,13 @@ function ticket_market!(model)
     for t in theatres
         t.market[:ticket].offered = min(t.hired_labour * p.customers_per_labour_unit, ticket_capacity(model, t))
     end
-    for w in shuffle(rng, persons(model))
+    for w in stable_shuffle(rng, persons(model))
         tp = expected_price(model, :ticket)
         afford = floor(Int, max(cash(w) - buffer_target(model, w), 0.0) / tp)
         afford >= 1 || continue
         rand(rng) < p.entertainment_propensity || continue
         w.greed != :none && continue
-        wanted = min(afford, rand(rng, 1:p.max_tickets_per_person))
+        wanted = min(afford, stable_range(rng, 1:p.max_tickets_per_person))
         w.market[:ticket].wanted = wanted
         bought = 0
         for _ in 1:wanted
@@ -483,7 +487,7 @@ function greed_spending!(model)
     p = parameters(model); rng = stream(model, :greed)
     p.greed || return nothing
     theatres = enterprises(model, :theatre)
-    for w in shuffle(rng, [w for w in persons(model) if w.greed == :greedy])
+    for w in stable_shuffle(rng, [w for w in persons(model) if w.greed == :greedy])
         loaves = 0; tickets = 0
         for _ in 1:(p.greedy_max_breads_per_round + p.greedy_max_tickets_per_round)
             surplus = cash(w) - buffer_target(model, w)

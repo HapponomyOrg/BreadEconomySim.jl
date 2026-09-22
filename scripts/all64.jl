@@ -5,7 +5,7 @@ BASE = (; number_of_persons = N, number_of_landowners = 16, land_per_person = 1.
          demand_based_targets = true, wage_ceiling_from_own_ask = true, expected_price_from_asks = true, ask_increase_only_on_unmet_demand = true, random_hiring_ties = true, no_labour_tolerance = true, offer_full_capacity = true, credit_for_bread = true, spoilage_aware_stocking = true, distress_land_sales = true, maximum_capacity = 4.0,
          wage_reservation_net_of_tax = true, initial_endowment = :norm, startup_loan_term = 60, land_sales = :reservation, gluttony_probability = 0.1, plan_for_gluttony = true, planning_margin = 0.1, entertainment = true, number_of_theatres = 2, maximum_rounds = rounds, stop_when_half_dead = false, stop_when_stationary = false)
 DEBT = (; wage_tax_rate = 0.15, capital_tax_rate = 0.15, unemployment_fee_in_breads = 2.0, minimum_fee_in_breads = 2.0, government_employment_share = 0.1, deposit_interest_period = 12, deposit_interest_rate = 0.01, loyalty_bonus_rate = 0.02, account_fee_person = 0.0, account_fee_enterprise = 0.0, government_bonds = true)
-SUMSY = (; monetary_system = :sumsy, wage_tax_rate = 0.0, capital_tax_rate = 0.0, unemployment_fee_in_breads = 0.0, minimum_fee_in_breads = 0.0, government_employment_share = 0.1, demurrage_tax_rate = 0.01, guaranteed_income = 5.0, demurrage_free_buffer = 30.0, demurrage_rate = 0.02, account_fee_person = 0.5, account_fee_enterprise = 1.5, instalment_purchases = true, land_price_rent_multiple = 50.0)
+SUMSY = (; monetary_system = :sumsy, wage_tax_rate = 0.0, capital_tax_rate = 0.0, dividend_tax_rate = 0.0, unemployment_fee_in_breads = 0.0, minimum_fee_in_breads = 0.0, government_employment_share = 0.1, demurrage_tax_rate = 0.01, guaranteed_income = 5.0, demurrage_free_buffer = 30.0, demurrage_rate = 0.02, account_fee_person = 0.5, account_fee_enterprise = 1.5, instalment_purchases = true, land_price_rent_multiple = 50.0)
 MARKET = (; ownership = :shareholders, share_market = true, forward_valuation = true, required_yield_dispersion = 0.002, startup_financing = :paid_in_capital)
 GREEDY = (; MARKET..., greed = true, greed_share = 1.0)
 experiments = Dict(
@@ -168,7 +168,7 @@ end
 for (name, kw) in vcat(values(experiments)...)
     occursin("comparison", name) && continue
     full = (; BASE..., SUMSY..., kw...)
-    (full.wage_tax_rate == 0 && full.capital_tax_rate == 0) || error("variant '$name' would tax income under SuMSy")
+    (full.wage_tax_rate == 0 && full.capital_tax_rate == 0 && full.dividend_tax_rate == 0 && full.profit_tax_rate == 0) || error("variant '$name' would tax income under SuMSy")
 end
 for exp in order
     path = joinpath(@__DIR__, "..", "results", "all64_$(exp)_rounds.csv")

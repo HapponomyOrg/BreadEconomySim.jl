@@ -10,11 +10,14 @@ using EconoSim
 using DataFrames
 using Random
 using Statistics
+using StableRNGs
+using OrderedCollections
 
 export SimulationParameters, create_bread_economy, run_simulation, run_simulation!
 export round_data, event_log, agent_end_state, money_identity_gap, gini, land_units_per_landowner
 export Person, Enterprise
 
+include("stable_random.jl")
 include("parameters.jl")
 include("agents.jl")
 include("model.jl")
@@ -45,12 +48,17 @@ append!(ROUND_BEHAVIORS, Function[
     bread_market!,
     ticket_market!,
     greed_spending!,
+    charge_income_tax!,
+    settle_end_of_round!,
+    settle_invoices!,
+    liquidate_insolvent_firms!,
     clear!,
     service_debt!,
     service_peer_loans!,
     service_bonds!,
     pay_deposit_interest!,
     tax_enterprises!,
+    tax_profits!,
     join_cooperatives!,
     pay_dividends!,
     share_market!,

@@ -81,10 +81,10 @@ end
     last_meal::Symbol = :whole
     land::Int = 0
     bread::Vector{StockItem} = StockItem[]
-    ask::Dict{Symbol, Float64} = Dict{Symbol, Float64}()
-    bid::Dict{Symbol, Float64} = Dict{Symbol, Float64}()
-    market::Dict{Symbol, MarketRecord} = Dict(g => MarketRecord() for g in GOODS)
-    negotiated::Dict{Tuple{Symbol, Int}, Float64} = Dict{Tuple{Symbol, Int}, Float64}()
+    ask::OrderedDict{Symbol, Float64} = OrderedDict{Symbol, Float64}()
+    bid::OrderedDict{Symbol, Float64} = OrderedDict{Symbol, Float64}()
+    market::OrderedDict{Symbol, MarketRecord} = OrderedDict(g => MarketRecord() for g in GOODS)
+    negotiated::OrderedDict{Tuple{Symbol, Int}, Float64} = OrderedDict{Tuple{Symbol, Int}, Float64}()
     effective_capacity::Float64 = 0.0
     labour_available::Float64 = 0.0
     labour_offered::Float64 = 0.0
@@ -110,9 +110,10 @@ end
     buffer_lender::Bool = false         # opted into lending part of the buffer to the bank
     buffer_lent::Float64 = 0.0
     buffer_pledged::Float64 = 0.0       # demurrage-free buffer pledged to cooperatives (no money moves: the exemption does)
-    labour_reserved::Dict{Int, Float64} = Dict{Int, Float64}()   # capacity held back for a worker cooperative that hires later in the round
+    labour_reserved::OrderedDict{Int, Float64} = OrderedDict{Int, Float64}()   # capacity held back for a worker cooperative that hires later in the round
     rebate_income::Float64 = 0.0        # consumer cooperative patronage rebate received this round (untaxed: a price reduction)
     wealth_tax_arrears::Float64 = 0.0   # wealth tax due but unpaid for want of cash; collected first from later cash
+    income_tax_accrued::Float64 = 0.0   # income tax owed but not yet charged (income_tax_period > 1)
 end
 
 """An enterprise: bank, farm, bakery or government. No capacity, no hunger."""
@@ -123,10 +124,10 @@ end
     land::Int = 0
     grain::Vector{StockItem} = StockItem[]
     bread::Vector{StockItem} = StockItem[]
-    ask::Dict{Symbol, Float64} = Dict{Symbol, Float64}()
-    bid::Dict{Symbol, Float64} = Dict{Symbol, Float64}()
-    market::Dict{Symbol, MarketRecord} = Dict(g => MarketRecord() for g in GOODS)
-    negotiated::Dict{Tuple{Symbol, Int}, Float64} = Dict{Tuple{Symbol, Int}, Float64}()
+    ask::OrderedDict{Symbol, Float64} = OrderedDict{Symbol, Float64}()
+    bid::OrderedDict{Symbol, Float64} = OrderedDict{Symbol, Float64}()
+    market::OrderedDict{Symbol, MarketRecord} = OrderedDict(g => MarketRecord() for g in GOODS)
+    negotiated::OrderedDict{Tuple{Symbol, Int}, Float64} = OrderedDict{Tuple{Symbol, Int}, Float64}()
     production_target::Int = 0
     interest_rate::Float64 = 0.0
     retained_interest::Float64 = 0.0    # bank equity earned from interest, not yet paid out as wages
@@ -144,24 +145,29 @@ end
     enterprise_tax_paid::Float64 = 0.0  # this round
     buffer_received::Float64 = 0.0      # bank: pooled buffers (demurrage-free)
     ownership::Symbol = :none           # producers: :none | :cooperative | :shareholders
-    shares::Dict{Int, Float64} = Dict{Int, Float64}()   # holder id → share units (100 units per enterprise)
+    shares::OrderedDict{Int, Float64} = OrderedDict{Int, Float64}()   # holder id → share units (100 units per enterprise)
     dividend_history::Vector{Float64} = Float64[]        # total dividend paid per round
     net_history::Vector{Float64} = Float64[]             # operating net per round (for forward valuation)
     founder_ids::Vector{Int} = Int[]                     # the original shareholders (the control floor applies to them together)
     share_price::Float64 = 0.0          # last traded price per unit (book value until a trade)
-    members::Dict{Int, Int} = Dict{Int, Int}()           # cooperative: member id → shares held (dividends are per member, not per share)
+    members::OrderedDict{Int, Int} = OrderedDict{Int, Int}()           # cooperative: member id → shares held (dividends are per member, not per share)
     paid_in_capital::Float64 = 0.0      # founders' capital (shareholders) or members' capital (cooperative)
     tier_multiplier::Float64 = 1.5      # bakery: price of loaves beyond the ration relative to the ordinary ask (tiered pricing)
     tier_sold::Int = 0                  # this round
     tier_unmet::Bool = false
-    patronage_this_round::Dict{Int, Float64} = Dict{Int, Float64}()  # cooperative: member id -> hours worked / units bought this round
-    patronage_log::Vector{Dict{Int, Float64}} = Dict{Int, Float64}[]  # the trailing patronage_window rounds
-    membership_unpaid::Dict{Int, Float64} = Dict{Int, Float64}()      # worker cooperative: share capital still to be collected from wages
-    member_since::Dict{Int, Int} = Dict{Int, Int}()                   # member id -> round of admission
+    patronage_this_round::OrderedDict{Int, Float64} = OrderedDict{Int, Float64}()  # cooperative: member id -> hours worked / units bought this round
+    patronage_log::Vector{OrderedDict{Int, Float64}} = OrderedDict{Int, Float64}[]  # the trailing patronage_window rounds
+    membership_unpaid::OrderedDict{Int, Float64} = OrderedDict{Int, Float64}()      # worker cooperative: share capital still to be collected from wages
+    member_since::OrderedDict{Int, Int} = OrderedDict{Int, Int}()                   # member id -> round of admission
     buffer_pledged::Float64 = 0.0       # cooperative: exemption pledged by its members (demurrage-free headroom)
-    buffer_pledged_by::Dict{Int, Float64} = Dict{Int, Float64}()  # member id -> pledge, released on redemption
+    buffer_pledged_by::OrderedDict{Int, Float64} = OrderedDict{Int, Float64}()  # member id -> pledge, released on redemption
     retained_reserve::Float64 = 0.0     # cooperative: indivisible reserve, never distributed, not members' property
     rebate_per_unit::Float64 = 0.0      # consumer cooperative: expected rebate per unit bought (smoothed)
+    refoundings::Int = 0                # times the firm has been sold as a going concern at a liquidation
+    staff_target::Float64 = 1.0         # bank: labour units it employs (set at creation from bank_customers_per_labour_unit)
+    revenue_period::Float64 = 0.0       # profit tax: sales since the last assessment (accrued at the sale)
+    materials_period::Float64 = 0.0     # grain, rent and interest since the last assessment
+    labour_period::Float64 = 0.0        # wages since the last assessment
     insurance_premiums::Float64 = 0.0   # bank: cumulative
     insurance_payouts::Float64 = 0.0    # bank: cumulative
 end

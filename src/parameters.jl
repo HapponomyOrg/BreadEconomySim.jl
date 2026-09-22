@@ -27,7 +27,7 @@ Base.@kwdef struct SimulationParameters
     spoilage_age_in_rounds::Int = 3
 
     # Prices and negotiation
-    initial_prices::Dict{Symbol, Float64} = Dict(:bread => 5.0, :grain => 5.2, :rent => 0.75, :wage => 3.92, :ticket => 2.0)   # static-consistent vector, see HANDOFF
+    initial_prices::OrderedDict{Symbol, Float64} = OrderedDict(:bread => 5.0, :grain => 5.2, :rent => 0.75, :wage => 3.92, :ticket => 2.0)   # static-consistent vector, see HANDOFF
     land_price_rent_multiple::Float64 = 15.0
     negotiation_steps::Int = 6
     minimum_concession_fraction::Float64 = 0.25
@@ -164,7 +164,20 @@ Base.@kwdef struct SimulationParameters
     # family with a negative lever is relieved on a raise and cut hardest on a cut. Levers (0, 0, 0) = one scale;
     # (−2, +1, 0) shifts the burden from income to consumption whichever way the total moves. The step limit applies to
     # r; a lever multiplies it. Under SuMSy the income family is the demurrage tax (see `tax_policy`).
-    tax_levers::NamedTuple{(:income, :consumption, :wealth), NTuple{3, Float64}} = (income = 0.0, consumption = 0.0, wealth = 0.0)
+    # Five tax families (22 September 2026, design §3), each with its own scale and lever: income (wage, capital and dividend tax;
+    # the progressive brackets), consumption (VAT), wealth, profit, parking (the SuMSy parking tax — the parking *fee* is money,
+    # not tax, and is never scaled). Any family left out of the tuple has lever 0, so (income = -3.0,) is a valid setting.
+    tax_levers::NamedTuple = (income = 0.0, consumption = 0.0, wealth = 0.0, profit = 0.0, parking = 0.0)
+    # Collection periods (design §3): 1 = every month, as before; 12 = accrued through the year and charged in the twelfth month.
+    # Monthly withholding with a yearly balance (the Belgian mode) is a future option.
+    income_tax_period::Int = 1
+    # Profit tax (design §3): per period, revenue − `deductible_materials` × (materials, rent and interest) − `deductible_labour` ×
+    # wages, never below 0 (no loss carry-forward), at `profit_tax_rate` (the rate applies to the profit whatever the period's
+    # length). Charged to farms, bakeries and theatres; an invoice to the government under settlement = :invoicing.
+    profit_tax_rate::Float64 = 0.0
+    profit_tax_period::Int = 1
+    deductible_materials::Float64 = 1.0
+    deductible_labour::Float64 = 0.5
     # Wealth tax (20 September 2026): a yearly rate on what a person holds in land and shares, valued at book — land at
     # `land_price` (rent multiple × expected rent), shares at `book_per_unit` (the firm's cash + land − debt per unit),
     # cooperative membership at the capital paid in. Charged every round at rate ÷ `wealth_tax_rounds_per_year`, in cash,
@@ -253,7 +266,8 @@ Base.@kwdef struct SimulationParameters
     # `customers_per_labour_unit`. 0 shows = unlimited (the rule until 20 September: a theatre absorbed whatever labour
     # ticket demand paid for). 0 seats = one seat for every person in the village at founding.
     shows_per_round::Int = 0
-    seats_per_show::Int = 0
+    seats_per_show::Int = 0                           # 0 = villagers ÷ theatres × (1 + theatre_seat_margin), so the theatres together seat the village plus the margin
+    theatre_seat_margin::Float64 = 0.25               # 21 September: with several theatres a seat per villager *per theatre* would be several times the village
     # Clearing switch (13 September 2026): true = all intra-round payments are promises netted at clearing (spec v2 addendum);
     # false = every payment is settled immediately (cash, then credit, the unpaid tail becomes a trade arrear)
     clearing::Bool = true
@@ -318,6 +332,35 @@ Base.@kwdef struct SimulationParameters
     stop_when_half_dead::Bool = true
     stop_when_stationary::Bool = true
 
+    # Settlement (22 September 2026, design of 21 September). Two systems:
+    #   :invoicing    — the design: a consumer pays cash at the counter; wages and rent are paid at the end of the month from
+    #                   takings (credit for the shortfall); firms invoice each other, payable at the end of the NEXT month (trade
+    #                   credit, no interest; unpaid invoices age and can trigger liquidation); clearing only among
+    #                   `settlement_clearing` members (the banks, and the government, which finances itself there).
+    #   :clearing_all — the system of every version before 22 September: all payments of everyone, consumers included, are
+    #                   netted and settled together at the end of the month. Kept as the default for now only so earlier
+    #                   results and the regression tests still reproduce; to become the comparison once :invoicing is the default.
+    # `clearing = false` still means cash for everything (legacy).
+    settlement::Symbol = :clearing_all              # :invoicing | :clearing_all (see above)
+    settlement_clearing::Vector{Symbol} = [:bank, :government]
+    settlement_invoicing::Vector{Symbol} = [:farm, :bakery, :theatre, :government]
+    # Liquidation (design §2): a producer whose invoices overdue by `liquidation_overdue_rounds` or more reach
+    # `liquidation_arrears_share` of its book value is sold as a going concern at `liquidation_price_share` × book value
+    # (never below the debt left after its cash), to up to `shareholder_count` buyers with the most spare cash, who hold the
+    # new shares pro rata; if no group can pay, it is closed and its assets go to its creditors, the rest struck.
+    # Working capital (22 September): under :invoicing a supplier waits a month to be paid, so banks lend against what it is owed —
+    # a loan is affordable when it is covered by `receivables_advance_rate` of the open invoices owed to the borrower, whatever
+    # the income test says (invoice financing). 0 switches it off.
+    receivables_advance_rate::Float64 = 0.8
+    # Bank staff (22 September): 0 = one unit of labour per bank, as before. k > 0 = one unit per k villagers the bank serves, so a
+    # bank's wage bill grows with its customers and the cost-recovery lending rate does not fall just because the village is larger.
+    bank_customers_per_labour_unit::Int = 0
+    liquidation_arrears_share::Float64 = 0.10
+    liquidation_overdue_rounds::Int = 3
+    liquidation_price_share::Float64 = 0.90
+    liquidated_coop_stays_coop::Bool = false           # true: a cooperative is refounded by its members, one share at par each
+    bank_bailout::Bool = true                          # a bank whose net worth goes below zero is recapitalised by the government (failure: a future option)
+    peer_loan_insurance::Bool = false                  # SuMSy: every peer loan is insured (premium on repayments to the bank's pool; the pool covers a struck loan, the rest is the lenders' loss)
     # Run control
     random_streams::Bool = true                        # one random stream per subsystem (18 September 2026), each seeded from `seed`; false = the single shared stream of earlier runs
     maximum_rounds::Int = 50

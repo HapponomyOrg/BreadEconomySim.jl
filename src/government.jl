@@ -14,7 +14,7 @@ function government_hiring!(model)
     limit = floor(p.government_employment_share * sum(w.capacity for w in persons(model); init = 0.0))
     wage = government_wage_per_unit(model)
     hired = 0.0
-    for w in shuffle(rng, [w for w in persons(model) if w.labour_available > 1e-9])
+    for w in stable_shuffle(rng, [w for w in persons(model) if w.labour_available > 1e-9])
         hired >= limit - 1e-9 && break
         units = min(w.labour_available, limit - hired)
         gov.wage_bill += units * wage
@@ -47,9 +47,10 @@ The government's reserve and tax policy, once a round after demurrage.
    `:scale` moves one multiplier on every tax; `:brackets` moves each progressive bracket in proportion to its own
    rate (plus `bracket_fixed_rise` points), so higher brackets carry more of a rise and get more of a cut.
 
-4. The mix (levers): each family first shifts by |r| × its lever (`tax_levers`; a standing preference — a family with
-   a negative lever is relieved on a raise and cut hardest on a cut) and then moves by r with all the others. Levers
-   (0, 0, 0) are one scale; (−2, +1, 0) shift the burden from income to consumption whichever way the total moves.
+4. The mix (levers): five families — income, consumption, wealth, profit, parking tax — each with its own scale. Each
+   first shifts by |r| × its lever (`tax_levers`; a standing preference — a family with a negative lever is relieved on
+   a raise and cut hardest on a cut) and then moves by r with the others. All levers 0 is one scale. The parking *fee*
+   is money, not tax, and is never touched.
 
 With `tax_policy = :none` a reduction is applied in full (the 20 September rule) and shortfalls do nothing: under
 debt money the government borrows, under SuMSy it runs its balance down.
@@ -100,7 +101,8 @@ function manage_government_reserve!(model)
             model.tax_scale = clamp(model.tax_scale * (1 + (-surplus) * p.surplus_tax_reduction_share / model.tax_this_round), 0.0, 1.0)
         end
         model.tax_policy_step = 0.0
-        model.consumption_tax_scale = model.tax_scale; model.wealth_tax_scale = model.tax_scale   # :none — one scale
+        model.consumption_tax_scale = model.tax_scale; model.wealth_tax_scale = model.tax_scale   # :none — one scale for all five
+        model.profit_tax_scale = model.tax_scale; model.parking_tax_scale = model.tax_scale
         return nothing
     end
     # the desired relative change in revenue, then the step limit
@@ -117,15 +119,14 @@ function manage_government_reserve!(model)
         end
         model.tax_scale = clamp(model.tax_scale * (1 + mv), 0.0, p.tax_scale_maximum)   # capital and demurrage tax follow it under :brackets
     end
-    lv = p.tax_levers
-    for (family, lever) in ((:income, lv.income), (:consumption, lv.consumption), (:wealth, lv.wealth))
-        shift = abs(r) * lever          # a standing preference, not a direction: a family relieved on a raise is cut hardest on a cut (21 September)
+    scale_field = OrderedDict(:consumption => :consumption_tax_scale, :wealth => :wealth_tax_scale, :profit => :profit_tax_scale, :parking => :parking_tax_scale)
+    for family in (:income, :consumption, :wealth, :profit, :parking)
+        shift = abs(r) * Float64(get(p.tax_levers, family, 0.0))   # a standing preference, not a direction (21 September)
         if family == :income
             abs(shift) > 1e-12 && apply_income!(model, p, shift); apply_income!(model, p, r)
-        elseif family == :consumption
-            model.consumption_tax_scale = clamp(model.consumption_tax_scale * (1 + shift) * (1 + r), 0.0, p.tax_scale_maximum)
         else
-            model.wealth_tax_scale = clamp(model.wealth_tax_scale * (1 + shift) * (1 + r), 0.0, p.tax_scale_maximum)
+            f = scale_field[family]
+            setproperty!(model, f, clamp(getproperty(model, f) * (1 + shift) * (1 + r), 0.0, p.tax_scale_maximum))
         end
     end
     return nothing

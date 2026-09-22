@@ -321,11 +321,11 @@ function manage_new_form_membership!(model)
     isempty(coops) && return nothing
     par = p.membership_share_price
     round_now = current_round(model)
-    for w in shuffle(rng, persons(model))
+    for w in stable_shuffle(rng, persons(model))
         # consumers join a cooperative they have actually bought from
         open = [c for c in coops if coop_form(model, c) == :consumer && !haskey(c.members, w.id) && patronage_total(c, w.id) > 0]
         if !isempty(open) && plan_contribution(model, w) !== nothing && rand(rng) < p.cooperative_join_probability
-            c = length(open) == 1 ? open[1] : rand(rng, open)
+            c = length(open) == 1 ? open[1] : stable_pick(rng, open)
             if contribute_membership!(model, w, c)
                 log_event!(model, :membership; actor = w.id, cooperative = c.id, price = par,
                            pledge = get(c.buffer_pledged_by, w.id, 0.0), route = :purchase)
@@ -474,6 +474,10 @@ function validate_cooperatives(p::SimulationParameters)
     p.consumption_tax_rate >= 0 || throw(ArgumentError("consumption_tax_rate cannot be negative"))
     p.wealth_tax_rate >= 0 || throw(ArgumentError("wealth_tax_rate cannot be negative"))
     p.wealth_tax_rounds_per_year >= 1 || throw(ArgumentError("wealth_tax_rounds_per_year must be at least 1"))
-    all(isfinite, values(p.tax_levers)) || throw(ArgumentError("tax_levers must be finite"))
+    all(x -> x isa Real && isfinite(x), values(p.tax_levers)) || throw(ArgumentError("tax_levers must be finite numbers"))
+    all(in((:income, :consumption, :wealth, :profit, :parking)), keys(p.tax_levers)) || throw(ArgumentError("tax_levers families: income, consumption, wealth, profit, parking"))
+    (p.income_tax_period >= 1 && p.profit_tax_period >= 1) || throw(ArgumentError("tax periods must be at least 1"))
+    (0 <= p.deductible_materials <= 1 && 0 <= p.deductible_labour <= 1) || throw(ArgumentError("deductible shares must be in [0, 1]"))
+    p.profit_tax_rate >= 0 || throw(ArgumentError("profit_tax_rate cannot be negative"))
     return nothing
 end

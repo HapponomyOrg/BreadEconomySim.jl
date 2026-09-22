@@ -61,7 +61,7 @@ The rules are the same in both villages. The ones that changed since the previou
 
 **Random draws.** Every draw in the model now comes from one of eleven random streams, one per subsystem, seeded from the run seed and the subsystem's name. With the single shared stream of the previous version, switching on a feature that draws — random tie-breaking in hiring, greed assigned at random — shifted every later draw in every other part of the model, so the same seed was a different experiment in two configurations. Ten seeds and separate streams are the minimum the comparisons below are made at; where a result is bimodal (some seeds whole, some dead) the text gives the count of surviving runs rather than a mean.
 
-**The money stock under SuMSy.** It is fixed by the guaranteed income and the demurrage alone. A village started with everyone at the buffer sees its stock rise from about 2,000 to about 15,000 over sixty rounds — convergence to the level the two rates imply, not inflation — and prices rise with it, to about 1.35 × the starting vector. Section 10B starts a village at that level directly.
+**The money stock under SuMSy.** It is fixed by the guaranteed income and the demurrage alone. A village started with everyone at the buffer sees its stock rise from about 2,000 to about 15,000 over sixty rounds, and prices rise with it, to about 1.35 × the starting vector: inflation in the ordinary sense, and bounded — the stock converges to the level the two rates imply and cannot exceed it, so the rise in prices is capped where the stock is. Section 10B starts a village at that level directly.
 
 **How much the starting prices matter.** Both villages start from one price vector (bread 5, grain 5.2, wage 3.92, rent 0.75, ticket 2), chosen so that every link in the chain can pay its worker one meal a round. The scripts refuse to run a comparison in which the two villages start from different prices.
 
@@ -114,7 +114,7 @@ Every firm has four founders holding 640 shares; shares trade at a forward valua
 **SuMSy:** 64 alive · 17.6 · 50.0 · 6.69 · surplus 93 · Gini 0.45. The largest single change on the SuMSy side of the ladder: tickets from 126 to 50, unemployment from 10 to 18, the cash Gini from 0.11 to 0.45. Shares crowd out the theatre. Section 8 shows this depends on the clearing step and on the dividends it makes possible.
 
 ### Rung 9 — co-ops (side rung)
-Four farms, four bakeries and one theatre are member cooperatives; the rest stay shareholder firms; the share market runs.
+The village has four farms and four bakeries for this rung; two farms, two bakeries and one of the two theatres are member cooperatives, the rest stay shareholder firms; the share market runs.
 **Debt money:** 64 (60) alive · 17.6 · 50.5 · 3.43 · debt 12,318 (196 %) · deficit 86 · Gini 0.29.
 **SuMSy:** 64 alive · 10.4 · 121.0 · 4.85 · surplus 92 · Gini 0.27. The cooperatives, and the cooperative theatre in particular, undo most of the crowding-out: tickets 50 → 121, unemployment 18 → 10, Gini 0.45 → 0.27. Section 9 takes the forms apart; the member form is partly a second guaranteed income by equal dividend, and the worker and consumer forms recover less.
 

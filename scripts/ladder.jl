@@ -16,7 +16,7 @@ RULES = (; number_of_persons = N, number_of_landowners = N ÷ 4, land_per_person
 # Bare bones: no government activity, no benefit, no interest on deposits, no theatre, no margin.
 BARE_DEBT = (; RULES..., wage_tax_rate = 0.0, capital_tax_rate = 0.0, unemployment_fee_in_breads = 0.0, minimum_fee_in_breads = 0.0,
               partial_unemployment_fee = false, government_employment_share = 0.0, account_fee_person = 0.0, account_fee_enterprise = 0.0)
-BARE_SUMSY = (; BARE_DEBT..., monetary_system = :sumsy, guaranteed_income = 5.0, demurrage_free_buffer = 30.0, demurrage_rate = 0.02,
+BARE_SUMSY = (; BARE_DEBT..., monetary_system = :sumsy, dividend_tax_rate = 0.0, guaranteed_income = 5.0, demurrage_free_buffer = 30.0, demurrage_rate = 0.02,
                account_fee_person = 0.5, account_fee_enterprise = 1.5, instalment_purchases = true, land_price_rent_multiple = 50.0)
 GOV_DEBT = (; wage_tax_rate = 0.15, capital_tax_rate = 0.15, unemployment_fee_in_breads = 2.0, minimum_fee_in_breads = 2.0, government_employment_share = 0.10)
 GOV_SUMSY = (; demurrage_tax_rate = 0.01, government_employment_share = 0.10)       # public jobs funded by a 1 % demurrage tax; the GI is the benefit
