@@ -77,7 +77,8 @@ const LADDERS = [(parse(Int, split(x, ":")[1]), Symbol(split(x, ":")[2])) for x 
 const RUNGS   = filter(!isempty, split(get(ENV, "RUNGS", ""), ","))
 
 ladder_name(N, settlement) = settlement == :invoicing ? "ladder2_$(N)" : "ladder2_$(N)_$(settlement)"
-parts_dir(N, settlement) = joinpath(ROOT, "results", "parts", "$(ladder_name(N, settlement))_$(ROUNDS)months")   # the run length is part of the key: a short test run is never taken for a real one
+const MODEL_VERSION = "2026-09-23"   # part of the key: runs made with an earlier model are never taken for current ones
+parts_dir(N, settlement) = joinpath(ROOT, "results", "parts", "$(ladder_name(N, settlement))_$(ROUNDS)months_$(MODEL_VERSION)")   # the run length is part of the key: a short test run is never taken for a real one
 safe(s) = replace(s, r"[^A-Za-z0-9]+" => "_")
 part_file(job) = joinpath(parts_dir(job.N, job.settlement), "$(safe(job.rung))__$(job.system)__$(job.seed).csv")
 
@@ -121,6 +122,7 @@ for (N, settlement) in LADDERS
         for system in ("debt", "sumsy"), seed in 1:SEEDS
             (startswith(name, "X1") && system == "debt") && continue       # the 2×2 rungs run one side only
             (startswith(name, "X2") && system == "sumsy") && continue
+            (startswith(name, "E") && system == "debt") && continue        # full-money-stock twins: SuMSy only
             job = (; N, settlement, rounds = ROUNDS, rung = name, system, seed)
             push!(jobs, (; job..., file = part_file(job), index = length(jobs) + 1, total = 0))
         end
@@ -148,14 +150,27 @@ function summarise(rounds::DataFrame, N::Int)
     tail = combine(groupby(filter(r -> r.round > maxround - 12, rounds), [:rung, :system, :seed]),
         :gdp_round => mean => :gdp, :tickets_sold => mean => :tickets, :price_bread => (x -> mean(skipmissing(x))) => :bread_price,
         :unemployed => mean => :unemployed, :tax => mean => :revenue, :government_outlay => mean => :outlay)
-    runs = innerjoin(last_rows, tail; on = [:rung, :system, :seed], makeunique = true)
+    # every run is kept: a run that ended early (a village that lost its last farm or bakery) has no rows in the tail window,
+    # and an inner join silently dropped it — survivorship bias (review 3). Left join; the run's last recorded row stands.
+    runs = leftjoin(last_rows, tail; on = [:rung, :system, :seed], makeunique = true)
+    runs.collapsed = runs.round .< maxround
+    # the public debt's course in each run: its peak, the month of the peak, and the first month after it with nothing owed
+    debt_course = combine(groupby(sort(rounds, :round), [:rung, :system, :seed])) do g
+        peak, k = findmax(g.government_debt)
+        after = findfirst(<=(1e-6), g.government_debt[k:end])
+        (; debt_peak = peak, debt_peak_month = g.round[k], debt_repaid_month = (peak <= 1e-6 || after === nothing) ? missing : g.round[k + after - 1])
+    end
+    runs = leftjoin(runs, debt_course; on = [:rung, :system, :seed])
     runs.debt_pct_gdp = [g > 0 ? 100 * d / (12 * g) : NaN for (d, g) in zip(runs.government_debt, runs.gdp)]
     runs.shortfall = runs.outlay .- runs.revenue
     combine(groupby(runs, [:rung, :system]),
-        nrow => :runs, :persons_alive => mean => :alive, :persons_alive => minimum => :alive_worst,
+        nrow => :runs, :collapsed => sum => :runs_collapsed,
+        :persons_alive => mean => :alive_at_end, :persons_alive => minimum => :alive_worst,
         :persons_alive => (x -> count(>=(N * 15 / 16), x)) => :runs_whole,
         :unemployed => mean => :unemployed, :tickets => mean => :tickets, :bread_price => mean => :bread_price,
         :government_debt => mean => :public_debt, :debt_pct_gdp => mean => :public_debt_pct_gdp, :shortfall => mean => :shortfall_per_month,
+        :debt_peak => mean => :public_debt_peak, :debt_peak_month => mean => :public_debt_peak_month,
+        :debt_repaid_month => (x -> count(!ismissing, x)) => :runs_debt_repaid, :debt_repaid_month => (x -> all(ismissing, x) ? missing : mean(skipmissing(x))) => :public_debt_repaid_month,
         :gini_cash_persons => mean => :gini_cash, :gini_net_wealth_persons => mean => :gini_wealth,
         :wealth_gap_meals => mean => :wealth_gap_meals, :wealth_bottom10_meals => mean => :wealth_bottom10_meals,
         :cash_gap_meals => mean => :cash_gap_meals, :cash_bottom10_meals => mean => :cash_bottom10_meals,

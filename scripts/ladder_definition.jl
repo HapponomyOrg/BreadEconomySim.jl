@@ -3,7 +3,8 @@ using BreadEconomySim
 # The ladder as a function of the village size, the run length and the settlement system (22 September), so that one
 # process can build several ladders (scripts/run_all.jl). ladder2_rungs.jl calls it with the command-line values.
 function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol)
-    RULES = (; number_of_persons = N, number_of_landowners = N ÷ 4, land_per_person = 1.5, initial_production_target = 10 * N ÷ 128, shares_per_person = 10, shareholder_count = 4, number_of_farms = 4, number_of_bakeries = 4, shows_per_round = 1, theatre_seat_margin = 0.25, unmet_demand_share = 0.05, unsold_share = 0.05, settlement = SETTLEMENT,   # 22 September: :invoicing = the settlement design (cash at the counter, wages at month end, invoices between firms, clearing among banks)
+    RULES = (; number_of_persons = N, number_of_landowners = N ÷ 4, land_per_person = 1.5, initial_production_target = 10 * N ÷ 128, shares_per_person = 10, shareholder_count = 4, number_of_farms = 4, number_of_bakeries = 4, shows_per_round = 1, theatre_seat_margin = 0.25, unmet_demand_share = 0.05, unsold_share = 0.05, founding_equity = true, settlement = SETTLEMENT,   # 23 Sept: founders capitalise their firms
+           # 22 September: :invoicing = the settlement design (cash at the counter, wages at month end, invoices between firms, clearing among banks)
              initial_interest_rate = 0.005, maximum_interest_rate = 0.015,   # a month: 6 % a year to start, at most about 20 %; the rate itself covers the banks' costs (one staff unit per bank: staff scaled with customers bankrupted the banks at 512, 22 Sept)
               demand_based_targets = true, wage_ceiling_from_own_ask = true, expected_price_from_asks = true, ask_increase_only_on_unmet_demand = true,
               random_hiring_ties = true, no_labour_tolerance = true, offer_full_capacity = true, credit_for_bread = true, spoilage_aware_stocking = true,
@@ -34,6 +35,7 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol)
     # 21 September: the 5 % triggers on unmet and unsold demand are base rules from rung 0 (the one-miss trigger was a defect, not a
     # rung, and is gone from the ladder). Rung 10 adds what is genuinely an addition: the cost floor and a buyer who pays up to double for
     # scarce bread. The price rules are behaviour, not policy; every rung and stress test from 10 on runs under the full set.
+    EQ       = (; start_at_saturation = :equilibrium, initial_price_multiplier = 1.35)   # every villager at cushion + GI/(fee + tax); prices to match
     PRICES   = (; ask_floor = :cost, bread_bid_base_multiplier = 2.0)
     RESERVE  = (; government_reserve_in_rounds = 3, surplus_tax_reduction_share = 1.0)                                # rung 11: a public reserve, the surplus returned as a tax cut
     FISCAL   = (; tax_policy = :scale, tax_response_coverage = 0.5, tax_response_step = 0.02, tax_scale_maximum = 2.0,
@@ -66,6 +68,12 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol)
         ("B best SuMSy village: co-ops + prices + reserve", (; V8_DEBT..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE...), (; V8_SUMSY..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE...)),
         ("SB1 best SuMSy + greedy quarter", (; V8_DEBT..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE..., GREEDY_Q...), (; V8_SUMSY..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE..., GREEDY_Q...)),
         ("SB2 best SuMSy + everyone greedy", (; V8_DEBT..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE..., GREEDY_A...), (; V8_SUMSY..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE..., GREEDY_A...)),
+        # Full money stock (23 September): SuMSy villages started at their equilibrium money stock, set against the same steps
+        # started with everyone at the cushion — the startup public debt of a filling-up village should disappear. SuMSy side only.
+        ("E2 + government, full money stock", (;), (; planning_margin = 0.1, GOV_SUMSY..., EQ...)),
+        ("E8 + shareholders & share market, full money stock", (;), (; V8_SUMSY..., EQ...)),
+        ("E11 + government reserve, full money stock", (;), (; V8_SUMSY..., PRICES..., RESERVE..., EQ...)),
+        ("EB best SuMSy village, full money stock", (;), (; V8_SUMSY..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE..., EQ...)),
         # The 2×2 (review 2, §4.4): the monetary system crossed with the fiscal package, on the rung-11 village. X1 = SuMSy money
         # with the debt village's taxes and benefit; X2 = debt money with the SuMSy village's surcharge and no benefit. Together
         # with rungs 11 debt and 11 SuMSy they separate what the money does from what the fiscal package does. Only the named

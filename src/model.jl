@@ -302,6 +302,7 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
             create_money!(model, w, parameters.initial_money_per_person)
         end
     end
+    parameters.founding_equity && pay_in_founding_equity!(model)      # 23 Sept: founders capitalise their firms
     return model
 end
 

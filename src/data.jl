@@ -82,7 +82,9 @@ function record!(model)
         money_in_dead_balances = sum(cash(a) for a in agents_by_id(model) if !a.alive; init = 0.0),
         outstanding_debt = sum(debt_of(a) + peer_debt_of(model, a) for a in alive; init = 0.0),
         peer_lent = model.peer_lent_this_round,
-        government_debt = debt_of(gov) + government_rest_interest(model) + bonds_outstanding(model) + government_trade_arrears(model), government_bank_debt = debt_of(gov) + government_rest_interest(model), bonds_outstanding = bonds_outstanding(model), government_arrears = government_trade_arrears(model),
+        government_debt = debt_of(gov) + government_rest_interest(model) + bonds_outstanding(model) + government_trade_arrears(model) + peer_debt_of(model, gov),   # 23 Sept: peer loans too — a SuMSy government that borrows villagers' savings owes them (review 3)
+        termination = model.finished ? model.termination_reason : "",
+        government_peer_debt = peer_debt_of(model, gov), government_bank_debt = debt_of(gov) + government_rest_interest(model), bonds_outstanding = bonds_outstanding(model), government_arrears = government_trade_arrears(model),
         bonds_issued = model.bonds_issued_this_round, coupons = model.coupons_this_round, bond_rate = bond_coupon_rate(model),
         government_cash = cash(gov), government_reserve_target = model.government_reserve_target,
         surplus_redistributed = model.surplus_redistributed_this_round, tax_scale = model.tax_scale,
@@ -253,6 +255,10 @@ end
 
 function record_and_adapt!(model)
     record!(model)
+    for e in model.enterprise_list                                     # the last three months' sales, for the liquidation test
+        push!(e.turnover_history, e.revenue_this_round); length(e.turnover_history) > 3 && popfirst!(e.turnover_history)
+        e.revenue_this_round = 0.0
+    end
     roll_patronage_window!(model)
     adapt_prices!(model)
     adapt_targets!(model)

@@ -94,7 +94,8 @@ end
     d = round_data(run(; seed = 1, maximum_rounds = 30, OWN...))
     @test d.founder_capital[end] > 0 && d.reserve_shortfall_forprofit[end] < d.reserve_shortfall_forprofit[1]   # capital paid in, shortfall shrinks
     ds = round_data(run(; seed = 1, maximum_rounds = 30, SUMSY_OWN...))
-    @test ds.founder_capital[end] > 0 && ds.founder_debt[end] > 0 && ds.government_debt[end] == 0            # SuMSy founders borrow from villagers
+    @test ds.founder_capital[end] > 0 && ds.founder_debt[end] > 0
+    @test ds.government_debt[end] ≈ ds.government_peer_debt[end]      # a SuMSy government may borrow villagers' savings while the parking tax is small, never from a bank (23 Sept)
 end
 
 @testset "cooperative membership: join at par above the buffer, redeem at par in distress" begin
@@ -333,12 +334,12 @@ end
     # random stream (`random_streams = false`), `streams` = per-subsystem streams. scripts/golden.jl regenerates both; the
     # 15 September values are superseded and kept only in git history.
     golden = Dict(
-        ("single", "debt") => (; price_bread = 6.697468750000001, price_wage = 5.135262435661766, money = 2170.5721, debt = 2221.6540000000005, gov_debt = 1586.9236, gini = 0.47531052055054035, cash_persons = 1814.6455999999996, tax = 36.290299999999995),
-        ("single", "debt_bonds") => (; price_bread = 6.122283333333333, price_wage = 4.292304999999999, money = 773.5304000000001, debt = 655.5259999999997, gov_debt = 1402.2599999999998, gini = 0.47102167038944676, cash_persons = 621.2942, tax = 31.032899999999977),
-        ("single", "sumsy") => (; price_bread = 4.390394117647059, price_wage = 3.1772416666666636, money = 2483.5527, debt = 38.0576, gov_debt = 0.0, gini = 0.5232599210512905, cash_persons = 1702.4912, tax = 0.0),
-        ("streams", "debt") => (; price_bread = 6.277878787878789, price_wage = 4.860122984068625, money = 2123.5373, debt = 2174.5474999999997, gov_debt = 1556.7314, gini = 0.46629970833940027, cash_persons = 1814.5340999999999, tax = 34.911999999999985),
-        ("streams", "debt_bonds") => (; price_bread = 6.121823529411764, price_wage = 4.34168069698468, money = 825.9959, debt = 709.4689, gov_debt = 1435.9048999999998, gini = 0.46427811536851094, cash_persons = 629.2376, tax = 32.96249999999998),
-        ("streams", "sumsy") => (; price_bread = 4.470093939393939, price_wage = 3.2976382352941167, money = 2483.6186, debt = 52.8591, gov_debt = 0.0, gini = 0.5106809127665535, cash_persons = 1700.8167999999998, tax = 0.0))
+        ("single", "debt") => (; price_bread = 6.315871875000001, price_wage = 4.778102558823528, money = 2088.5076000000004, debt = 2136.9815000000003, gov_debt = 1501.7097, gini = 0.46687493505357125, cash_persons = 1761.8283000000001, tax = 34.2685),
+        ("single", "debt_bonds") => (; price_bread = 5.463324242424242, price_wage = 3.906711011029414, money = 729.5627, debt = 606.1003, gov_debt = 1385.1892999999998, gini = 0.45734222815193815, cash_persons = 588.9098999999999, tax = 28.11439999999999),
+        ("single", "sumsy") => (; price_bread = 4.716076470588236, price_wage = 3.4243705882352957, money = 2483.5764, debt = 10.598600000000001, gov_debt = 0.0, gini = 0.5351819353471121, cash_persons = 1706.7677000000003, tax = 0.0),
+        ("streams", "debt") => (; price_bread = 5.916084848484848, price_wage = 4.581315493259804, money = 2051.6816999999996, debt = 2099.1299, gov_debt = 1484.3687, gini = 0.46190433292821576, cash_persons = 1757.2860999999996, tax = 33.174899999999994),
+        ("streams", "debt_bonds") => (; price_bread = 5.571720588235295, price_wage = 3.8882152496292637, money = 776.7808, debt = 653.0337999999999, gov_debt = 1391.4052, gini = 0.45563444421603605, cash_persons = 585.6147, tax = 29.69620000000004),
+        ("streams", "sumsy") => (; price_bread = 4.457366666666666, price_wage = 3.296194117647059, money = 2483.6059000000005, debt = 1.7051, gov_debt = 0.0, gini = 0.5122876828682883, cash_persons = 1716.5401000000002, tax = 0.0))
     configs = Dict("debt" => BEH, "sumsy" => (; BEH..., SUM...),
                    "debt_bonds" => (; BEH..., government_bonds = true, deposit_interest_period = 12, deposit_interest_rate = 0.01, loyalty_bonus_rate = 0.02))
     for (mode, streams) in (("single", false), ("streams", true)), (name, kw) in configs
@@ -820,7 +821,7 @@ end
 @testset "liquidation: trigger, refounding, asset liquidation, write-offs, bailout, insurance (22 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     round_data_money(m) = sum(B.cash(a) for a in B.alive_agents(m) if !B.is_bank(a); init = 0.0)   # deposits held by everyone but the banks
-    W = (; BEH..., settlement = :invoicing, ownership = :shareholders, share_market = true, startup_financing = :paid_in_capital)
+    W = (; BEH..., settlement = :invoicing, ownership = :shareholders, share_market = true, startup_financing = :paid_in_capital, liquidation_test = :book)
     function prepared()
         m = create_bread_economy(SimulationParameters(; seed = 1, W..., maximum_rounds = 1))
         b = first(B.enterprises(m, :bakery)); f = first(B.enterprises(m, :farm))
@@ -956,8 +957,7 @@ end
     B.make_loan!(m2, bank, b2, 200.0, :test); loan = last(m2.loans)
     give!(b2, -B.cash(b2))                                                                   # the loan has been spent: the bakery owes 200 and holds nothing
     B.seize_enterprise!(m2, loan)
-    @test b2.alive && b2.refoundings == 1 && m2.liquidations == 1                          # sold as a going concern, not closed
-    @test haskey(b2.shares, B.persons(m2)[1].id)
+    @test b2.alive && m2.liquidations == 0                                                  # 23 Sept: loan arrears go to the liquidation test, no seizure
     # whole runs, both villages: identity
     for kw in ((; W...), (; W..., SUM..., government_employment_share = 0.1, demurrage_tax_rate = 0.01))
         @test abs(money_identity_gap(run(; seed = 2, maximum_rounds = 40, kw...))) < 1e-6
@@ -994,6 +994,51 @@ end
     l2.settled = false                                                                   # as a refounding could leave it
     B.service_debt!(m2)
     @test l2.settled
+end
+
+
+@testset "cash-flow liquidation test and founding equity (23 September 2026)" begin
+    give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
+    W = (; BEH..., settlement = :invoicing, ownership = :shareholders, share_market = true, startup_financing = :paid_in_capital)
+    function late_payer(; overdue, turnover, receivables = 0.0)
+        m = create_bread_economy(SimulationParameters(; seed = 1, W..., maximum_rounds = 1))
+        b = first(B.enterprises(m, :bakery)); f = first(B.enterprises(m, :farm)); f2 = B.enterprises(m, :farm)[2]
+        give!(b, -B.cash(b)); b.production_target = 0
+        b.turnover_history = [turnover, turnover, turnover]
+        push!(m.invoices, B.Invoice(b.id, f.id, overdue, overdue, :grain, :none, B.current_round(m) - 3))
+        receivables > 0 && push!(m.invoices, B.Invoice(f2.id, b.id, receivables, receivables, :grain, :none, B.current_round(m)))
+        return m, b, f
+    end
+    # pays late but can borrow against what it is owed: catches up, not liquidated, the invoice is paid
+    m, b, f = late_payer(overdue = 50.0, turnover = 100.0, receivables = 500.0)
+    fc = B.cash(f)
+    @test !B.insolvent(m, b) && isapprox(B.cash(f) - fc, 50.0; atol = 1e-6) && !any(iv -> iv.from_id == b.id && iv.round_issued < B.current_round(m), m.invoices)
+    # the same with no credit to be had: insolvent
+    m, b, f = late_payer(overdue = 50.0, turnover = 100.0)
+    @test B.insolvent(m, b)
+    # overdue below 10 % of turnover: carried, not insolvent
+    m, b, f = late_payer(overdue = 5.0, turnover = 100.0)
+    @test !B.insolvent(m, b)
+    # negative book value but nothing overdue: trades on
+    m, b, f = late_payer(overdue = 0.0, turnover = 100.0); filter!(iv -> false, m.invoices)
+    B.make_loan!(m, first(B.enterprises(m, :bank)), b, 300.0, :test); give!(b, -B.cash(b))
+    @test B.book_value_net(m, b) < 0 && !B.insolvent(m, b)
+    # loan arrears count as overdue obligations
+    m, b, f = late_payer(overdue = 0.0, turnover = 10.0); filter!(iv -> false, m.invoices)
+    B.make_loan!(m, first(B.enterprises(m, :bank)), b, 300.0, :test); l = last(m.loans); l.in_arrears = true; l.arrears_rounds = 3
+    @test B.obligations_overdue(m, b, 3) > 0 && B.insolvent(m, b)
+    # founding equity: every shareholder firm starts with its working reserve, paid in by its founders
+    me = create_bread_economy(SimulationParameters(; seed = 1, W..., founding_equity = true, maximum_rounds = 1))
+    for e in B.alive_agents(me)
+        (B.is_producer(e) && e.ownership == :shareholders) || continue
+        @test isapprox(B.cash(e), B.reserve_target(me, e); rtol = 1e-3) && e.paid_in_capital > 0
+    end
+    # a cooperative has founding members who pay in its reserve and become its first members
+    mc = create_bread_economy(SimulationParameters(; seed = 1, BEH..., settlement = :invoicing, ownership = :mixed, number_of_farms = 4, number_of_bakeries = 4, startup_financing = :paid_in_capital, founding_equity = true, maximum_rounds = 1))
+    coops = [e for e in B.alive_agents(mc) if B.is_producer(e) && e.ownership == :cooperative]
+    @test !isempty(coops) && all(e -> length(e.members) == B.parameters(mc).shareholder_count && isapprox(B.cash(e), B.reserve_target(mc, e); rtol = 1e-3), coops)
+    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 20, W..., founding_equity = true))) < 1e-6
+    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 20, W..., SUM..., government_employment_share = 0.1, demurrage_tax_rate = 0.01, founding_equity = true))) < 1e-6
 end
 
 @testset "cooperative forms (14 September 2026)" begin

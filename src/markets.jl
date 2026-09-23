@@ -303,7 +303,7 @@ function grain_market!(model)
                 price === nothing && continue
                 fund!(model, b, price, :grain) || continue
                 pay!(model, b, f, price, :grain)
-                b.materials_period += price; f.revenue_period += price
+                b.materials_period += price; f.revenue_period += price; f.revenue_this_round += price
                 take_stock!(f.grain, 1.0); push!(b.grain, StockItem(1.0, 0))
                 f.market[:grain].sold += 1; b.market[:grain].got += 1
                 record_transaction!(model, :grain, price, 1.0)

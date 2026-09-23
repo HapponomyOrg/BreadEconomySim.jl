@@ -110,6 +110,7 @@ function charge_account_fees!(model)
         (is_bank(a) || is_authority(a)) && continue
         bank = bank_of(model, a)
         bank === nothing && continue
+        is_government(a) && continue                    # 23 Sept: the government pays no account fee (with no revenue of its own it borrowed 1.5 a month for it)
         fee = a isa Person ? p.account_fee_person : p.account_fee_enterprise
         fee <= 0 && continue
         promise!(model, a, bank, fee, :account_fee, 1)
@@ -258,8 +259,7 @@ end
 function seize_enterprise_peer!(model, l::PeerLoan)
     b = model[l.borrower_id]
     if parameters(model).settlement == :invoicing && b isa Enterprise && b.kind in (:farm, :bakery, :theatre)
-        liquidate!(model, b, :loan_arrears)                           # one procedure: sale as a going concern first
-        return nothing
+        return nothing              # 23 Sept: peer-loan arrears are overdue obligations in the liquidation test; no separate seizure
     end
     borrower = model[l.borrower_id]; lender = model[l.lender_id]
     pay = round(min(cash(borrower), l.outstanding), digits = 4)

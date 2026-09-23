@@ -355,6 +355,14 @@ Base.@kwdef struct SimulationParameters
     # Bank staff (22 September): 0 = one unit of labour per bank, as before. k > 0 = one unit per k villagers the bank serves, so a
     # bank's wage bill grows with its customers and the cost-recovery lending rate does not fall just because the village is larger.
     bank_customers_per_labour_unit::Int = 0
+    # The liquidation test (23 September, closest to Belgian insolvency law: persistent non-payment *and* shaken credit):
+    #   :cash_flow — overdue obligations (invoices and loan instalments, each at least `liquidation_overdue_rounds` behind) reach
+    #                `liquidation_arrears_share` of the firm's monthly turnover, *and* a loan to pay them is refused;
+    #   :book      — the 22 September rule: overdue invoices reach that share of book value (fires on any overdue once book ≤ 0).
+    liquidation_test::Symbol = :cash_flow
+    # Founders pay in equity at the founding equal to the firm's working reserve, from savings or a personal loan (23 Sept; a Belgian
+    # BV must start with sufficient equity). false = the old rule: firms start empty and call on founders when short.
+    founding_equity::Bool = false
     liquidation_arrears_share::Float64 = 0.10
     liquidation_overdue_rounds::Int = 3
     liquidation_price_share::Float64 = 0.90

@@ -166,6 +166,8 @@ end
     refoundings::Int = 0                # times the firm has been sold as a going concern at a liquidation
     staff_target::Float64 = 1.0         # bank: labour units it employs (set at creation from bank_customers_per_labour_unit)
     revenue_period::Float64 = 0.0       # profit tax: sales since the last assessment (accrued at the sale)
+    revenue_this_round::Float64 = 0.0   # sales this month (for the turnover in the liquidation test)
+    turnover_history::Vector{Float64} = Float64[]   # the last three months' sales
     materials_period::Float64 = 0.0     # grain, rent and interest since the last assessment
     labour_period::Float64 = 0.0        # wages since the last assessment
     insurance_premiums::Float64 = 0.0   # bank: cumulative

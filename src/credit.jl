@@ -118,6 +118,17 @@ Cheapest bank (ties random). Refused when in arrears, no bank alive, or unafford
 Banks and the government skip the affordability test (interbank lending; the state is always allowed to borrow).
 """
 function request_loan!(model, borrower::Agent, amount::Float64, purpose::Symbol)
+    # invoice financing is the firm's own credit (23 Sept): under :invoicing a loan covered by the firm's receivables is made to
+    # the firm directly — before any call on its founders or members, which would otherwise answer for it
+    let p = parameters(model)
+        if p.settlement == :invoicing && borrower isa Enterprise && p.receivables_advance_rate > 0 && is_producer(borrower)
+            owed = sum(total_due(l) for l in debtor_loans(model, borrower); init = 0.0) + amount
+            if owed <= p.receivables_advance_rate * receivables(model, borrower) + 1e-9
+                bank = bank_of(model, borrower); bank === nothing && (bank = first(enterprises(model, :bank)))
+                p.monetary_system == :sumsy || (make_loan!(model, bank, borrower, amount, purpose); return true)
+            end
+        end
+    end
     amount = ceil(amount * 1e4) / 1e4
     amount <= 0 && return true
     if parameters(model).cooperative_founding == :symmetric && borrower isa Enterprise && borrower.ownership == :cooperative && !isempty(borrower.members)
@@ -362,7 +373,7 @@ A person buys bread or a ticket: the negotiated price goes to the seller, the co
 """
 function pay_consumption!(model, buyer::Agent, seller::Agent, price::Float64, purpose::Symbol)
     pay!(model, buyer, seller, price, purpose)
-    seller isa Enterprise && (seller.revenue_period += price)
+    seller isa Enterprise && (seller.revenue_period += price; seller.revenue_this_round += price)
     buyer isa Person || return price
     tax = round(price * consumption_tax_rate(model), digits = 4)
     if tax > 1e-6
@@ -698,8 +709,7 @@ function seize_enterprise!(model, loan::Loan)
     debtor = model[loan.debtor_id]
     p = parameters(model)
     if p.settlement == :invoicing && debtor.kind in (:farm, :bakery, :theatre)
-        liquidate!(model, debtor, :loan_arrears)                      # one procedure: sale as a going concern first
-        return nothing
+        return nothing              # 23 Sept: loan arrears are overdue obligations in the liquidation test; no separate seizure
     end
     if p.settlement == :invoicing && p.bank_bailout && is_bank(debtor)
         # banks do not fail (22 September): a bank behind on an interbank loan is recapitalised by the government for what it owes,
@@ -751,10 +761,54 @@ of the firm's book value — or the book value is nil or negative while anything
 function insolvent(model, e::Enterprise)
     p = parameters(model)
     e.kind in (:farm, :bakery, :theatre) || return false
-    overdue = invoices_overdue(model, e, p.liquidation_overdue_rounds)
+    if p.liquidation_test == :book
+        overdue = invoices_overdue(model, e, p.liquidation_overdue_rounds)
+        overdue > 1e-6 || return false
+        book = book_value_net(model, e)
+        return book <= 1e-6 || overdue >= p.liquidation_arrears_share * book - 1e-9
+    end
+    # :cash_flow — persistent non-payment, measured against what the firm sells, and shaken credit
+    overdue = obligations_overdue(model, e, p.liquidation_overdue_rounds)
     overdue > 1e-6 || return false
-    book = book_value_net(model, e)
-    return book <= 1e-6 || overdue >= p.liquidation_arrears_share * book - 1e-9
+    turnover = isempty(e.turnover_history) ? 0.0 : sum(e.turnover_history) / length(e.turnover_history)
+    overdue >= p.liquidation_arrears_share * turnover - 1e-9 || return false
+    # the credit test: a firm that can still borrow the money to catch up is not insolvent — it borrows and pays
+    if request_loan!(model, e, overdue, :catch_up)
+        pay_overdue_invoices!(model, e)
+        log_event!(model, :caught_up; actor = e.id, agent_kind = e.kind, amount = overdue)
+        return false
+    end
+    return true
+end
+
+"""What a firm owes that is at least `rounds` months behind: invoices, and bank and peer loan instalments in arrears."""
+function obligations_overdue(model, e::Enterprise, rounds::Int)
+    total = invoices_overdue(model, e, rounds)
+    for l in debtor_loans(model, e)
+        (l.in_arrears && l.arrears_rounds >= rounds && !l.settled) || continue
+        d = l.debt
+        isempty(d.installments) && continue
+        due = Float64(d.installments[end]) + Float64(sum(d.installments)) * Float64(d.interest_rate) + Float64(d.rest_interest)
+        total += l.arrears_rounds * due
+    end
+    for l in model.peer_loans
+        (l.borrower_id == e.id && l.in_arrears && l.arrears_rounds >= rounds && !l.settled) || continue
+        total += l.arrears_rounds * l.installment
+    end
+    return round(total, digits = 4)
+end
+
+"""Pay a firm's overdue invoices from its cash, oldest first (after a catch-up loan)."""
+function pay_overdue_invoices!(model, e::Enterprise)
+    now = current_round(model)
+    for iv in sort([iv for iv in model.invoices if iv.from_id == e.id && iv.round_issued < now]; by = iv -> iv.round_issued)
+        amt = round(min(iv.amount, cash(e)), digits = 4); amt > 1e-6 || break
+        to = model[iv.to_id]
+        to.alive && (transfer!(model, e, to, amt, iv.purpose); book_settled!(model, e, to, amt, iv.income_kind))
+        iv.amount = round(iv.amount - amt, digits = 4); model.invoices_paid_this_round += amt
+    end
+    filter!(iv -> iv.amount > 1e-6, model.invoices)
+    return nothing
 end
 
 """Spare cash a would-be buyer can put into a firm: above the cushion for a person, above the reserve for a producer."""
@@ -976,6 +1030,56 @@ function tax_profits!(model)
         end
         model.profit_tax_this_round += tax
         log_event!(model, :profit_tax; actor = e.id, agent_kind = e.kind, base = base, tax = tax)
+    end
+    return nothing
+end
+
+
+"""
+    pay_in_founding_equity!(model)
+
+`founding_equity`: at the founding, the founders of every shareholder firm pay in equity equal to the firm's working
+reserve (three months of costs), in equal parts — from their savings above the cushion first, the rest by a personal loan
+(a bank loan under debt money; a peer loan under SuMSy, as far as lenders can be found). A Belgian BV must start with
+sufficient equity; the rest of a firm's needs are financed by loans and trade credit. A cooperative has founding members
+who do the same (23 Sept): `shareholder_count` villagers not already founding another firm, in order of id, become its
+first members and pay in its reserve between them.
+"""
+function pay_in_founding_equity!(model)
+    p = parameters(model)
+    taken = Set{Int}(id for e in model.enterprise_list if e.ownership == :shareholders for id in keys(e.shares))
+    for e in [x for x in model.enterprise_list if x.alive && is_producer(x) && (x.ownership == :cooperative || !isempty(x.shares))]
+        target = reserve_target(model, e)
+        target > 1e-6 || continue
+        if e.ownership == :cooperative
+            free = [w for w in model.person_list if w.alive && !(w.id in taken)]
+            isempty(free) && (free = collect(model.person_list))
+            founders = free[1:min(p.shareholder_count, length(free))]
+            for w in founders
+                push!(taken, w.id); e.members[w.id] = 1; e.membership_unpaid[w.id] = 0.0; e.member_since[w.id] = 0
+            end
+        else
+            founders = sort([model[id] for id in keys(e.shares) if model[id] isa Person]; by = w -> w.id)
+        end
+        isempty(founders) && continue
+        each = round(target / length(founders), digits = 4)
+        for w in founders
+            own = round(min(max(cash(w) - buffer_target(model, w), 0.0), each), digits = 4)
+            short = round(each - own, digits = 4)
+            if short > 1e-6
+                if p.monetary_system == :sumsy
+                    request_loan!(model, w, short, :founding_equity)
+                else
+                    bank = bank_of(model, w); bank === nothing && (bank = first(enterprises(model, :bank)))
+                    make_loan!(model, bank, w, short, :founding_equity)
+                end
+            end
+            amount = round(min(each, cash(w)), digits = 4)
+            amount > 1e-6 || continue
+            transfer!(model, w, e, amount, :paid_in_capital)
+            e.paid_in_capital += amount
+            log_event!(model, :founding_equity; actor = w.id, firm = e.id, amount = amount)
+        end
     end
     return nothing
 end
