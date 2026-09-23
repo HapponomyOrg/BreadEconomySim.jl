@@ -2,7 +2,7 @@
 
 The container used in the chat sessions is suspended between messages, and a background job only advances while a message is being answered. The ladder needs about 460 runs of one to two minutes each, per settlement system — so it has to run on a machine that stays on.
 
-Requirements: Julia 1.12, this repository, and EconoSim.jl checked out next to it (the Manifest points at `../EconoSim.jl`; adjust with `] dev ../EconoSim.jl` if your layout differs).
+Requirements: Julia 1.13 and this repository. EconoSim.jl is fetched from https://github.com/HapponomyOrg/EconoSim.jl (branch main) by `Pkg.instantiate()`; `UPDATE_ECONOSIM=1` moves it to the latest commit before a run. To work on a local copy of EconoSim instead: `] dev ../EconoSim.jl`.
 
     cd BreadEconomySim.jl
     julia --project=. -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'

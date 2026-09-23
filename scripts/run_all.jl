@@ -21,7 +21,7 @@
 #   LADDERS=512:invoicing,512:clearing_all,128:invoicing
 #   RUNGS=                  only rungs whose name starts with one of these comma-separated prefixes (for testing)
 #   SKIP_TESTS=1            skip the test suite
-#   ECONOSIM_PATH=…         where EconoSim.jl is, if not in a folder next to this repository
+#   UPDATE_ECONOSIM=1       move EconoSim.jl to the latest commit on its main branch first
 #
 # Example, a quick check that everything works (a few minutes):
 #     SEEDS=1 ROUNDS=6 LADDERS=128:invoicing RUNGS=0,2 SKIP_TESTS=1 julia --project=. scripts/run_all.jl
@@ -32,25 +32,18 @@
 #   ladder2_<N>_rungs.csv                                            what each rung contains (for the report's panels)
 # ======================================================================================================================
 
+using Dates
+const START_TIME = now()                                            # the whole batch is timed; printed at the end
+
 const ROOT = normpath(joinpath(@__DIR__, ".."))
 cd(ROOT)
 
 # ---- 1. packages and tests --------------------------------------------------------------------------------------------
 using Pkg
 Pkg.activate(ROOT; io = devnull)
-# EconoSim.jl is a local package: the Manifest records the path it had on the machine where it was last resolved. If that path
-# does not exist here, use ECONOSIM_PATH, or an EconoSim.jl folder next to this repository, and point the project at it.
-let manifest = read(joinpath(ROOT, "Manifest.toml"), String)
-    i = findfirst("[[deps.EconoSim]]", manifest)
-    block = i === nothing ? "" : split(manifest[last(i)+1:end], "\n[[")[1]           # the EconoSim entry, up to the next package
-    m = match(r"path = \"([^\"]+)\"", block)
-    recorded = m === nothing ? "" : m.captures[1]
-    if isempty(recorded) || !isdir(isabspath(recorded) ? recorded : joinpath(ROOT, recorded))
-        candidate = get(ENV, "ECONOSIM_PATH", normpath(joinpath(ROOT, "..", "EconoSim.jl")))
-        isdir(candidate) || error("EconoSim.jl not found. Clone https://github.com/HapponomyOrg/EconoSim.jl next to this repository, or set ECONOSIM_PATH.")
-        println("Pointing the project at EconoSim.jl in $candidate"); Pkg.develop(path = candidate)
-    end
-end
+# EconoSim.jl comes from its GitHub repository (https://github.com/HapponomyOrg/EconoSim.jl, branch main). Set
+# UPDATE_ECONOSIM=1 to move to its latest commit before running; otherwise the commit recorded in the Manifest is used.
+get(ENV, "UPDATE_ECONOSIM", "0") == "1" && (println("Updating EconoSim.jl to the latest commit on main…"); Pkg.update("EconoSim"))
 println("Installing and precompiling packages (first time only takes a while)…"); flush(stdout)
 Pkg.instantiate(); Pkg.precompile()
 
@@ -193,4 +186,5 @@ for (N, settlement) in LADDERS
         run(addenv(`$(Base.julia_cmd()) --project=$ROOT $(joinpath(ROOT, "scripts", "dump_rungs.jl")) $SEEDS $ROUNDS all $N`, "SETTLEMENT" => "invoicing"))
     end
 end
-println("\nAll done.")
+elapsed = Dates.value(now() - START_TIME) ÷ 1000                      # seconds
+println("\nAll done in $(elapsed ÷ 3600) h $(lpad((elapsed % 3600) ÷ 60, 2, '0')) min $(lpad(elapsed % 60, 2, '0')) s (started $(Dates.format(START_TIME, "yyyy-mm-dd HH:MM")), finished $(Dates.format(now(), "yyyy-mm-dd HH:MM"))).")
