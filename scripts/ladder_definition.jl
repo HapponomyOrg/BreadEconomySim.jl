@@ -3,7 +3,7 @@ using BreadEconomySim
 # The ladder as a function of the village size, the run length and the settlement system (22 September), so that one
 # process can build several ladders (scripts/run_all.jl). ladder2_rungs.jl calls it with the command-line values.
 function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol)
-    RULES = (; number_of_persons = N, number_of_landowners = N ÷ 4, land_per_person = 1.5, initial_production_target = 10 * N ÷ 128, shares_per_person = 10, shareholder_count = 4, number_of_farms = 4, number_of_bakeries = 4, shows_per_round = 1, theatre_seat_margin = 0.25, unmet_demand_share = 0.05, unsold_share = 0.05, founding_equity = true, settlement = SETTLEMENT,   # 23 Sept: founders capitalise their firms
+    RULES = (; number_of_persons = N, number_of_landowners = N ÷ 4, land_per_person = 1.5, initial_production_target = 10 * N ÷ 128, shares_per_person = 10, shareholder_count = 4, number_of_farms = 4, number_of_bakeries = 4, shows_per_round = 1, theatre_seat_margin = 0.25, unmet_demand_share = 0.05, unsold_share = 0.05, founding_equity = true, founders = :distinct, settlement = SETTLEMENT,   # 23 Sept: founders capitalise their firms
            # 22 September: :invoicing = the settlement design (cash at the counter, wages at month end, invoices between firms, clearing among banks)
              initial_interest_rate = 0.005, maximum_interest_rate = 0.015,   # a month: 6 % a year to start, at most about 20 %; the rate itself covers the banks' costs (one staff unit per bank: staff scaled with customers bankrupted the banks at 512, 22 Sept)
               demand_based_targets = true, wage_ceiling_from_own_ask = true, expected_price_from_asks = true, ask_increase_only_on_unmet_demand = true,

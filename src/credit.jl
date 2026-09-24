@@ -174,9 +174,9 @@ function request_loan!(model, borrower::Agent, amount::Float64, purpose::Symbol)
 end
 
 """Book a bank loan: the deposit is created, the debt recorded, the money counted. No credit decision — see `request_loan!`."""
-function make_loan!(model, lender::Enterprise, borrower::Agent, amount::Float64, purpose::Symbol)
+function make_loan!(model, lender::Enterprise, borrower::Agent, amount::Float64, purpose::Symbol; term::Int = loan_term_for(model, borrower))
     rate = borrowing_rate(model, lender, borrower)
-    debt = bank_loan(lender.balance, borrower.balance, amount, rate, loan_term_for(model, borrower), 1, current_round(model))
+    debt = bank_loan(lender.balance, borrower.balance, amount, rate, term, 1, current_round(model))
     push!(model.loans, Loan(length(model.loans) + 1, lender.id, borrower.id, debt, 0, false, current_round(model), false, 0.0))
     model.money_created_this_round += amount
     model.cumulative_money_created += amount
@@ -552,12 +552,15 @@ function clear!(model)
     return nothing
 end
 
+"""The protected minimum on debt collection: `collection_floor_in_breads` loaves at the expected bread price."""
+collection_floor(model) = parameters(model).collection_floor_in_breads * expected_price(model, :bread)
+
 function garnish!(model, a::Agent, incoming::Float64)
     (a.alive && a isa Person) || return nothing
     a.land > 0 && return nothing
     loans = [l for l in debtor_loans(model, a) if l.in_arrears]
     isempty(loans) && return nothing
-    garnished = min(round(parameters(model).garnishment_rate * incoming, digits = 4), cash(a))
+    garnished = min(round(parameters(model).garnishment_rate * incoming, digits = 4), max(cash(a) - collection_floor(model), 0.0))   # never below the protected minimum
     for l in loans
         garnished <= 1e-9 && break
         paid = repay_extra!(model, l, min(garnished, total_due(l)))
@@ -641,7 +644,12 @@ function service_debt!(model)
             creditor = model[loan.creditor_id]
             is_bank(debtor) && monetise_equity!(model, debtor, next_payment(loan) - cash(debtor))
             due_interest = loan.debt.interest_rate * outstanding_principal(loan) + rest_interest(loan)
-            _, (paid_installment, paid_interest, shortfall) = process_debt!(loan.debt)
+            if debtor isa Person && cash(debtor) - collection_floor(model) < next_payment(loan) - 1e-9
+                # the protected minimum: a payment that would leave less than the floor is missed instead (arrears)
+                paid_installment, paid_interest, shortfall = 0.0, 0.0, next_payment(loan)
+            else
+                _, (paid_installment, paid_interest, shortfall) = process_debt!(loan.debt)
+            end
             paid_installment = Float64(paid_installment); paid_interest = Float64(paid_interest); shortfall = Float64(shortfall)
             creditor.retained_interest += paid_interest
             creditor.interest_received += paid_interest
@@ -874,7 +882,7 @@ function refound!(model, e::Enterprise)
     if e.ownership == :cooperative && !stays_coop
         e.retained_reserve > 1e-6 && (locked = round(min(e.retained_reserve, cash(e)), digits = 4); locked > 1e-6 && transfer!(model, e, government(model), locked, :cooperative_reserve))
         e.retained_reserve = 0.0
-        empty!(e.members); empty!(e.membership_unpaid); empty!(e.member_since); empty!(e.patronage); empty!(e.patronage_log); empty!(e.patronage_this_round)
+        empty!(e.members); empty!(e.membership_unpaid); empty!(e.member_since); empty!(e.patronage_log); empty!(e.patronage_this_round)
         release_all_pledges!(model, e)
         e.ownership = :shareholders
     end
@@ -1070,8 +1078,13 @@ function pay_in_founding_equity!(model)
                 if p.monetary_system == :sumsy
                     request_loan!(model, w, short, :founding_equity)
                 else
+                    # business terms (24 Sept): only what the founder can carry over `founding_loan_term` months
                     bank = bank_of(model, w); bank === nothing && (bank = first(enterprises(model, :bank)))
-                    make_loan!(model, bank, w, short, :founding_equity)
+                    rate = borrowing_rate(model, bank, w)
+                    existing = sum(next_payment(l) for l in debtor_loans(model, w); init = 0.0)
+                    room = p.affordability_ratio * expected_income(model, w) - living_cost(model, w) - existing
+                    loan = round(min(short, max(room, 0.0) / (1 / p.founding_loan_term + rate)), digits = 4)
+                    loan > 1e-6 && make_loan!(model, bank, w, loan, :founding_equity; term = p.founding_loan_term)
                 end
             end
             amount = round(min(each, cash(w)), digits = 4)

@@ -1029,16 +1029,64 @@ end
     @test B.obligations_overdue(m, b, 3) > 0 && B.insolvent(m, b)
     # founding equity: every shareholder firm starts with its working reserve, paid in by its founders
     me = create_bread_economy(SimulationParameters(; seed = 1, W..., founding_equity = true, maximum_rounds = 1))
-    for e in B.alive_agents(me)
-        (B.is_producer(e) && e.ownership == :shareholders) || continue
-        @test isapprox(B.cash(e), B.reserve_target(me, e); rtol = 1e-3) && e.paid_in_capital > 0
-    end
+    firms = [e for e in B.alive_agents(me) if B.is_producer(e) && e.ownership == :shareholders]
+    @test all(e -> B.cash(e) <= B.reserve_target(me, e) * (1 + 1e-3) && e.paid_in_capital >= 0, firms)   # at most the reserve: founders put in what they can afford (24 Sept)
+    @test any(e -> e.paid_in_capital > 0, firms)
     # a cooperative has founding members who pay in its reserve and become its first members
     mc = create_bread_economy(SimulationParameters(; seed = 1, BEH..., settlement = :invoicing, ownership = :mixed, number_of_farms = 4, number_of_bakeries = 4, startup_financing = :paid_in_capital, founding_equity = true, maximum_rounds = 1))
     coops = [e for e in B.alive_agents(mc) if B.is_producer(e) && e.ownership == :cooperative]
-    @test !isempty(coops) && all(e -> length(e.members) == B.parameters(mc).shareholder_count && isapprox(B.cash(e), B.reserve_target(mc, e); rtol = 1e-3), coops)
+    @test !isempty(coops) && all(e -> length(e.members) == B.parameters(mc).shareholder_count && B.cash(e) <= B.reserve_target(mc, e) * (1 + 1e-3), coops)
     @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 20, W..., founding_equity = true))) < 1e-6
     @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 20, W..., SUM..., government_employment_share = 0.1, demurrage_tax_rate = 0.01, founding_equity = true))) < 1e-6
+end
+
+
+@testset "a failing cooperative is refounded as a shareholder firm (24 September 2026)" begin
+    give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., settlement = :invoicing, ownership = :mixed, number_of_farms = 4, number_of_bakeries = 4, founding_equity = true, maximum_rounds = 1))
+    c = first(e for e in B.alive_agents(m) if B.is_producer(e) && e.ownership == :cooperative)
+    f = first(e for e in B.alive_agents(m) if B.is_producer(e) && e !== c && e.kind == :farm)
+    for a in B.alive_agents(m); a === c || give!(a, -B.cash(a)); end
+    buyer = B.persons(m)[end]; give!(buyer, 5_000.0)
+    push!(m.invoices, B.Invoice(c.id, f.id, 40.0, 40.0, :grain, :none, B.current_round(m) - 3))
+    @test B.refound!(m, c)
+    @test c.alive && c.ownership == :shareholders && isempty(c.members) && haskey(c.shares, buyer.id)
+end
+
+
+@testset "every firm has its own founders (24 September 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., ownership = :shareholders, number_of_persons = 64, number_of_farms = 4, number_of_bakeries = 4, entertainment = true, number_of_theatres = 4, founders = :distinct, maximum_rounds = 1))
+    fs = [Set(keys(e.shares)) for e in m.enterprise_list if B.is_producer(e)]; k = B.parameters(m).shareholder_count
+    @test length(fs) == 12 && all(length(f) == k for f in fs)
+    @test length(union(fs...)) == 12k                                                      # every firm its own founders
+    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., ownership = :shareholders, maximum_rounds = 1))
+    @test length(union([Set(keys(e.shares)) for e in m0.enterprise_list if B.is_producer(e)]...)) == B.parameters(m0).shareholder_count   # the old rule
+end
+
+
+@testset "founding loans on business terms and the protected minimum (24 September 2026)" begin
+    give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
+    W = (; BEH..., settlement = :invoicing, ownership = :shareholders, founders = :distinct, founding_equity = true)
+    m = create_bread_economy(SimulationParameters(; seed = 1, W..., maximum_rounds = 1))
+    for l in m.loans
+        l.debtor_id in (w.id for w in B.persons(m)) || continue
+        @test length(l.debt.installments) == B.parameters(m).founding_loan_term                    # five-year founding loans
+        w = m[l.debtor_id]
+        @test B.next_payment(l) + B.living_cost(m, w) <= B.parameters(m).affordability_ratio * B.expected_income(m, w) + 1e-6
+    end
+    # the protected minimum: a payment that would leave less than one loaf is missed, not taken
+    m2 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., maximum_rounds = 3))
+    w = first(B.persons(m2)); bank = first(B.enterprises(m2, :bank))
+    B.make_loan!(m2, bank, w, 100.0, :test); l = last(m2.loans); l.created = -1
+    give!(w, B.next_payment(l) + 0.5 * B.collection_floor(m2) - B.cash(w))                      # enough for the payment, not for the floor too
+    c0 = B.cash(w); B.service_debt!(m2)
+    @test B.cash(w) == c0 && l.in_arrears                                                        # missed, not taken
+    give!(w, 50.0); B.service_debt!(m2)
+    @test B.cash(w) >= B.collection_floor(m2) - 1e-9                                             # paid, the floor kept
+    # garnishment leaves the floor
+    give!(w, B.collection_floor(m2) + 1.0 - B.cash(w)); w.land = 0; l.in_arrears = true
+    B.garnish!(m2, w, 1_000.0)
+    @test B.cash(w) >= B.collection_floor(m2) - 1e-9
 end
 
 @testset "cooperative forms (14 September 2026)" begin

@@ -70,7 +70,7 @@ const LADDERS = [(parse(Int, split(x, ":")[1]), Symbol(split(x, ":")[2])) for x 
 const RUNGS   = filter(!isempty, split(get(ENV, "RUNGS", ""), ","))
 
 ladder_name(N, settlement) = settlement == :invoicing ? "ladder2_$(N)" : "ladder2_$(N)_$(settlement)"
-const MODEL_VERSION = "2026-09-23"   # part of the key: runs made with an earlier model are never taken for current ones
+const MODEL_VERSION = "2026-09-24"   # part of the key: runs made with an earlier model are never taken for current ones
 parts_dir(N, settlement) = joinpath(ROOT, "results", "parts", "$(ladder_name(N, settlement))_$(ROUNDS)months_$(MODEL_VERSION)")   # the run length is part of the key: a short test run is never taken for a real one
 safe(s) = replace(s, r"[^A-Za-z0-9]+" => "_")
 part_file(job) = joinpath(parts_dir(job.N, job.settlement), "$(safe(job.rung))__$(job.system)__$(job.seed).csv")
@@ -129,6 +129,9 @@ results = pmap(todo; on_error = e -> "FAILED: " * sprint(showerror, e)) do job
     run_job(job)
 end
 failed = count(startswith("FAILED"), results)
+for (job, line) in zip(todo, results)
+    startswith(line, "FAILED") && println("FAILED  $(job.N) $(job.settlement) | $(job.rung) | $(job.system) seed $(job.seed): ", first(line, 400))
+end
 failed > 0 && @warn "$failed runs failed; run the script again to retry them (finished runs are kept)"
 
 # ---- 3. combined files, summaries and configuration tables ----------------------------------------------------------
@@ -154,21 +157,22 @@ function summarise(rounds::DataFrame, N::Int)
         (; debt_peak = peak, debt_peak_month = g.round[k], debt_repaid_month = (peak <= 1e-6 || after === nothing) ? missing : g.round[k + after - 1])
     end
     runs = leftjoin(runs, debt_course; on = [:rung, :system, :seed])
-    runs.debt_pct_gdp = [g > 0 ? 100 * d / (12 * g) : NaN for (d, g) in zip(runs.government_debt, runs.gdp)]
+    runs.debt_pct_gdp = [(ismissing(g) || g <= 0) ? missing : 100 * d / (12 * g) for (d, g) in zip(runs.government_debt, runs.gdp)]   # a collapsed run has no last-year rows
     runs.shortfall = runs.outlay .- runs.revenue
+    m(x) = (v = collect(skipmissing(x)); isempty(v) ? missing : mean(v))          # means over the runs that have the figure
     combine(groupby(runs, [:rung, :system]),
         nrow => :runs, :collapsed => sum => :runs_collapsed,
-        :persons_alive => mean => :alive_at_end, :persons_alive => minimum => :alive_worst,
+        :persons_alive => m => :alive_at_end, :persons_alive => minimum => :alive_worst,
         :persons_alive => (x -> count(>=(N * 15 / 16), x)) => :runs_whole,
-        :unemployed => mean => :unemployed, :tickets => mean => :tickets, :bread_price => mean => :bread_price,
-        :government_debt => mean => :public_debt, :debt_pct_gdp => mean => :public_debt_pct_gdp, :shortfall => mean => :shortfall_per_month,
-        :debt_peak => mean => :public_debt_peak, :debt_peak_month => mean => :public_debt_peak_month,
+        :unemployed => m => :unemployed, :tickets => m => :tickets, :bread_price => m => :bread_price,
+        :government_debt => m => :public_debt, :debt_pct_gdp => m => :public_debt_pct_gdp, :shortfall => m => :shortfall_per_month,
+        :debt_peak => m => :public_debt_peak, :debt_peak_month => m => :public_debt_peak_month,
         :debt_repaid_month => (x -> count(!ismissing, x)) => :runs_debt_repaid, :debt_repaid_month => (x -> all(ismissing, x) ? missing : mean(skipmissing(x))) => :public_debt_repaid_month,
-        :gini_cash_persons => mean => :gini_cash, :gini_net_wealth_persons => mean => :gini_wealth,
-        :wealth_gap_meals => mean => :wealth_gap_meals, :wealth_bottom10_meals => mean => :wealth_bottom10_meals,
-        :cash_gap_meals => mean => :cash_gap_meals, :cash_bottom10_meals => mean => :cash_bottom10_meals,
-        :negative_wealth_persons => mean => :under_water, :zero_cash_persons => mean => :without_cash,
-        :liquidations => mean => :liquidations, :refoundings => mean => :refoundings, :bank_bailouts => mean => :bank_bailouts,
+        :gini_cash_persons => m => :gini_cash, :gini_net_wealth_persons => m => :gini_wealth,
+        :wealth_gap_meals => m => :wealth_gap_meals, :wealth_bottom10_meals => m => :wealth_bottom10_meals,
+        :cash_gap_meals => m => :cash_gap_meals, :cash_bottom10_meals => m => :cash_bottom10_meals,
+        :negative_wealth_persons => m => :under_water, :zero_cash_persons => m => :without_cash,
+        :liquidations => m => :liquidations, :refoundings => m => :refoundings, :bank_bailouts => m => :bank_bailouts,
         :identity => (x -> maximum(abs.(x))) => :worst_identity_gap)
 end
 

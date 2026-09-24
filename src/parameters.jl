@@ -363,6 +363,17 @@ Base.@kwdef struct SimulationParameters
     # Founders pay in equity at the founding equal to the firm's working reserve, from savings or a personal loan (23 Sept; a Belgian
     # BV must start with sufficient equity). false = the old rule: firms start empty and call on founders when short.
     founding_equity::Bool = false
+    # Who founds the firms (24 September): :shared = the old rule, the same `shareholder_count` villagers found every firm
+    # (at 512 villagers: 4 owners of all twelve firms); :distinct = every firm has its own founders, taken in order of id,
+    # wrapping round when there are more founder places than villagers (at 512 with twelve firms: 48 owners, 9 %).
+    founders::Symbol = :shared
+    # Founding loans on business terms (24 September): a founder borrows for their share of the founding equity only what passes
+    # the affordability test over `founding_loan_term` months; a founder who cannot carry the full share puts in what they can
+    # and the firm starts with less equity (it borrows the rest itself when it needs it).
+    founding_loan_term::Int = 60
+    # A protected minimum on debt collection (24 September; cf. the legal limits on garnishment): loan repayment and garnishment
+    # never take a person's cash below this many loaves at the current price — what cannot be paid becomes arrears.
+    collection_floor_in_breads::Float64 = 1.0
     liquidation_arrears_share::Float64 = 0.10
     liquidation_overdue_rounds::Int = 3
     liquidation_price_share::Float64 = 0.90

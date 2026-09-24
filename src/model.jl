@@ -201,6 +201,9 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
         ps = sort([a for a in agents_by_id(model) if a isa Person]; by = a -> a.id)
         units_total = parameters.shares_per_person > 0 ? float(parameters.shares_per_person * parameters.number_of_persons) : 100.0
         holders = ps[1:min(parameters.shareholder_count, length(ps))]
+        firm_no = 0                                                   # :distinct founders: each firm gets the next villagers in id order
+        founders_of() = parameters.founders == :distinct ?
+            [ps[mod1((firm_no - 1) * parameters.shareholder_count + j, length(ps))] for j in 1:min(parameters.shareholder_count, length(ps))] : holders
         for kind in (:farm, :bakery, :theatre)
             es = sort([a for a in agents_by_id(model) if a isa Enterprise && a.kind == kind]; by = a -> a.id)
             ncoop = parameters.ownership == :cooperative ? length(es) : parameters.ownership == :shareholders ? 0 :
@@ -215,8 +218,9 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
                     end
                 else
                     e.ownership = :shareholders
-                    for w in holders; e.shares[w.id] = units_total / length(holders); end
-                    e.founder_ids = [w.id for w in holders]
+                    firm_no += 1; fs = founders_of()
+                    for w in fs; e.shares[w.id] = units_total / length(fs); end
+                    e.founder_ids = [w.id for w in fs]
                 end
             end
         end

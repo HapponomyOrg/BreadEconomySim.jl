@@ -197,7 +197,7 @@ function service_peer_loans!(model)
         interest = round(l.rate * l.outstanding, digits = 4)
         lender_interest = round(l.lender_rate * l.outstanding, digits = 4)
         due = round(max(inst + interest, 0.0), digits = 4)
-        pay = round(min(due, cash(borrower)), digits = 4)
+        pay = round(min(due, borrower isa Person ? max(cash(borrower) - collection_floor(model), 0.0) : cash(borrower)), digits = 4)   # the protected minimum (24 Sept)
         share = due > 1e-9 ? pay / due : 1.0
         to_lender = round(share * (inst + lender_interest), digits = 4)
         to_bank = round(pay - to_lender, digits = 4)
