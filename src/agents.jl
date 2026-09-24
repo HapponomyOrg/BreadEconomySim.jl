@@ -114,6 +114,7 @@ end
     rebate_income::Float64 = 0.0        # consumer cooperative patronage rebate received this round (untaxed: a price reduction)
     wealth_tax_arrears::Float64 = 0.0   # wealth tax due but unpaid for want of cash; collected first from later cash
     income_tax_accrued::Float64 = 0.0   # income tax owed but not yet charged (income_tax_period > 1)
+    land_levy_arrears::Float64 = 0.0    # land levy due but unpaid
 end
 
 """An enterprise: bank, farm, bakery or government. No capacity, no hunger."""
@@ -165,6 +166,7 @@ end
     rebate_per_unit::Float64 = 0.0      # consumer cooperative: expected rebate per unit bought (smoothed)
     refoundings::Int = 0                # times the firm has been sold as a going concern at a liquidation
     staff_target::Float64 = 1.0         # bank: labour units it employs (set at creation from bank_customers_per_labour_unit)
+    land_levy_arrears::Float64 = 0.0    # land levy due but unpaid
     revenue_period::Float64 = 0.0       # profit tax: sales since the last assessment (accrued at the sale)
     revenue_this_round::Float64 = 0.0   # sales this month (for the turnover in the liquidation test)
     turnover_history::Vector{Float64} = Float64[]   # the last three months' sales

@@ -70,7 +70,7 @@ const LADDERS = [(parse(Int, split(x, ":")[1]), Symbol(split(x, ":")[2])) for x 
 const RUNGS   = filter(!isempty, split(get(ENV, "RUNGS", ""), ","))
 
 ladder_name(N, settlement) = settlement == :invoicing ? "ladder2_$(N)" : "ladder2_$(N)_$(settlement)"
-const MODEL_VERSION = "2026-09-24"   # part of the key: runs made with an earlier model are never taken for current ones
+const MODEL_VERSION = "2026-09-24f"   # part of the key: runs made with an earlier model are never taken for current ones
 parts_dir(N, settlement) = joinpath(ROOT, "results", "parts", "$(ladder_name(N, settlement))_$(ROUNDS)months_$(MODEL_VERSION)")   # the run length is part of the key: a short test run is never taken for a real one
 safe(s) = replace(s, r"[^A-Za-z0-9]+" => "_")
 part_file(job) = joinpath(parts_dir(job.N, job.settlement), "$(safe(job.rung))__$(job.system)__$(job.seed).csv")
@@ -116,6 +116,8 @@ for (N, settlement) in LADDERS
             (startswith(name, "X1") && system == "debt") && continue       # the 2×2 rungs run one side only
             (startswith(name, "X2") && system == "sumsy") && continue
             (startswith(name, "E") && system == "debt") && continue        # full-money-stock twins: SuMSy only
+            (startswith(name, "L") && system == "debt") && continue        # land-levy variants: SuMSy only
+            (startswith(name, "L") && system == "debt") && continue        # land-levy variants: SuMSy only
             job = (; N, settlement, rounds = ROUNDS, rung = name, system, seed)
             push!(jobs, (; job..., file = part_file(job), index = length(jobs) + 1, total = 0))
         end
@@ -163,15 +165,18 @@ function summarise(rounds::DataFrame, N::Int)
     combine(groupby(runs, [:rung, :system]),
         nrow => :runs, :collapsed => sum => :runs_collapsed,
         :persons_alive => m => :alive_at_end, :persons_alive => minimum => :alive_worst,
-        :persons_alive => (x -> count(>=(N * 15 / 16), x)) => :runs_whole,
+        [:persons_alive, :collapsed] => ((a, c) -> count(i -> !c[i] && a[i] >= N * 15 / 16, eachindex(a))) => :runs_whole,   # a collapsed village is never whole (review 5)
+        [:persons_alive, :collapsed] => ((a, c) -> (v = a[.!c]; isempty(v) ? missing : mean(v))) => :alive_complete_runs,
         :unemployed => m => :unemployed, :tickets => m => :tickets, :bread_price => m => :bread_price,
         :government_debt => m => :public_debt, :debt_pct_gdp => m => :public_debt_pct_gdp, :shortfall => m => :shortfall_per_month,
         :debt_peak => m => :public_debt_peak, :debt_peak_month => m => :public_debt_peak_month,
         :debt_repaid_month => (x -> count(!ismissing, x)) => :runs_debt_repaid, :debt_repaid_month => (x -> all(ismissing, x) ? missing : mean(skipmissing(x))) => :public_debt_repaid_month,
-        :gini_cash_persons => m => :gini_cash, :gini_net_wealth_persons => m => :gini_wealth,
+        :gini_cash_persons => m => :gini_cash,
+        :gini_net_wealth_persons => (x -> (v = collect(skipmissing(x)); (isempty(v) || any(g -> !(0 <= g <= 1), v)) ? missing : mean(v))) => :gini_wealth,   # not defined when net wealth goes negative (review 5)
         :wealth_gap_meals => m => :wealth_gap_meals, :wealth_bottom10_meals => m => :wealth_bottom10_meals,
         :cash_gap_meals => m => :cash_gap_meals, :cash_bottom10_meals => m => :cash_bottom10_meals,
         :negative_wealth_persons => m => :under_water, :zero_cash_persons => m => :without_cash,
+        :land_households_share => m => :land_held_by_households, :gini_wealth_attributed => (x -> (v = collect(skipmissing(x)); (isempty(v) || any(g -> !(0 <= g <= 1), v)) ? missing : mean(v))) => :gini_wealth_firms_attributed,
         :liquidations => m => :liquidations, :refoundings => m => :refoundings, :bank_bailouts => m => :bank_bailouts,
         :identity => (x -> maximum(abs.(x))) => :worst_identity_gap)
 end

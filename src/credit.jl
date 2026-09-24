@@ -1070,29 +1070,85 @@ function pay_in_founding_equity!(model)
             founders = sort([model[id] for id in keys(e.shares) if model[id] isa Person]; by = w -> w.id)
         end
         isempty(founders) && continue
-        each = round(target / length(founders), digits = 4)
-        for w in founders
-            own = round(min(max(cash(w) - buffer_target(model, w), 0.0), each), digits = 4)
-            short = round(each - own, digits = 4)
-            if short > 1e-6
-                if p.monetary_system == :sumsy
-                    request_loan!(model, w, short, :founding_equity)
-                else
-                    # business terms (24 Sept): only what the founder can carry over `founding_loan_term` months
-                    bank = bank_of(model, w); bank === nothing && (bank = first(enterprises(model, :bank)))
-                    rate = borrowing_rate(model, bank, w)
-                    existing = sum(next_payment(l) for l in debtor_loans(model, w); init = 0.0)
-                    room = p.affordability_ratio * expected_income(model, w) - living_cost(model, w) - existing
-                    loan = round(min(short, max(room, 0.0) / (1 / p.founding_loan_term + rate)), digits = 4)
-                    loan > 1e-6 && make_loan!(model, bank, w, loan, :founding_equity; term = p.founding_loan_term)
-                end
+        pay_in_equity!(model, e, founders, target)
+    end
+    return nothing
+end
+
+"""
+    pay_in_equity!(model, e, founders, target) → amount raised
+
+The founders pay in `target` between them, in equal parts: from their savings above the cushion first, the rest by a personal
+loan — on business terms under debt money (only what passes the affordability test over `founding_loan_term` months), a peer
+loan under SuMSy. A founder who cannot carry the full share puts in what they can.
+"""
+function pay_in_equity!(model, e::Enterprise, founders::Vector, target::Float64)
+    p = parameters(model)
+    raised = 0.0
+    each = round(target / length(founders), digits = 4)
+    for w in founders
+        own = round(min(max(cash(w) - buffer_target(model, w), 0.0), each), digits = 4)
+        short = round(each - own, digits = 4)
+        if short > 1e-6
+            if p.monetary_system == :sumsy
+                request_loan!(model, w, short, :founding_equity)
+            else
+                bank = bank_of(model, w); bank === nothing && (bank = first(enterprises(model, :bank)))
+                rate = borrowing_rate(model, bank, w)
+                existing = sum(next_payment(l) for l in debtor_loans(model, w); init = 0.0)
+                room = p.affordability_ratio * expected_income(model, w) - living_cost(model, w) - existing
+                loan = round(min(short, max(room, 0.0) / (1 / p.founding_loan_term + rate)), digits = 4)
+                loan > 1e-6 && make_loan!(model, bank, w, loan, :founding_equity; term = p.founding_loan_term)
             end
-            amount = round(min(each, cash(w)), digits = 4)
-            amount > 1e-6 || continue
-            transfer!(model, w, e, amount, :paid_in_capital)
-            e.paid_in_capital += amount
-            log_event!(model, :founding_equity; actor = w.id, firm = e.id, amount = amount)
         end
+        amount = round(min(each, max(cash(w) - (current_round(model) > 0 ? collection_floor(model) : 0.0), 0.0)), digits = 4)
+        amount > 1e-6 || continue
+        transfer!(model, w, e, amount, :paid_in_capital)
+        e.paid_in_capital += amount; raised += amount
+        log_event!(model, :founding_equity; actor = w.id, firm = e.id, amount = amount)
+    end
+    return raised
+end
+
+"""
+    refound_missing_producers!(model)
+
+When fewer than `refound_minimum` farms, or bakeries, are open, villagers try to start one (24 September). The most recently
+closed firm of that kind is reopened as a new business with a clean slate — new founders (the `shareholder_count` villagers with
+the most spare cash, ties by id), no stock, no debts, no history — and the founders pay in its working reserve as at the
+founding (`pay_in_equity!`). If they raise nothing, the attempt fails and is tried again next month.
+"""
+function refound_missing_producers!(model)
+    p = parameters(model)
+    p.refound_minimum > 0 || return nothing
+    for kind in (:farm, :bakery)
+        length(enterprises(model, kind)) >= p.refound_minimum && continue
+        shells = [e for e in model.enterprise_list if !e.alive && e.kind == kind]
+        isempty(shells) && continue
+        e = shells[argmax([x.closed_round for x in shells])]
+        candidates = sort([w for w in persons(model)]; by = w -> (-(cash(w) - buffer_target(model, w)), w.id))
+        founders = candidates[1:min(p.shareholder_count, length(candidates))]
+        isempty(founders) && continue
+        # a clean slate
+        e.alive = true
+        empty!(e.grain); empty!(e.bread); empty!(e.dividend_history); empty!(e.net_history); empty!(e.turnover_history)
+        empty!(e.members); empty!(e.membership_unpaid); empty!(e.member_since); empty!(e.patronage_log); empty!(e.patronage_this_round)
+        e.production_target = p.initial_production_target
+        e.hired_labour = 0.0; e.rented_land = 0; e.land_let = 0; e.wage_bill = 0.0; e.operating_net = 0.0; e.interest_paid = 0.0
+        e.share_price = 0.0; e.paid_in_capital = 0.0; e.retained_reserve = 0.0; e.land_levy_arrears = 0.0
+        e.revenue_period = 0.0; e.materials_period = 0.0; e.labour_period = 0.0; e.revenue_this_round = 0.0
+        e.ownership = :shareholders
+        empty!(e.shares); units = total_share_units(model)
+        for w in founders; e.shares[w.id] = units / length(founders); end
+        e.founder_ids = [w.id for w in founders]
+        raised = pay_in_equity!(model, e, founders, reserve_target(model, e))
+        if raised <= 1e-6
+            e.alive = false; empty!(e.shares); e.founder_ids = Int[]
+            log_event!(model, :new_firm_failed; agent_kind = kind)
+            continue
+        end
+        model.new_firms += 1
+        log_event!(model, :new_firm; actor = e.id, agent_kind = kind, founders = e.founder_ids, equity = raised)
     end
     return nothing
 end
@@ -1393,7 +1449,7 @@ end
 
 # ---- ownership: dividends and the share market (13 September 2026) -----------------
 
-book_value(model, e::Enterprise) = cash(e) + e.land * land_price(model) - debt_of(e) - peer_debt_of(model, e)
+book_value(model, e::Enterprise) = cash(e) + e.land * land_valuation_price(model) - debt_of(e) - peer_debt_of(model, e)
 total_share_units(model) = (p = parameters(model); p.shares_per_person > 0 ? float(p.shares_per_person * p.number_of_persons) : 100.0)
 book_per_unit(model, e::Enterprise) = book_value(model, e) / total_share_units(model)
 mean_dividend_per_unit(model, e::Enterprise) = isempty(e.dividend_history) ? 0.0 : sum(e.dividend_history[max(1, end - 11):end]) / min(length(e.dividend_history), 12) / total_share_units(model)

@@ -923,7 +923,7 @@ end
     @test isapprox(ml.profit_tax_scale, 0.98 * 1.02; atol = 1e-9) && isapprox(ml.parking_tax_scale, 1.02 * 1.02; atol = 1e-9)
     @test isapprox(ml.tax_scale, 1.02; atol = 1e-9) && B.parameters(ml).demurrage_rate == 0.02
     @test isapprox(levered((income = -3.0,)).tax_scale, 0.94 * 1.02; atol = 1e-9)        # a partial tuple: the others are 0
-    @test_throws ArgumentError run(; seed = 1, maximum_rounds = 1, BEH..., tax_levers = (land = 1.0,))
+    @test_throws ArgumentError run(; seed = 1, maximum_rounds = 1, BEH..., tax_levers = (river = 1.0,))
     # the parking tax follows its own scale under SuMSy
     ms = create_bread_economy(SimulationParameters(; seed = 1, BEH..., SUM..., demurrage_tax_rate = 0.01, maximum_rounds = 1))
     for w in B.persons(ms); give!(w, 200.0); end
@@ -1087,6 +1087,114 @@ end
     give!(w, B.collection_floor(m2) + 1.0 - B.cash(w)); w.land = 0; l.in_arrears = true
     B.garnish!(m2, w, 1_000.0)
     @test B.cash(w) >= B.collection_floor(m2) - 1e-9
+end
+
+
+@testset "land prices discovered by the money logic, seller credit on both sides, villages that run on (24 September 2026)" begin
+    give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
+    LM = (; BEH..., land_pricing = :market, land_sales = :reservation, instalment_purchases = true, unmet_demand_share = 0.05, unsold_share = 0.05)
+    DEPOSITS = (; deposit_interest_rate = 0.01, loyalty_bonus_rate = 0.02, deposit_interest_period = 12)
+    md = create_bread_economy(SimulationParameters(; seed = 1, LM..., DEPOSITS..., land_loans = true, maximum_rounds = 1))   # farms may buy on credit, so their demand counts
+    @test B.money_return_rate(md) ≈ 0.0025
+    w = first(B.persons(md))
+    @test B.land_reservation(md, w) ≈ B.expected_price(md, :rent) / 0.0025                 # debt money: rent over what idle money earns
+    @test 0.0025 < B.instalment_rate(md, w) < B.buyer_alternative(md, w)                   # seller credit between deposit and loan rate
+    ms = create_bread_economy(SimulationParameters(; seed = 1, LM..., SUM..., demurrage_tax_rate = 0.01, maximum_rounds = 1))
+    @test B.money_return_rate(ms) ≈ -0.03                                                    # SuMSy: idle money loses the parking fee and tax
+    @test B.land_reservation(ms, first(B.persons(ms))) == Inf                                 # without a levy nobody sells land to hold such money
+    @test B.instalment_rate(ms, first(B.persons(ms))) < 0                                     # seller credit at a negative market rate
+    ml = create_bread_economy(SimulationParameters(; seed = 1, LM..., SUM..., demurrage_tax_rate = 0.01, land_levy = true, maximum_rounds = 1))
+    @test B.land_levy_rate(ml) ≈ 0.0325 && B.land_reservation(ml, first(B.persons(ml))) ≈ B.expected_price(ml, :rent) / (0.0325 + max(-0.03, B.parameters(ml).peer_loan_rate - B.parameters(ml).bank_spread))
+    g0 = B.cash(B.government(ml)); B.collect_land_levy!(ml)
+    @test B.cash(B.government(ml)) > g0                                                       # the levy goes to the government
+    @test B.land_price(ms) ≈ B.parameters(ms).land_price_rent_multiple * B.expected_price(ms, :rent)   # the base price
+    # excess demand raises the price: farms want land, no landowner sells at 15 months' rent under debt money
+    p0 = B.land_price(md)
+    for f in B.enterprises(md, :farm); f.production_target = f.land + 5; give!(f, 10_000.0); end
+    B.land_market!(md)
+    @test B.land_price(md) ≈ p0 * 1.06
+    # excess supply lowers the price: under debt money, the price far above every reservation, no farm wanting land, nobody able to buy
+    mx = create_bread_economy(SimulationParameters(; seed = 1, LM..., DEPOSITS..., maximum_rounds = 1))
+    mx.land_price_current = 10 * B.land_reservation(mx, first(B.persons(mx)))
+    for f in B.enterprises(mx, :farm); f.production_target = f.land; end
+    for w in B.persons(mx); give!(w, -B.cash(w)); end
+    p1 = B.land_price(mx); B.land_market!(mx)
+    @test B.land_price(mx) ≈ p1 * 0.94
+    # seller credit under debt money: a buyer without the cash buys on instalments, at a market rate between deposit and loan rate
+    mi = run(; seed = 1, maximum_rounds = 24, LM..., DEPOSITS..., land_sales = :forced)
+    inst = [l for l in mi.peer_loans if B.is_person(mi[l.borrower_id]) || B.is_producer(mi[l.borrower_id])]
+    @test !isempty(inst) && all(l -> 0.0025 < l.rate <= B.parameters(mi).maximum_interest_rate, inst)   # between the deposit rate and the banks' ceiling
+    # a village without bakeries runs on when the stopping rule is off
+    mr = create_bread_economy(SimulationParameters(; seed = 1, BEH..., stop_without_producers = false, maximum_rounds = 8))
+    for b in B.enterprises(mr, :bakery); B.close_enterprise!(mr, b, :test); end
+    run_simulation!(mr)
+    @test mr.termination_reason in ("everyone is dead", "maximum rounds reached")               # the village runs on and starves visibly, no silent stop
+    # the new measures
+    d = round_data(run(; seed = 1, maximum_rounds = 10, BEH...))
+    @test all(0 .<= d.land_households_share .<= 1) && all(isfinite, d.gini_wealth_attributed)
+end
+
+
+@testset "land: price within the order book, wealth at the last traded price (24 September 2026)" begin
+    give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
+    LM = (; BEH..., land_pricing = :market, land_sales = :reservation, instalment_purchases = true, unmet_demand_share = 0.05, unsold_share = 0.05,
+          deposit_interest_rate = 0.01, loyalty_bonus_rate = 0.02, deposit_interest_period = 12, land_loans = true)
+    m = create_bread_economy(SimulationParameters(; seed = 1, LM..., maximum_rounds = 1))
+    for f in B.enterprises(m, :farm); f.production_target = f.land + 5; give!(f, 10_000.0); end
+    for w in B.persons(m); give!(w, -B.cash(w)); end                                        # only farms can buy, on credit
+    cap = maximum(B.land_buyer_reservation(m, f, :cash) for f in B.enterprises(m, :farm))    # they have the cash, so they bid with it
+    m.land_price_current = 0.99 * cap
+    B.land_market!(m)
+    @test B.land_price(m) <= cap + 1e-9                                                      # never above the best unserved bid
+    B.land_market!(m)
+    @test B.land_price(m) <= cap + 1e-9
+    # wealth values land at the price last paid, not the quote
+    m2 = create_bread_economy(SimulationParameters(; seed = 1, LM..., maximum_rounds = 1))
+    w = first(o for o in B.persons(m2) if o.land > 0)
+    base = B.land_valuation_price(m2)
+    m2.land_price_current = 100 * base
+    @test B.land_valuation_price(m2) == base && B.net_wealth(m2, w) < w.land * B.land_price(m2)
+    # a sale updates the valuation price
+    d = round_data(run(; seed = 1, maximum_rounds = 36, LM..., SUM..., demurrage_tax_rate = 0.01, government_employment_share = 0.1, land_levy = true))
+    @test any(d.land_price_traded .!= d.land_price_traded[1]) && sum(d.land_sold) > 0         # with the levy land trades, and wealth follows the price paid
+end
+
+
+@testset "the land levy is a tax family under the levers (24 September 2026)" begin
+    L = (; BEH..., SUM..., demurrage_tax_rate = 0.01, land_pricing = :market, land_levy = true, government_reserve_in_rounds = 3, surplus_tax_reduction_share = 1.0)
+    m = create_bread_economy(SimulationParameters(; seed = 1, L..., maximum_rounds = 1))
+    r0 = B.land_levy_rate(m)
+    m.tax_this_round = 1_000.0; m.government_outlay_this_round = 10.0                      # a large surplus
+    B.book_asset!(B.government(m).balance, B.DEPOSIT, 5_000.0)
+    B.manage_government_reserve!(m)
+    @test m.land_levy_scale < 1.0 && B.land_levy_rate(m) < r0                              # too much income: the levy is scaled down
+    @test_throws ArgumentError run(; seed = 1, maximum_rounds = 1, BEH..., tax_levers = (sea = 1.0,))
+    run(; seed = 1, maximum_rounds = 1, BEH..., tax_levers = (land = -1.0,))                 # the land lever is accepted
+end
+
+
+@testset "a village that has lost its last bakery tries to start one (24 September 2026)" begin
+    give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., founders = :distinct, maximum_rounds = 3))
+    for b in B.enterprises(m, :bakery); B.close_enterprise!(m, b, :test); end
+    @test isempty(B.enterprises(m, :bakery))
+    rich = B.persons(m)[end]; give!(rich, 2_000.0)
+    B.refound_missing_producers!(m)
+    nb = B.enterprises(m, :bakery)
+    @test length(nb) == 1 && haskey(nb[1].shares, rich.id) && B.cash(nb[1]) > 0 && m.new_firms == 1
+    @test isempty(nb[1].bread) && B.debt_of(nb[1]) == 0
+    # nobody can raise anything: the attempt fails and nothing opens
+    m2 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., SUM..., maximum_rounds = 3))
+    for b in B.enterprises(m2, :bakery); B.close_enterprise!(m2, b, :test); end
+    for a in B.alive_agents(m2); give!(a, -B.cash(a)); end
+    B.refound_missing_producers!(m2)
+    @test isempty(B.enterprises(m2, :bakery)) && m2.new_firms == 0
+    # switched off
+    m3 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., refound_minimum = 0, maximum_rounds = 3))
+    for b in B.enterprises(m3, :bakery); B.close_enterprise!(m3, b, :test); end
+    B.refound_missing_producers!(m3)
+    @test isempty(B.enterprises(m3, :bakery))
+    @test abs(money_identity_gap(run(; seed = 2, maximum_rounds = 30, BEH..., settlement = :invoicing))) < 1e-6
 end
 
 @testset "cooperative forms (14 September 2026)" begin

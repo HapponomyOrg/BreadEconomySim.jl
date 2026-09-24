@@ -5,8 +5,58 @@ land_to_let(a::Agent) = (a isa Person || is_bank(a)) ? a.land - a.land_let : 0
 """A landowner's reservation price for a unit: the value of the rent stream at the cost of holding cash instead."""
 function land_reservation(model, o::Person)
     p = parameters(model); rent = expected_price(model, :rent)
+    p.land_pricing == :market && return land_worth(model, seller_alternative(model))   # 24 Sept: the seller's best alternative for the money
     p.monetary_system == :sumsy && p.demurrage_rate > 0 && return rent / p.demurrage_rate
     return rent * p.land_reservation_multiple
+end
+
+"""
+The monthly return on idle money (24 September): under debt money what a deposit earns (interest and loyalty bonus, per month);
+under SuMSy what money above the buffer loses (minus the parking fee and the parking tax).
+"""
+function money_return_rate(model)
+    p = parameters(model)
+    p.monetary_system == :sumsy && return -(p.demurrage_rate + p.demurrage_tax_rate * model.parking_tax_scale)
+    return (p.deposit_interest_rate + p.loyalty_bonus_rate) / max(p.deposit_interest_period, 1)
+end
+
+"""The monthly levy on land value: the cost of holding money plus the margin, when `land_levy` is on."""
+land_levy_rate(model) = parameters(model).land_levy ? (max(-money_return_rate(model), 0.0) + parameters(model).land_levy_margin) * model.land_levy_scale : 0.0   # scaled by the fiscal policy like any tax
+
+"""
+Land's worth to someone whose alternative for the money earns `alternative` a month: holding land yields the rent less the levy,
+holding the alternative yields `alternative` × price, so they are indifferent at rent ÷ (levy + alternative). When that is not
+positive, land beats the alternative at any price (Inf): under SuMSy without a levy, nobody sells land to hold money.
+"""
+function land_worth(model, alternative::Float64)
+    denominator = land_levy_rate(model) + alternative
+    return denominator > 1e-6 ? expected_price(model, :rent) / denominator : Inf
+end
+
+"""The credit alternatives around a land sale: the seller's best use of the money and the buyer's best other source of credit."""
+function seller_alternative(model)
+    p = parameters(model)
+    p.monetary_system == :sumsy && return max(money_return_rate(model), p.peer_loan_rate - p.bank_spread)   # lend it through the bank, or hold it
+    return money_return_rate(model)                                                                        # the deposit rate
+end
+function buyer_alternative(model, b::Agent)
+    p = parameters(model)
+    p.monetary_system == :sumsy && return p.peer_loan_rate
+    bank = bank_of(model, b); bank === nothing && (bank = first(enterprises(model, :bank)))
+    return borrowing_rate(model, bank, b)
+end
+
+"""Seller credit on land: a market rate between the two alternatives (`instalment_bargaining` of the gap to the seller)."""
+function instalment_rate(model, b::Agent)
+    lo = seller_alternative(model); hi = buyer_alternative(model, b)
+    return lo + parameters(model).instalment_bargaining * (hi - lo)
+end
+
+"""A buyer's reservation for a unit, by how it pays: its own money (worth the money's return), a loan or instalments (the rate)."""
+function land_buyer_reservation(model, b::Agent, via::Symbol)
+    via == :cash && return land_worth(model, money_return_rate(model))
+    via == :instalment && return land_worth(model, instalment_rate(model, b))
+    return land_worth(model, buyer_alternative(model, b))
 end
 
 """
@@ -36,14 +86,26 @@ function land_market!(model)
     end
     # purchases: enterprises first, then persons
     buyers = vcat(farms, stable_shuffle(rng, persons(model)))
+    land_unmet = 0.0; land_sold = 0.0; best_unmet_bid = 0.0
+    offering = parameters(model).land_pricing == :market ? [s for s in sellers() if !(s isa Person) || price >= land_reservation(model, s)] : Agent[]
+    land_supply = sum(Float64(land_to_let(s)) for s in offering; init = 0.0)
+    lowest_ask = isempty(offering) ? 0.0 : minimum(s isa Person ? land_reservation(model, s) : 0.0 for s in offering)   # the least an offering seller accepts
     for b in buyers
         while true
             # a farm wants land it will work; a person wants land only below the value of its rent stream to them
-            wants = b isa Enterprise ? b.production_target > b.land : b.greed == :greedy ? price < land_reservation(model, b) - 1e-9 :
+            wants = b isa Enterprise ? b.production_target > b.land : parameters(model).land_pricing == :market ? true :
+                    b.greed == :greedy ? price < land_reservation(model, b) - 1e-9 :
                     (parameters(model).land_sales == :reservation ? price < land_reservation(model, b) - 1e-9 : true)
             surplus = available_cash(b) - buffer_target(model, b)
             pm0 = parameters(model)
-            instalment = pm0.instalment_purchases && pm0.monetary_system == :sumsy && surplus < price
+            # 24 Sept: seller credit (instalments) in both villages — ordinary seller credit exists in debt economies too
+            instalment = pm0.instalment_purchases && (pm0.monetary_system == :sumsy || pm0.land_pricing == :market) && surplus < price
+            bres = Inf
+            if pm0.land_pricing == :market && wants
+                via = surplus >= price ? :cash : instalment ? :instalment : :loan
+                bres = land_buyer_reservation(model, b, via)
+                wants = price <= bres + 1e-9                                      # nobody pays more than the land is worth to them, by how they pay
+            end
             if instalment
                 (wants && !has_arrears(model, b) && affordable(model, b, price, 0.0)) || break
             elseif pm0.land_loans
@@ -58,13 +120,18 @@ function land_market!(model)
             elseif pm.land_sales == :reservation
                 candidates = [s for s in candidates if !(s isa Person) || price >= land_reservation(model, s)]
             end
-            isempty(candidates) && break
+            if isempty(candidates)
+                land_unmet += b isa Enterprise ? max(b.production_target - b.land, 0) : 1      # wanted, could pay, found no seller at this price
+                best_unmet_bid = max(best_unmet_bid, bres)                                     # the most an unserved buyer would pay
+                break
+            end
             s = candidates[1]
             sellers_dirty[] = true
             if instalment
                 bank = bank_of(model, b)
+                irate = pm0.land_pricing == :market ? instalment_rate(model, b) : 0.0      # 24 Sept: a market rate, negative under SuMSy
                 push!(model.peer_loans, PeerLoan(length(model.peer_loans) + 1, s.id, b.id, bank === nothing ? s.id : bank.id, price, price, price / pm0.instalment_rounds,
-                                                 0.0, 0.0, pm0.default_insurance && s isa Person, current_round(model), 0, false, false, 0.0))
+                                                 irate, irate, pm0.default_insurance && s isa Person, current_round(model), 0, false, false, 0.0))
                 log_event!(model, :instalment_purchase; buyer = b.id, buyer_kind = kind_of(b), seller = s.id, price = price, rounds = pm0.instalment_rounds)
             else
                 pay!(model, b, s, price, :land_purchase)
@@ -73,8 +140,23 @@ function land_market!(model)
             b.land += 1
             b isa Enterprise && (b.market[:rent].wanted = max(b.production_target - b.land, 0))
             log_event!(model, :land_purchase; buyer = b.id, buyer_kind = kind_of(b), seller = s.id, price = price)
+            land_sold += 1
+            model.land_last_trade_price = price
             b isa Person && break     # persons buy at most one unit per round
         end
+    end
+    # price discovery (24 Sept): up when enough demand went unserved, down when enough land on offer went unsold
+    pmk = parameters(model)
+    if pmk.land_pricing == :market
+        demand = land_sold + land_unmet
+        # 24 Sept: within what the market supports — never above the most an unserved buyer would pay, never below the least an
+        # unsold seller would accept (an order book, not an escalator)
+        if demand > 0 && land_unmet >= pmk.unmet_demand_share * demand - 1e-9 && land_unmet > 0 && best_unmet_bid > price
+            model.land_price_current = min(price * (1 + pmk.land_price_step), best_unmet_bid)
+        elseif land_supply > 0 && land_supply - land_sold >= pmk.unsold_share * land_supply - 1e-9 && land_supply - land_sold > 0 && price > lowest_ask
+            model.land_price_current = max(price * (1 - pmk.land_price_step), lowest_ask)
+        end
+        model.land_supply_this_round = land_supply; model.land_demand_this_round = demand; model.land_sold_this_round = land_sold
     end
     # distress sales (seller-initiated, immediate settlement)
     if parameters(model).distress_land_sales
@@ -84,7 +166,7 @@ function land_market!(model)
                       (b isa Person ? cash(b) - buffer_target(model, b) : (is_farm(b) ? available_cash(b) : 0.0)) >= dprice]
             isempty(buyers) && continue
             b = first(sort(buyers; by = x -> -(x isa Person ? cash(x) : available_cash(x))))
-            transfer!(model, b, o, dprice, :distress_land_sale)
+            transfer!(model, b, o, dprice, :distress_land_sale)   # a fire sale: not a valuation price (24 Sept)
             o.land -= 1; o.market[:rent].offered -= 1; b.land += 1
             b isa Enterprise && (b.market[:rent].wanted = max(b.production_target - b.land, 0))
             log_event!(model, :land_purchase; buyer = b.id, buyer_kind = kind_of(b), seller = o.id, price = dprice, distress = true)

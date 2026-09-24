@@ -167,7 +167,7 @@ Base.@kwdef struct SimulationParameters
     # Five tax families (22 September 2026, design §3), each with its own scale and lever: income (wage, capital and dividend tax;
     # the progressive brackets), consumption (VAT), wealth, profit, parking (the SuMSy parking tax — the parking *fee* is money,
     # not tax, and is never scaled). Any family left out of the tuple has lever 0, so (income = -3.0,) is a valid setting.
-    tax_levers::NamedTuple = (income = 0.0, consumption = 0.0, wealth = 0.0, profit = 0.0, parking = 0.0)
+    tax_levers::NamedTuple = (income = 0.0, consumption = 0.0, wealth = 0.0, profit = 0.0, parking = 0.0, land = 0.0)   # land: the land levy (24 Sept)
     # Collection periods (design §3): 1 = every month, as before; 12 = accrued through the year and charged in the twelfth month.
     # Monthly withholding with a yearly balance (the Belgian mode) is a future option.
     income_tax_period::Int = 1
@@ -367,6 +367,32 @@ Base.@kwdef struct SimulationParameters
     # (at 512 villagers: 4 owners of all twelve firms); :distinct = every firm has its own founders, taken in order of id,
     # wrapping round when there are more founder places than villagers (at 512 with twelve firms: 48 owners, 9 %).
     founders::Symbol = :shared
+    # The land market (24 September). :multiple = the old rule, price = `land_price_rent_multiple` × rent. :market = the price is
+    # discovered: it starts at `land_price_rent_multiple` × rent and moves by `land_price_step` when at least `unmet_demand_share`
+    # of the demand went unserved (up) or at least `unsold_share` of the land offered went unsold (down). Sellers and buyers value
+    # land by the money logic: a unit is worth its rent divided by the monthly rate at which money is held (debt: deposit interest
+    # and loyalty bonus; SuMSy: the parking fee and parking tax) or borrowed (debt: the bank's rate).
+    land_pricing::Symbol = :multiple
+    land_price_step::Float64 = 0.06
+    # A levy on land (24 September; Gesell's Freiland as a variant): each month landholders pay `land_levy_rate` × the value of their
+    # land to the government. With `land_levy = true` the rate is the cost of holding money (parking fee + parking tax, 0 under
+    # debt money) plus `land_levy_margin` — land is then worth its rent over that margin, as a debt village values it over its
+    # deposit rate. Without a levy, under SuMSy, land always beats money that loses value, and nobody sells it voluntarily.
+    land_levy::Bool = false
+    land_levy_margin::Float64 = 0.0025
+    # Seller credit on land (24 September): the monthly rate is a market decision between the seller's best alternative for the
+    # money and the buyer's best alternative source of credit; the seller gets this share of the gap (0.5 = split the difference).
+    # Under SuMSy both alternatives are negative, so the rate is too.
+    instalment_bargaining::Float64 = 0.5
+    # A levy on land holdings (24 September, the Freiland variant): each month every landholder pays `land_levy_rate` × the value of
+    # its land at the current price, to the government (a land-value tax). Land is worth rent ÷ (levy − what money earns); under SuMSy
+    # money earns minus the parking fee, so without a levy land beats money at any price, and with a levy equal to the parking fee
+    # it still does — the levy must exceed the parking fee for land to have a finite price.
+    land_levy_rate::Float64 = 0.0
+    # The run stops when no farm or no bakery is left (the old rule); false = the village runs on, and starves or recovers (review 5).
+    stop_without_producers::Bool = true
+    # When fewer than this many farms (or bakeries) are open, villagers try to start one (24 September; 0 = never).
+    refound_minimum::Int = 1
     # Founding loans on business terms (24 September): a founder borrows for their share of the founding equity only what passes
     # the affordability test over `founding_loan_term` months; a founder who cannot carry the full share puts in what they can
     # and the firm starts with less equity (it borrows the rest itself when it needs it).

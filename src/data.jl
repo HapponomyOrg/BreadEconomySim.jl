@@ -23,7 +23,7 @@ function decile_ends(values)
     return (sum(x[1:k]) / k, sum(x[end-k+1:end]) / k)
 end
 
-net_wealth(model, a::Agent) = cash(a) + a.land * land_price(model) - debt_of(a) - peer_debt_of(model, a) + peer_claims(model, a) + bond_holdings(model, a) +
+net_wealth(model, a::Agent) = cash(a) + a.land * land_valuation_price(model) - debt_of(a) - peer_debt_of(model, a) + peer_claims(model, a) + bond_holdings(model, a) +
                               (a isa Person ? share_wealth(model, a) : (a isa Enterprise && a.ownership != :none) ? -book_value(model, a) : 0.0) +
                               (a isa Person ? a.buffer_lent : 0.0) - (is_bank(a) ? a.buffer_received : 0.0) +
 
@@ -93,6 +93,11 @@ function record!(model)
         wealth_tax = model.wealth_tax_this_round, wealth_tax_base = model.wealth_tax_base, wealth_tax_scale = model.wealth_tax_scale,
         clearing_residue = model.clearing_residue, negative_wealth_persons = count(w -> net_wealth(model, w) < 0, ps),
         zero_cash_persons = count(w -> cash(w) <= 1e-6, ps),
+        # 24 Sept (review 5): land held by households, and a wealth Gini with the equity of firms nobody owns spread over the villagers
+        land_households_share = (let tot = sum(a.land for a in agents_by_id(model) if a.alive; init = 0); tot > 0 ? sum(w.land for w in ps; init = 0) / tot : NaN end),
+        gini_wealth_attributed = (let pool = sum(book_value(model, e) for e in model.enterprise_list if e.alive && is_producer(e) && isempty(e.shares) && isempty(e.members); init = 0.0)
+            isempty(ps) ? NaN : gini([net_wealth(model, w) + pool / length(ps) for w in ps]) end),
+        land_supply = model.land_supply_this_round, land_demand = model.land_demand_this_round, land_sold = model.land_sold_this_round, land_levy = model.land_levy_this_round, land_levy_scale = model.land_levy_scale, new_firms = model.new_firms,
         # the rich–poor gap: richest tenth minus poorest tenth of the living, in meals (two loaves at this month's price),
         # so that it works with zero and negative holdings and compares across villages with different price levels; the
         # poorest tenth's own holding is reported too, since the gap can also narrow because the top falls
@@ -213,7 +218,7 @@ function record!(model)
         n_bakeries = group_wealth(model, :bakery)[1], wealth_bakeries = group_wealth(model, :bakery)[2],
         n_banks = group_wealth(model, :bank)[1], wealth_banks = group_wealth(model, :bank)[2],
         wealth_government = group_wealth(model, :government)[2],
-        land_price = land_price(model),
+        land_price = land_price(model), land_price_traded = land_valuation_price(model),
         deaths = count(a -> a isa Person && !a.alive && a.death_round == r, agents_by_id(model)),
         closures = model.closures,
         production_target_farms = sum(a.production_target for a in enterprises(model, :farm); init = 0),
@@ -231,7 +236,7 @@ function check_termination!(model)
     if row.persons_alive == 0
         model.finished = true; model.termination_reason = "everyone is dead"; return true
     end
-    if row.farms_open == 0 || row.bakeries_open == 0
+    if p.stop_without_producers && (row.farms_open == 0 || row.bakeries_open == 0)
         model.finished = true; model.termination_reason = "no farm or no bakery left"; return true
     end
     if row.round >= p.maximum_rounds

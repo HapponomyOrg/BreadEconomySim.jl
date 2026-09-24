@@ -102,7 +102,7 @@ function manage_government_reserve!(model)
         end
         model.tax_policy_step = 0.0
         model.consumption_tax_scale = model.tax_scale; model.wealth_tax_scale = model.tax_scale   # :none — one scale for all five
-        model.profit_tax_scale = model.tax_scale; model.parking_tax_scale = model.tax_scale
+        model.profit_tax_scale = model.tax_scale; model.parking_tax_scale = model.tax_scale; model.land_levy_scale = model.tax_scale
         return nothing
     end
     # the desired relative change in revenue, then the step limit
@@ -119,8 +119,8 @@ function manage_government_reserve!(model)
         end
         model.tax_scale = clamp(model.tax_scale * (1 + mv), 0.0, p.tax_scale_maximum)   # capital and demurrage tax follow it under :brackets
     end
-    scale_field = OrderedDict(:consumption => :consumption_tax_scale, :wealth => :wealth_tax_scale, :profit => :profit_tax_scale, :parking => :parking_tax_scale)
-    for family in (:income, :consumption, :wealth, :profit, :parking)
+    scale_field = OrderedDict(:consumption => :consumption_tax_scale, :wealth => :wealth_tax_scale, :profit => :profit_tax_scale, :parking => :parking_tax_scale, :land => :land_levy_scale)
+    for family in (:income, :consumption, :wealth, :profit, :parking, :land)
         shift = abs(r) * Float64(get(p.tax_levers, family, 0.0))   # a standing preference, not a direction (21 September)
         if family == :income
             abs(shift) > 1e-12 && apply_income!(model, p, shift); apply_income!(model, p, r)
@@ -140,7 +140,7 @@ value per unit, cooperative membership at the capital paid in. Cash, loans and b
 """
 function taxable_wealth(model, w::Person)
     p = parameters(model)
-    value = w.land * land_price(model)
+    value = w.land * land_valuation_price(model)
     for e in alive_agents(model)
         e isa Enterprise || continue
         if e.ownership == :shareholders
@@ -208,6 +208,27 @@ function pay_unemployment_fees!(model)
                 w.fee = 0.0
             end
         end
+    end
+    return nothing
+end
+
+"""
+    collect_land_levy!(model)
+
+`land_levy`: every landholder pays `land_levy_rate` × the value of its land to the government each month — persons down to the
+protected minimum, firms and banks from their cash; what cannot be paid is carried as arrears and collected first next time.
+"""
+function collect_land_levy!(model)
+    rate = land_levy_rate(model)
+    rate > 0 || return nothing
+    gov = government(model); price = land_valuation_price(model)
+    for a in agents_by_id(model)
+        (a.alive && !is_government(a) && a.land > 0) || continue
+        due = round(a.land_levy_arrears + rate * a.land * price, digits = 4)
+        can = a isa Person ? max(cash(a) - collection_floor(model), 0.0) : cash(a)
+        paid = round(min(due, can), digits = 4)
+        paid > 1e-6 && (transfer!(model, a, gov, paid, :land_levy); gov.tax_collected += paid; model.tax_this_round += paid; model.land_levy_this_round += paid)
+        a.land_levy_arrears = round(due - paid, digits = 4)
     end
     return nothing
 end

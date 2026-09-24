@@ -113,7 +113,12 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
     props[:invoices_issued_this_round] = 0.0
     props[:invoices_paid_this_round] = 0.0
     props[:liquidations] = 0; props[:refoundings] = 0; props[:cumulative_bad_debt] = 0.0; props[:cumulative_bailouts] = 0.0
-    props[:profit_tax_scale] = 1.0; props[:parking_tax_scale] = 1.0
+    props[:profit_tax_scale] = 1.0; props[:parking_tax_scale] = 1.0; props[:land_levy_scale] = 1.0   # 24 Sept: the land levy is a sixth tax family
+    props[:land_price_current] = parameters.land_price_rent_multiple * parameters.initial_prices[:rent] * parameters.initial_price_multiplier   # :market land pricing: the base price
+    props[:land_supply_this_round] = 0.0; props[:land_demand_this_round] = 0.0; props[:land_sold_this_round] = 0.0
+    props[:land_levy_this_round] = 0.0
+    props[:new_firms] = 0                                            # firms started after the founding (refound_missing_producers!)
+    props[:land_last_trade_price] = props[:land_price_current]        # the price someone last actually paid (the valuation price)
     props[:profit_tax_this_round] = 0.0; props[:income_tax_charged_this_round] = 0.0
     props[:after_clearing] = false                                    # true once clear! has run this round: later promises go to next round's clearing                                  # cumulative: net positions that could not be booked at clearing
     props[:wealth_tax_base] = 0.0
@@ -357,7 +362,12 @@ current_round(model) = get_step(model)
 parameters(model) = model.parameters
 expected_price(model, good::Symbol) = model.expected_prices[good]
 meal_price(model) = parameters(model).breads_per_meal * expected_price(model, :bread)
-land_price(model) = parameters(model).land_price_rent_multiple * expected_price(model, :rent)
+land_price(model) = parameters(model).land_pricing == :market ? model.land_price_current : parameters(model).land_price_rent_multiple * expected_price(model, :rent)
+
+"""The price land is valued at in wealth, book values, the wealth tax and the levy (24 September): under :market pricing the price
+last paid in a voluntary sale — distress sales at a discount are fire sales and do not count; the starting price until land first
+trades voluntarily. The quoted price stays in the data as `land_price`."""
+land_valuation_price(model) = parameters(model).land_pricing == :market ? model.land_last_trade_price : land_price(model)
 savings_buffer(model) = parameters(model).savings_target_in_meals * meal_price(model)
 
 function log_event!(model, kind::Symbol; kwargs...)
@@ -415,7 +425,7 @@ function begin_round!(model)
     model.government_outlay_this_round = 0.0; model.surplus_redistributed_this_round = 0.0
     model.consumption_tax_this_round = 0.0; model.wealth_tax_this_round = 0.0
     model.invoices_issued_this_round = 0.0; model.invoices_paid_this_round = 0.0
-    model.profit_tax_this_round = 0.0; model.income_tax_charged_this_round = 0.0; model.after_clearing = false
+    model.profit_tax_this_round = 0.0; model.income_tax_charged_this_round = 0.0; model.after_clearing = false; model.land_levy_this_round = 0.0
     for e in model.enterprise_list; empty!(e.patronage_this_round); end
     model.gi_this_round = 0.0; model.demurrage_this_round = 0.0; model.demurrage_tax_this_round = 0.0
     model.account_fees_this_round = 0.0; model.peer_lent_this_round = 0.0

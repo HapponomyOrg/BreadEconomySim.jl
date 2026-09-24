@@ -10,12 +10,13 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol)
               random_hiring_ties = true, no_labour_tolerance = true, offer_full_capacity = true, credit_for_bread = true, spoilage_aware_stocking = true,
               distress_land_sales = true, maximum_capacity = 4.0,
               wage_reservation_net_of_tax = true, initial_endowment = :norm, startup_loan_term = 60, land_sales = :reservation,
-              gluttony_probability = 0.1, plan_for_gluttony = true, maximum_rounds = rounds, stop_when_half_dead = false, stop_when_stationary = false)
+              gluttony_probability = 0.1, plan_for_gluttony = true, maximum_rounds = rounds, stop_when_half_dead = false, stop_when_stationary = false,
+              land_pricing = :market, instalment_purchases = true, stop_without_producers = false)   # 24 Sept: land prices discovered by the money logic, seller credit on both sides, villages run on
     # Bare bones: no government activity, no benefit, no interest on deposits, no theatre, no margin.
     BARE_DEBT = (; RULES..., wage_tax_rate = 0.0, capital_tax_rate = 0.0, unemployment_fee_in_breads = 0.0, minimum_fee_in_breads = 0.0,
                   partial_unemployment_fee = false, government_employment_share = 0.0, account_fee_person = 0.0, account_fee_enterprise = 0.0)
     BARE_SUMSY = (; BARE_DEBT..., monetary_system = :sumsy, dividend_tax_rate = 0.0, guaranteed_income = 5.0, demurrage_free_buffer = 30.0, demurrage_rate = 0.02,
-                   account_fee_person = 0.5, account_fee_enterprise = 1.5, instalment_purchases = true, land_price_rent_multiple = 50.0)
+                   account_fee_person = 0.5, account_fee_enterprise = 1.5)   # 24 Sept: the SuMSy-only land settings (price multiple 50, instalments) are gone — both villages share one land market
     GOV_DEBT = (; wage_tax_rate = 0.15, capital_tax_rate = 0.15, unemployment_fee_in_breads = 2.0, minimum_fee_in_breads = 2.0, government_employment_share = 0.10)
     GOV_DEBT = (; GOV_DEBT..., profit_tax_rate = 0.10)                                  # 22 September: the debt government also taxes profits (10 % a year; materials fully, wages half deductible)
     GOV_SUMSY = (; demurrage_tax_rate = 0.01, government_employment_share = 0.10)       # public jobs funded by a 1 % demurrage tax; the GI is the benefit
@@ -36,6 +37,7 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol)
     # rung, and is gone from the ladder). Rung 10 adds what is genuinely an addition: the cost floor and a buyer who pays up to double for
     # scarce bread. The price rules are behaviour, not policy; every rung and stress test from 10 on runs under the full set.
     EQ       = (; start_at_saturation = :equilibrium, initial_price_multiplier = 1.35)   # every villager at cushion + GI/(fee + tax); prices to match
+    DIVIDEND = (; surplus_tax_reduction_share = 0.0, surplus_redistribution_share = 1.0)   # the surplus paid out per head instead of cutting taxes
     PRICES   = (; ask_floor = :cost, bread_bid_base_multiplier = 2.0)
     RESERVE  = (; government_reserve_in_rounds = 3, surplus_tax_reduction_share = 1.0)                                # rung 11: a public reserve, the surplus returned as a tax cut
     FISCAL   = (; tax_policy = :scale, tax_response_coverage = 0.5, tax_response_step = 0.02, tax_scale_maximum = 2.0,
@@ -74,6 +76,26 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol)
         ("E8 + shareholders & share market, full money stock", (;), (; V8_SUMSY..., EQ...)),
         ("E11 + government reserve, full money stock", (;), (; V8_SUMSY..., PRICES..., RESERVE..., EQ...)),
         ("EB best SuMSy village, full money stock", (;), (; V8_SUMSY..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE..., EQ...)),
+        # Land levy variants (24 September, Gesell's Freiland): the key SuMSy steps with a levy on land equal to the cost of holding money
+        # plus a margin, so that land is no better a store of value than money. Without it, under SuMSy land beats money at any price.
+        ("L2 + government, land levy", (;), (; planning_margin = 0.1, GOV_SUMSY..., RESERVE..., land_levy = true)),   # the reserve rule scales the levy down when revenue exceeds need (24 Sept)
+        ("L8 + shareholders & share market, land levy", (;), (; V8_SUMSY..., RESERVE..., land_levy = true)),
+        ("L11 + government reserve, land levy", (;), (; V8_SUMSY..., PRICES..., RESERVE..., land_levy = true)),
+        ("LB best SuMSy village, land levy", (;), (; V8_SUMSY..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE..., land_levy = true)),
+        # Land dividend (24 September): the levy stays at the rate that neutralises land as a store of value, and what the government does
+        # not need is paid out equally to every villager instead of cutting the levy (Gesell's use of land rent). SuMSy side only.
+        ("LD8 + shareholders & share market, land levy, land dividend", (;), (; V8_SUMSY..., RESERVE..., DIVIDEND..., land_levy = true)),
+        ("LD11 + government reserve, land levy, land dividend", (;), (; V8_SUMSY..., PRICES..., RESERVE..., DIVIDEND..., land_levy = true)),
+        # Public employment (24 September): how large can the government's workforce be? Steps 8 and 11, both villages, the share of the
+        # village's labour the government hires (as employer of last resort, from labour the market leaves idle) swept from 20 to 50 %.
+        ("G8-20 step 8, public employment 20 %", (; V8_DEBT..., government_employment_share = 0.2), (; V8_SUMSY..., government_employment_share = 0.2)),
+        ("G8-30 step 8, public employment 30 %", (; V8_DEBT..., government_employment_share = 0.3), (; V8_SUMSY..., government_employment_share = 0.3)),
+        ("G8-40 step 8, public employment 40 %", (; V8_DEBT..., government_employment_share = 0.4), (; V8_SUMSY..., government_employment_share = 0.4)),
+        ("G8-50 step 8, public employment 50 %", (; V8_DEBT..., government_employment_share = 0.5), (; V8_SUMSY..., government_employment_share = 0.5)),
+        ("G11-20 step 11, public employment 20 %", (; V8_DEBT..., PRICES..., RESERVE..., government_employment_share = 0.2), (; V8_SUMSY..., PRICES..., RESERVE..., government_employment_share = 0.2)),
+        ("G11-30 step 11, public employment 30 %", (; V8_DEBT..., PRICES..., RESERVE..., government_employment_share = 0.3), (; V8_SUMSY..., PRICES..., RESERVE..., government_employment_share = 0.3)),
+        ("G11-40 step 11, public employment 40 %", (; V8_DEBT..., PRICES..., RESERVE..., government_employment_share = 0.4), (; V8_SUMSY..., PRICES..., RESERVE..., government_employment_share = 0.4)),
+        ("G11-50 step 11, public employment 50 %", (; V8_DEBT..., PRICES..., RESERVE..., government_employment_share = 0.5), (; V8_SUMSY..., PRICES..., RESERVE..., government_employment_share = 0.5)),
         # The 2×2 (review 2, §4.4): the monetary system crossed with the fiscal package, on the rung-11 village. X1 = SuMSy money
         # with the debt village's taxes and benefit; X2 = debt money with the SuMSy village's surcharge and no benefit. Together
         # with rungs 11 debt and 11 SuMSy they separate what the money does from what the fiscal package does. Only the named
