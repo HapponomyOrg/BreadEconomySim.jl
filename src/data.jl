@@ -97,7 +97,10 @@ function record!(model)
         land_households_share = (let tot = sum(a.land for a in agents_by_id(model) if a.alive; init = 0); tot > 0 ? sum(w.land for w in ps; init = 0) / tot : NaN end),
         gini_wealth_attributed = (let pool = sum(book_value(model, e) for e in model.enterprise_list if e.alive && is_producer(e) && isempty(e.shares) && isempty(e.members); init = 0.0)
             isempty(ps) ? NaN : gini([net_wealth(model, w) + pool / length(ps) for w in ps]) end),
-        land_supply = model.land_supply_this_round, land_demand = model.land_demand_this_round, land_sold = model.land_sold_this_round, land_levy = model.land_levy_this_round, land_levy_scale = model.land_levy_scale, new_firms = model.new_firms,
+        land_supply = model.land_supply_this_round, land_demand = model.land_demand_this_round, land_sold = model.land_sold_this_round, land_levy = model.land_levy_this_round, land_levy_scale = model.land_levy_scale, new_firms = model.new_firms, entries = model.entries,
+        coops_open = count(e -> e.alive && is_producer(e) && e.ownership == :cooperative, model.enterprise_list),
+        hhi_bread = (let s = [e.market[:bread].sold for e in enterprises(model, :bakery) if haskey(e.market, :bread)], t = sum(s; init = 0.0); t > 0 ? sum((x / t)^2 for x in s) : NaN end),
+        owners = length(union(Set{Int}(), (Set(keys(e.shares)) for e in model.enterprise_list if e.alive && is_producer(e))..., (Set(keys(e.members)) for e in model.enterprise_list if e.alive && is_producer(e))...)),
         # the rich–poor gap: richest tenth minus poorest tenth of the living, in meals (two loaves at this month's price),
         # so that it works with zero and negative holdings and compares across villages with different price levels; the
         # poorest tenth's own holding is reported too, since the gap can also narrow because the top falls

@@ -55,6 +55,7 @@ append!(ROUND_BEHAVIORS, Function[
     settle_invoices!,
     liquidate_insolvent_firms!,
     refound_missing_producers!,
+    market_entry!,
     clear!,
     service_debt!,
     service_peer_loans!,

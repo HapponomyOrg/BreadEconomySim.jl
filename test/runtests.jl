@@ -1197,6 +1197,110 @@ end
     @test abs(money_identity_gap(run(; seed = 2, maximum_rounds = 30, BEH..., settlement = :invoicing))) < 1e-6
 end
 
+
+@testset "a village whose banks have all closed (24 September 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., land_pricing = :market, instalment_purchases = true, founders = :distinct, maximum_rounds = 3))
+    for b in B.enterprises(m, :bank); B.close_enterprise!(m, b, :test); end
+    w = first(B.persons(m))
+    @test B.some_bank(m, w) === nothing && B.buyer_alternative(m, w) == Inf
+    B.land_market!(m)                                                                        # no bank: no credit, no error
+    for b in B.enterprises(m, :bakery); B.close_enterprise!(m, b, :test); end
+    B.refound_missing_producers!(m)                                                          # founders pay from savings only
+    @test true
+end
+
+
+@testset "market entry (25 September 2026)" begin
+    give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
+    function village(; kw...)
+        m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., ownership = :shareholders, founders = :distinct, market_entry = true, kw..., maximum_rounds = 1))
+        give!(B.persons(m)[end], 3_000.0)                                                   # someone with spare cash to found it
+        return m
+    end
+    short!(m) = for e in B.enterprises(m, :bakery); e.market[:bread] = B.MarketRecord(sold = 20.0, unmet_units = 5.0); end   # 20 % unserved
+    m = village(); nb = length(B.enterprises(m, :bakery))
+    short!(m); B.market_entry!(m); short!(m); B.market_entry!(m)
+    @test length(B.enterprises(m, :bakery)) == nb                                             # two months are not enough
+    short!(m); B.market_entry!(m)
+    new = B.enterprises(m, :bakery)
+    @test length(new) == nb + 1 && m.entries == 1
+    e = last(sort(new; by = x -> x.id))
+    @test e.ownership == :shareholders && haskey(e.shares, B.persons(m)[end].id) && B.cash(e) > 0
+    for _ in 1:3; short!(m); B.market_entry!(m); end
+    @test length(B.enterprises(m, :bakery)) == nb + 1                                         # the cooldown: not again within three months
+    # cooperative entrants
+    mc = village(entry_coop_share = 1.0)
+    for _ in 1:3; short!(mc); B.market_entry!(mc); end
+    ec = last(sort(B.enterprises(mc, :bakery); by = x -> x.id))
+    @test ec.ownership == :cooperative && !isempty(ec.members) && isempty(ec.shares)
+    # the ceiling
+    mx = village(entry_max_ratio = 1.0)
+    for _ in 1:3; short!(mx); B.market_entry!(mx); end
+    @test length(B.enterprises(mx, :bakery)) == nb
+    # whole runs with entry on: the money identity holds in both villages
+    for kw in ((; BEH..., ownership = :shareholders, market_entry = true, entry_coop_share = 0.5), (; BEH..., SUM..., government_employment_share = 0.1, demurrage_tax_rate = 0.01, market_entry = true))
+        @test abs(money_identity_gap(run(; seed = 2, maximum_rounds = 40, kw...))) < 1e-6
+    end
+end
+
+
+@testset "review 6: the tax scale recovers from a surplus, theatres restart with a waiting period (25 September 2026)" begin
+    give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
+    R = (; BEH..., SUM..., demurrage_tax_rate = 0.01, government_reserve_in_rounds = 3, surplus_tax_reduction_share = 1.0)
+    m = create_bread_economy(SimulationParameters(; seed = 1, R..., maximum_rounds = 1))
+    give!(B.government(m), 50_000.0)
+    m.tax_this_round = 100.0; m.government_outlay_this_round = 1.0
+    for _ in 1:20; B.manage_government_reserve!(m); end                                   # a long surplus
+    @test m.tax_scale >= B.parameters(m).tax_scale_minimum - 1e-12                         # never trapped at zero
+    give!(B.government(m), -B.cash(B.government(m)))                                       # then a deficit
+    s0 = m.tax_scale
+    m.tax_this_round = 100.0 * m.tax_scale; m.government_outlay_this_round = 500.0
+    B.manage_government_reserve!(m)
+    @test m.tax_scale > s0                                                                  # and it climbs back
+    # theatres restart, but at most once per waiting period
+    mt = create_bread_economy(SimulationParameters(; seed = 1, BEH..., entertainment = true, number_of_theatres = 2, founders = :distinct, maximum_rounds = 3))
+    give!(B.persons(mt)[end], 3_000.0)
+    for t in B.enterprises(mt, :theatre); B.close_enterprise!(mt, t, :test); end
+    B.refound_missing_producers!(mt)
+    @test length(B.enterprises(mt, :theatre)) == 1
+    for t in B.enterprises(mt, :theatre); B.close_enterprise!(mt, t, :test); end
+    B.refound_missing_producers!(mt)
+    @test isempty(B.enterprises(mt, :theatre))                                              # same month: the waiting period holds
+end
+
+
+@testset "land: forced and life-event sales at the best bid (25 September 2026)" begin
+    give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
+    LM = (; BEH..., land_pricing = :market, land_sales = :reservation, distress_land_sales = true, deposit_interest_rate = 0.01, loyalty_bonus_rate = 0.02, deposit_interest_period = 12)
+    m = create_bread_economy(SimulationParameters(; seed = 1, LM..., land_life_event_rate = 0.0, maximum_rounds = 1))
+    for f in B.enterprises(m, :farm); f.production_target = f.land; end
+    o = first(w for w in B.persons(m) if w.land > 0); give!(o, -B.cash(o)); o.hunger = 1       # a landowner in distress
+    buyer = first(w for w in B.persons(m) if w.land == 0); give!(buyer, 100.0)
+    m.land_price_current = 1_000.0                                                            # a quote nobody can pay
+    l0 = o.land; v0 = B.land_valuation_price(m)
+    B.land_market!(m)
+    @test o.land == l0 - 1 && B.cash(o) > 0                                                   # sold at the best bid, not at a discount on the quote
+    @test B.land_valuation_price(m) == v0                                                     # a fire sale does not set the valuation price
+    # life-event sales happen and set the valuation price
+    d = round_data(run(; seed = 1, maximum_rounds = 36, LM..., land_life_event_rate = 0.05))
+    @test sum(d.land_sold) > 0 && any(d.land_price_traded .!= d.land_price_traded[1])
+end
+
+
+@testset "no government, no bailout (25 September 2026)" begin
+    include(joinpath(@__DIR__, "..", "scripts", "ladder_definition.jl"))
+    def = ladder_definition(16, 30, :invoicing)
+    for (name, kd, ks) in def.rungs
+        startswith(name, "0 ") || startswith(name, "1 ") || continue
+        for (base, kw) in ((def.BARE_DEBT, kd), (def.BARE_SUMSY, ks))
+            @test !SimulationParameters(; base..., kw...).bank_bailout
+        end
+    end
+    @test SimulationParameters(; def.BARE_DEBT..., only(r for r in def.rungs if startswith(r[1], "2 "))[2]...).bank_bailout   # from step 2 on
+    d = round_data(run(; seed = 1, maximum_rounds = 30, def.BARE_DEBT..., bank_bailout = false))
+    @test all(d.bank_bailouts .== 0.0)
+end
+
 @testset "cooperative forms (14 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     params(m) = B.parameters(m)

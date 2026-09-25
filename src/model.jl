@@ -41,7 +41,7 @@ const ROUND_BEHAVIORS = Function[]
 # on, a reordered check — shifts every later draw everywhere, so the same seed no longer gives the same experiment
 # in the parts that did not change. Separate streams confine such a change to its own subsystem. Each stream is
 # seeded from the run seed and its own name, so adding a stream never re-seeds the others.
-const RANDOM_STREAMS = (:negotiation, :land, :labour, :grain, :bread, :tickets, :greed, :credit, :estates, :shares, :cooperatives)
+const RANDOM_STREAMS = (:negotiation, :land, :labour, :grain, :bread, :tickets, :greed, :credit, :estates, :shares, :cooperatives, :entry)
 
 """The random generator of a subsystem; the model's single generator when `random_streams` is off."""
 stream(model, name::Symbol) = parameters(model).random_streams ? model.streams[name] : model.single_stream
@@ -118,7 +118,13 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
     props[:land_supply_this_round] = 0.0; props[:land_demand_this_round] = 0.0; props[:land_sold_this_round] = 0.0
     props[:land_levy_this_round] = 0.0
     props[:new_firms] = 0                                            # firms started after the founding (refound_missing_producers!)
-    props[:land_last_trade_price] = props[:land_price_current]        # the price someone last actually paid (the valuation price)
+    props[:entries] = 0                                              # firms founded by market entry
+    props[:entry_unmet_history] = OrderedDict{Symbol, Vector{Float64}}()
+    props[:entry_margin_history] = OrderedDict{Symbol, Vector{Float64}}()
+    props[:entry_last] = OrderedDict{Symbol, Int}()
+    props[:refound_last] = OrderedDict{Symbol, Int}()
+    props[:land_last_trade_price] = props[:land_price_current]        # the valuation price: the median voluntary sale of the last 12 months
+    props[:land_sales_log] = Tuple{Int, Float64}[]                   # (round, price) of voluntary sales
     props[:profit_tax_this_round] = 0.0; props[:income_tax_charged_this_round] = 0.0
     props[:after_clearing] = false                                    # true once clear! has run this round: later promises go to next round's clearing                                  # cumulative: net positions that could not be booked at clearing
     props[:wealth_tax_base] = 0.0
@@ -368,6 +374,17 @@ land_price(model) = parameters(model).land_pricing == :market ? model.land_price
 last paid in a voluntary sale — distress sales at a discount are fire sales and do not count; the starting price until land first
 trades voluntarily. The quoted price stays in the data as `land_price`."""
 land_valuation_price(model) = parameters(model).land_pricing == :market ? model.land_last_trade_price : land_price(model)
+
+"""Record a voluntary land sale and revalue land at the median of the voluntary sales of the last twelve months (25 September:
+comparable sales, as an appraiser values land — one sale to the richest bidder no longer revalues every plot)."""
+function record_land_sale!(model, price::Float64)
+    now = current_round(model)
+    push!(model.land_sales_log, (now, price))
+    filter!(x -> now - x[1] < 12, model.land_sales_log)
+    v = sort([x[2] for x in model.land_sales_log]); n = length(v)
+    model.land_last_trade_price = isodd(n) ? v[(n + 1) ÷ 2] : (v[n ÷ 2] + v[n ÷ 2 + 1]) / 2
+    return nothing
+end
 savings_buffer(model) = parameters(model).savings_target_in_meals * meal_price(model)
 
 function log_event!(model, kind::Symbol; kwargs...)

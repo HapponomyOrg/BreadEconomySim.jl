@@ -124,8 +124,8 @@ function request_loan!(model, borrower::Agent, amount::Float64, purpose::Symbol)
         if p.settlement == :invoicing && borrower isa Enterprise && p.receivables_advance_rate > 0 && is_producer(borrower)
             owed = sum(total_due(l) for l in debtor_loans(model, borrower); init = 0.0) + amount
             if owed <= p.receivables_advance_rate * receivables(model, borrower) + 1e-9
-                bank = bank_of(model, borrower); bank === nothing && (bank = first(enterprises(model, :bank)))
-                p.monetary_system == :sumsy || (make_loan!(model, bank, borrower, amount, purpose); return true)
+                bank = some_bank(model, borrower)
+                (bank === nothing || p.monetary_system == :sumsy) || (make_loan!(model, bank, borrower, amount, purpose); return true)
             end
         end
     end
@@ -171,6 +171,15 @@ function request_loan!(model, borrower::Agent, amount::Float64, purpose::Symbol)
     end
     make_loan!(model, lender, borrower, amount, purpose)
     return true
+end
+
+"""The agent's own bank, or else any bank still open, or `nothing` when every bank has closed (24 Sept: a village without a
+government can lose both banks)."""
+function some_bank(model, a::Agent)
+    b = bank_of(model, a)
+    (b !== nothing && b.alive) && return b
+    open_banks = enterprises(model, :bank)
+    return isempty(open_banks) ? nothing : first(open_banks)
 end
 
 """Book a bank loan: the deposit is created, the debt recorded, the money counted. No credit decision — see `request_loan!`."""
@@ -1093,12 +1102,14 @@ function pay_in_equity!(model, e::Enterprise, founders::Vector, target::Float64)
             if p.monetary_system == :sumsy
                 request_loan!(model, w, short, :founding_equity)
             else
-                bank = bank_of(model, w); bank === nothing && (bank = first(enterprises(model, :bank)))
-                rate = borrowing_rate(model, bank, w)
-                existing = sum(next_payment(l) for l in debtor_loans(model, w); init = 0.0)
-                room = p.affordability_ratio * expected_income(model, w) - living_cost(model, w) - existing
-                loan = round(min(short, max(room, 0.0) / (1 / p.founding_loan_term + rate)), digits = 4)
-                loan > 1e-6 && make_loan!(model, bank, w, loan, :founding_equity; term = p.founding_loan_term)
+                bank = some_bank(model, w)
+                if bank !== nothing                                        # no bank left: savings only
+                    rate = borrowing_rate(model, bank, w)
+                    existing = sum(next_payment(l) for l in debtor_loans(model, w); init = 0.0)
+                    room = p.affordability_ratio * expected_income(model, w) - living_cost(model, w) - existing
+                    loan = round(min(short, max(room, 0.0) / (1 / p.founding_loan_term + rate)), digits = 4)
+                    loan > 1e-6 && make_loan!(model, bank, w, loan, :founding_equity; term = p.founding_loan_term)
+                end
             end
         end
         amount = round(min(each, max(cash(w) - (current_round(model) > 0 ? collection_floor(model) : 0.0), 0.0)), digits = 4)
@@ -1111,6 +1122,39 @@ function pay_in_equity!(model, e::Enterprise, founders::Vector, target::Float64)
 end
 
 """
+    start_firm!(model, e, founders, ownership)
+
+Give a (closed or new) firm a clean slate — no stock, debts or history, the starting production target — and new owners:
+shares for its founders, or founding members for a cooperative (in the form set for its kind).
+"""
+function start_firm!(model, e::Enterprise, founders::Vector, ownership::Symbol)
+    p = parameters(model)
+    e.alive = true
+    empty!(e.grain); empty!(e.bread); empty!(e.dividend_history); empty!(e.net_history); empty!(e.turnover_history)
+    empty!(e.members); empty!(e.membership_unpaid); empty!(e.member_since); empty!(e.patronage_log); empty!(e.patronage_this_round)
+    e.production_target = e.kind == :theatre ? max(ceil(Int, p.number_of_persons * p.entertainment_propensity / p.customers_per_labour_unit / max(length(enterprises(model, :theatre)), 1)), 1) :
+                                               p.initial_production_target
+    e.hired_labour = 0.0; e.rented_land = 0; e.land_let = 0; e.wage_bill = 0.0; e.operating_net = 0.0; e.interest_paid = 0.0
+    e.share_price = 0.0; e.paid_in_capital = 0.0; e.retained_reserve = 0.0; e.land_levy_arrears = 0.0
+    e.revenue_period = 0.0; e.materials_period = 0.0; e.labour_period = 0.0; e.revenue_this_round = 0.0
+    empty!(e.shares)
+    if ownership == :cooperative
+        e.ownership = :cooperative
+        for w in founders; e.members[w.id] = 1; e.membership_unpaid[w.id] = 0.0; e.member_since[w.id] = current_round(model); end
+        e.founder_ids = Int[]
+    else
+        e.ownership = :shareholders
+        units = total_share_units(model)
+        for w in founders; e.shares[w.id] = units / length(founders); end
+        e.founder_ids = [w.id for w in founders]
+    end
+    return e
+end
+
+"""The villagers with the most spare cash (ties by id), up to `shareholder_count` — the founders of a new firm."""
+richest_founders(model) = (c = sort(persons(model); by = w -> (-(cash(w) - buffer_target(model, w)), w.id)); c[1:min(parameters(model).shareholder_count, length(c))])
+
+"""
     refound_missing_producers!(model)
 
 When fewer than `refound_minimum` farms, or bakeries, are open, villagers try to start one (24 September). The most recently
@@ -1121,34 +1165,84 @@ founding (`pay_in_equity!`). If they raise nothing, the attempt fails and is tri
 function refound_missing_producers!(model)
     p = parameters(model)
     p.refound_minimum > 0 || return nothing
-    for kind in (:farm, :bakery)
+    for kind in (p.entertainment ? (:farm, :bakery, :theatre) : (:farm, :bakery))      # 25 Sept: theatres too
         length(enterprises(model, kind)) >= p.refound_minimum && continue
+        current_round(model) - get(model.refound_last, kind, -10^6) >= p.refound_cooldown || continue   # a waiting period between attempts
+        model.refound_last[kind] = current_round(model)
         shells = [e for e in model.enterprise_list if !e.alive && e.kind == kind]
         isempty(shells) && continue
         e = shells[argmax([x.closed_round for x in shells])]
-        candidates = sort([w for w in persons(model)]; by = w -> (-(cash(w) - buffer_target(model, w)), w.id))
-        founders = candidates[1:min(p.shareholder_count, length(candidates))]
+        founders = richest_founders(model)
         isempty(founders) && continue
-        # a clean slate
-        e.alive = true
-        empty!(e.grain); empty!(e.bread); empty!(e.dividend_history); empty!(e.net_history); empty!(e.turnover_history)
-        empty!(e.members); empty!(e.membership_unpaid); empty!(e.member_since); empty!(e.patronage_log); empty!(e.patronage_this_round)
-        e.production_target = p.initial_production_target
-        e.hired_labour = 0.0; e.rented_land = 0; e.land_let = 0; e.wage_bill = 0.0; e.operating_net = 0.0; e.interest_paid = 0.0
-        e.share_price = 0.0; e.paid_in_capital = 0.0; e.retained_reserve = 0.0; e.land_levy_arrears = 0.0
-        e.revenue_period = 0.0; e.materials_period = 0.0; e.labour_period = 0.0; e.revenue_this_round = 0.0
-        e.ownership = :shareholders
-        empty!(e.shares); units = total_share_units(model)
-        for w in founders; e.shares[w.id] = units / length(founders); end
-        e.founder_ids = [w.id for w in founders]
+        start_firm!(model, e, founders, :shareholders)
         raised = pay_in_equity!(model, e, founders, reserve_target(model, e))
         if raised <= 1e-6
-            e.alive = false; empty!(e.shares); e.founder_ids = Int[]
+            e.alive = false; empty!(e.shares); empty!(e.members); e.founder_ids = Int[]
             log_event!(model, :new_firm_failed; agent_kind = kind)
             continue
         end
         model.new_firms += 1
         log_event!(model, :new_firm; actor = e.id, agent_kind = kind, founders = e.founder_ids, equity = raised)
+    end
+    return nothing
+end
+
+
+const ENTRY_GOOD = OrderedDict(:farm => :grain, :bakery => :bread, :theatre => :ticket)
+
+"""A firm of `kind` to found: the most recently closed one's shell, or a new agent priced like its competitors."""
+function firm_shell!(model, kind::Symbol)
+    shells = [e for e in model.enterprise_list if !e.alive && e.kind == kind]
+    !isempty(shells) && return shells[argmax([x.closed_round for x in shells])]
+    ref = first(enterprises(model, kind))
+    e = add_agent!(Enterprise, model; kind = kind, balance = Balance(), production_target = parameters(model).initial_production_target,
+                   ask = OrderedDict{Symbol, Float64}(ref.ask), bid = OrderedDict{Symbol, Float64}(ref.bid))
+    push!(model.agent_list, e); push!(model.enterprise_list, e)
+    return e
+end
+
+"""
+    market_entry!(model)
+
+`market_entry` (25 September): each month, per kind, the market's unserved share and the firms' operating margin are recorded;
+when unmet demand has been at least `entry_unmet_share` for `entry_unmet_months` months running, or the margin has averaged above
+`entry_margin` over `entry_margin_months`, the villagers with the most spare cash found a new firm (a cooperative with probability
+`entry_coop_share`) — at most one per kind per `entry_cooldown` months and up to `entry_max_ratio` × the starting number.
+"""
+function market_entry!(model)
+    p = parameters(model)
+    p.market_entry || return nothing
+    start = OrderedDict(:farm => p.number_of_farms, :bakery => p.number_of_bakeries, :theatre => p.entertainment ? p.number_of_theatres : 0)
+    for (kind, good) in ENTRY_GOOD
+        firms = enterprises(model, kind)
+        isempty(firms) && continue                                       # a missing kind is restarted by refound_missing_producers!
+        sold = sum(e.market[good].sold for e in firms if haskey(e.market, good); init = 0.0)
+        unmet = maximum(e.market[good].unmet_units for e in firms if haskey(e.market, good); init = 0.0)   # market-wide, on every seller
+        uh = get!(model.entry_unmet_history, kind, Float64[]); push!(uh, sold + unmet > 0 ? unmet / (sold + unmet) : 0.0); length(uh) > 24 && popfirst!(uh)
+        net = sum(isempty(e.net_history) ? 0.0 : last(e.net_history) for e in firms; init = 0.0)
+        turn = sum(isempty(e.turnover_history) ? 0.0 : last(e.turnover_history) for e in firms; init = 0.0)
+        mh = get!(model.entry_margin_history, kind, Float64[]); push!(mh, turn > 0 ? net / turn : 0.0); length(mh) > 24 && popfirst!(mh)
+        k1, k2 = p.entry_unmet_months, p.entry_margin_months
+        signal = (length(uh) >= k1 && all(>=(p.entry_unmet_share - 1e-12), uh[end-k1+1:end])) ||
+                 (length(mh) >= k2 && sum(mh[end-k2+1:end]) / k2 > p.entry_margin)
+        signal || continue
+        current_round(model) - get(model.entry_last, kind, -10^6) >= p.entry_cooldown || continue
+        length(firms) < p.entry_max_ratio * start[kind] || continue
+        founders = richest_founders(model)
+        isempty(founders) && continue
+        coop = rand(stream(model, :entry)) < p.entry_coop_share
+        e = firm_shell!(model, kind)
+        start_firm!(model, e, founders, coop ? :cooperative : :shareholders)
+        raised = pay_in_equity!(model, e, founders, reserve_target(model, e))
+        if raised <= 1e-6                                                # nobody could put money in: no firm, try again next month
+            e.alive = false; empty!(e.shares); empty!(e.members); e.founder_ids = Int[]
+            e.closed_round = current_round(model)
+            log_event!(model, :entry_failed; agent_kind = kind)
+            continue
+        end
+        model.entry_last[kind] = current_round(model); model.entries += 1
+        empty!(uh); empty!(mh)                                           # the signal starts again with the new competitor in place
+        log_event!(model, :entry; actor = e.id, agent_kind = kind, ownership = e.ownership, founders = collect(keys(coop ? e.members : e.shares)), equity = raised)
     end
     return nothing
 end

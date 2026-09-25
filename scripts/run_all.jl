@@ -27,7 +27,8 @@
 #     SEEDS=1 ROUNDS=6 LADDERS=128:invoicing RUNGS=0,2 SKIP_TESTS=1 julia --project=. scripts/run_all.jl
 #
 # Output (results/):
-#   ladder2_<N>_rounds.csv / ladder2_<N>_clearing_all_rounds.csv     every round of every run
+#   ladder2_<N>_rounds.csv / ladder2_<N>_clearing_all_rounds.csv     every round of every run — split into …_part1.csv, …_part2.csv
+#                                                                    when over 90 MB (GitHub's limit is 100 MB); `read_split` reads either form
 #   ladder2_<N>_summary.csv / ladder2_<N>_clearing_all_summary.csv   one row per rung and village
 #   ladder2_<N>_rungs.csv                                            what each rung contains (for the report's panels)
 # ======================================================================================================================
@@ -70,7 +71,7 @@ const LADDERS = [(parse(Int, split(x, ":")[1]), Symbol(split(x, ":")[2])) for x 
 const RUNGS   = filter(!isempty, split(get(ENV, "RUNGS", ""), ","))
 
 ladder_name(N, settlement) = settlement == :invoicing ? "ladder2_$(N)" : "ladder2_$(N)_$(settlement)"
-const MODEL_VERSION = "2026-09-24f"   # part of the key: runs made with an earlier model are never taken for current ones
+const MODEL_VERSION = "2026-09-25d"   # part of the key: runs made with an earlier model are never taken for current ones
 parts_dir(N, settlement) = joinpath(ROOT, "results", "parts", "$(ladder_name(N, settlement))_$(ROUNDS)months_$(MODEL_VERSION)")   # the run length is part of the key: a short test run is never taken for a real one
 safe(s) = replace(s, r"[^A-Za-z0-9]+" => "_")
 part_file(job) = joinpath(parts_dir(job.N, job.settlement), "$(safe(job.rung))__$(job.system)__$(job.seed).csv")
@@ -117,7 +118,10 @@ for (N, settlement) in LADDERS
             (startswith(name, "X2") && system == "sumsy") && continue
             (startswith(name, "E") && system == "debt") && continue        # full-money-stock twins: SuMSy only
             (startswith(name, "L") && system == "debt") && continue        # land-levy variants: SuMSy only
-            (startswith(name, "L") && system == "debt") && continue        # land-levy variants: SuMSy only
+            (startswith(name, "GP") && system == "debt") && continue       # parking-tax policy sweep: SuMSy only
+            (startswith(name, "NLD") && system == "debt") && continue      # levy with entry: SuMSy only
+            (startswith(name, "GP") && system == "debt") && continue       # parking-tax policy sweep: SuMSy only
+            (startswith(name, "NLD") && system == "debt") && continue      # levy with entry: SuMSy only
             job = (; N, settlement, rounds = ROUNDS, rung = name, system, seed)
             push!(jobs, (; job..., file = part_file(job), index = length(jobs) + 1, total = 0))
         end
@@ -138,6 +142,51 @@ failed > 0 && @warn "$failed runs failed; run the script again to retry them (fi
 
 # ---- 3. combined files, summaries and configuration tables ----------------------------------------------------------
 using DataFrames, CSV, Statistics
+
+"""
+    write_split(path, df; limit_mb = 90)
+
+Write `df` as one CSV if it stays under `limit_mb`, else as `…_rounds_part1.csv`, `…_part2.csv`, … each under the limit
+(GitHub refuses files over 100 MB). Pieces are cut only between runs, never inside one. Earlier pieces or an earlier whole
+file of the same name are removed first, so a smaller rerun leaves no stale parts behind. `read_split` reads them back.
+"""
+function write_split(path::String, df::DataFrame; limit_mb = 90)
+    base = path[1:end-4]                                              # without ".csv"
+    for f in readdir(dirname(path); join = true)                     # remove an earlier whole file and earlier parts
+        (f == path || part_number(base, f) !== nothing) && rm(f)
+    end
+    CSV.write(path, df)
+    size_mb = filesize(path) / 2^20
+    size_mb <= limit_mb && return [path]
+    rm(path)
+    sort!(df, [:rung, :system, :seed, :round])
+    runs = collect(groupby(df, [:rung, :system, :seed]))
+    pieces = ceil(Int, size_mb / limit_mb) + 1                       # a margin: rows are not all the same width
+    per = ceil(Int, length(runs) / pieces)
+    written = String[]
+    for (k, chunk) in enumerate(Iterators.partition(runs, per))
+        f = "$(base)_part$(k).csv"
+        CSV.write(f, reduce(vcat, (DataFrame(r) for r in chunk)))
+        push!(written, f)
+    end
+    return written
+end
+
+"""The part number of `f` if it is `<base>_part<k>.csv`, else `nothing`."""
+function part_number(base::String, f::String)
+    prefix = base * "_part"
+    (startswith(f, prefix) && endswith(f, ".csv")) || return nothing
+    return tryparse(Int, f[length(prefix)+1:end-4])
+end
+
+"""Read a file written by `write_split` — the whole file, or its parts in order."""
+function read_split(path::String)
+    isfile(path) && return CSV.read(path, DataFrame)
+    base = path[1:end-4]
+    parts = sort([f for f in readdir(dirname(path); join = true) if part_number(base, f) !== nothing]; by = f -> part_number(base, f))
+    isempty(parts) && error("neither $(path) nor its parts exist")
+    return reduce((a, b) -> vcat(a, b; cols = :union), (CSV.read(f, DataFrame) for f in parts))
+end
 
 """One row per rung and village: the numbers the report quotes (means over the runs, with the worst run and the count of
 runs in which the village stayed whole, i.e. lost at most one person in sixteen)."""
@@ -188,9 +237,9 @@ for (N, settlement) in LADDERS
     isempty(files) && continue
     rounds = reduce((a, b) -> vcat(a, b; cols = :union), [CSV.read(f, DataFrame) for f in files])
     name = ladder_name(N, settlement)
-    CSV.write(joinpath(ROOT, "results", "$(name)_rounds.csv"), rounds)
+    write_split(joinpath(ROOT, "results", "$(name)_rounds.csv"), rounds)   # under GitHub's 100 MB limit (25 Sept)
     CSV.write(joinpath(ROOT, "results", "$(name)_summary.csv"), summarise(rounds, N))
-    println("wrote results/$(name)_rounds.csv and results/$(name)_summary.csv ($(length(files)) runs)")
+    println("wrote results/$(name)_rounds*.csv and results/$(name)_summary.csv ($(length(files)) runs)")
     if settlement == :invoicing
         run(addenv(`$(Base.julia_cmd()) --project=$ROOT $(joinpath(ROOT, "scripts", "dump_rungs.jl")) $SEEDS $ROUNDS all $N`, "SETTLEMENT" => "invoicing"))
     end

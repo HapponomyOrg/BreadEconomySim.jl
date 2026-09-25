@@ -42,8 +42,8 @@ end
 function buyer_alternative(model, b::Agent)
     p = parameters(model)
     p.monetary_system == :sumsy && return p.peer_loan_rate
-    bank = bank_of(model, b); bank === nothing && (bank = first(enterprises(model, :bank)))
-    return borrowing_rate(model, bank, b)
+    bank = some_bank(model, b)
+    return bank === nothing ? Inf : borrowing_rate(model, bank, b)     # no bank left: no credit to be had
 end
 
 """Seller credit on land: a market rate between the two alternatives (`instalment_bargaining` of the gap to the seller)."""
@@ -141,7 +141,7 @@ function land_market!(model)
             b isa Enterprise && (b.market[:rent].wanted = max(b.production_target - b.land, 0))
             log_event!(model, :land_purchase; buyer = b.id, buyer_kind = kind_of(b), seller = s.id, price = price)
             land_sold += 1
-            model.land_last_trade_price = price
+            record_land_sale!(model, price)
             b isa Person && break     # persons buy at most one unit per round
         end
     end
@@ -158,8 +158,32 @@ function land_market!(model)
         end
         model.land_supply_this_round = land_supply; model.land_demand_this_round = demand; model.land_sold_this_round = land_sold
     end
-    # distress sales (seller-initiated, immediate settlement)
-    if parameters(model).distress_land_sales
+    # seller-initiated sales at the best bid (25 September, review 6): a landowner who must sell (distress) or wants to for reasons
+    # of their own (a life event, with probability `land_life_event_rate` a month) takes the best bid on the table — the most any
+    # buyer both would pay and can pay in cash. Distress sales are fire sales and do not set the valuation price; life-event sales do.
+    if parameters(model).land_pricing == :market
+        pl = parameters(model)
+        distressed(o) = pl.distress_land_sales && (o.hunger > 0 || has_arrears(model, o) || cash(o) < meal_price(model))
+        for o in stable_shuffle(rng, [o for o in persons(model) if land_to_let(o) > 0])
+            forced = distressed(o)
+            forced || rand(rng) < pl.land_life_event_rate || continue
+            bids = [(b, min(land_buyer_reservation(model, b, :cash), b isa Person ? cash(b) - buffer_target(model, b) : available_cash(b)))
+                    for b in alive_agents(model) if b.id != o.id && !is_government(b) && !is_bank(b) && (b isa Person || is_farm(b))]
+            bids = [(b, x) for (b, x) in bids if x > 1e-6]
+            isempty(bids) && continue
+            b, bid = bids[argmax([x for (_, x) in bids])]
+            bid = round(bid, digits = 4)
+            forced || bid >= 0.5 * land_valuation_price(model) || continue    # a life-event seller does not give land away
+            transfer!(model, b, o, bid, forced ? :distress_land_sale : :land_sale)
+            o.land -= 1; o.market[:rent].offered -= 1; b.land += 1
+            b isa Enterprise && (b.market[:rent].wanted = max(b.production_target - b.land, 0))
+            forced || (record_land_sale!(model, bid); land_sold += 1)
+            log_event!(model, :land_purchase; buyer = b.id, buyer_kind = kind_of(b), seller = o.id, price = bid, distress = forced, life_event = !forced)
+        end
+        model.land_sold_this_round = land_sold
+    end
+    # distress sales (seller-initiated, immediate settlement) — the old rule, for :multiple pricing
+    if parameters(model).distress_land_sales && parameters(model).land_pricing != :market
         dprice = round(price * parameters(model).distress_land_discount, digits = 4)
         for o in stable_shuffle(rng, [o for o in persons(model) if land_to_let(o) > 0 && (o.hunger > 0 || has_arrears(model, o) || cash(o) < meal_price(model))])
             buyers = [b for b in alive_agents(model) if b.id != o.id && !is_government(b) &&
@@ -225,7 +249,7 @@ function ticket_capacity(model, t::Enterprise)
     p = parameters(model)
     p.shows_per_round <= 0 && return Inf
     seats = p.seats_per_show > 0 ? p.seats_per_show :
-            ceil(p.number_of_persons / max(count(x -> x.kind == :theatre, model.enterprise_list), 1) * (1 + p.theatre_seat_margin))
+            ceil(p.number_of_persons / max(p.number_of_theatres, 1) * (1 + p.theatre_seat_margin))   # 25 Sept: fixed at the founding — a new theatre brings its own seats
     return Float64(p.shows_per_round * seats)
 end
 

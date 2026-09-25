@@ -374,6 +374,9 @@ Base.@kwdef struct SimulationParameters
     # and loyalty bonus; SuMSy: the parking fee and parking tax) or borrowed (debt: the bank's rate).
     land_pricing::Symbol = :multiple
     land_price_step::Float64 = 0.06
+    # Landowners who sell for reasons of their own (an inheritance, a move) — the monthly probability that a landowner offers a unit
+    # at the best bid (25 September). Such sales count for the valuation price; distress sales do not.
+    land_life_event_rate::Float64 = 0.005
     # A levy on land (24 September; Gesell's Freiland as a variant): each month landholders pay `land_levy_rate` × the value of their
     # land to the government. With `land_levy = true` the rate is the cost of holding money (parking fee + parking tax, 0 under
     # debt money) plus `land_levy_margin` — land is then worth its rent over that margin, as a debt village values it over its
@@ -393,6 +396,22 @@ Base.@kwdef struct SimulationParameters
     stop_without_producers::Bool = true
     # When fewer than this many farms (or bakeries) are open, villagers try to start one (24 September; 0 = never).
     refound_minimum::Int = 1
+    refound_cooldown::Int = 3                         # at most one restart per kind in this many months (a village that cannot sustain a firm would otherwise restart one every month)
+    # The reserve rule without a tax policy never scales taxes below this (25 September, review 6: at 0 they could never recover).
+    tax_scale_minimum::Float64 = 0.05
+    # Market entry (25 September; docs/designs_implemented/design_market_entry_2026-09-25.md): off by default and on the ladder. A new farm, bakery or theatre
+    # is founded when its market has had at least `entry_unmet_share` unserved demand in each of the last `entry_unmet_months`
+    # months, or its firms have averaged an operating margin above `entry_margin` over the last `entry_margin_months` months — at
+    # most one per kind per `entry_cooldown` months and up to `entry_max_ratio` × the starting number. Founders are the villagers
+    # with the most spare cash (founding rules); the firm is a cooperative with probability `entry_coop_share`.
+    market_entry::Bool = false
+    entry_unmet_share::Float64 = 0.05
+    entry_unmet_months::Int = 3
+    entry_margin::Float64 = 0.20
+    entry_margin_months::Int = 6
+    entry_cooldown::Int = 3
+    entry_max_ratio::Float64 = 2.0
+    entry_coop_share::Float64 = 0.0
     # Founding loans on business terms (24 September): a founder borrows for their share of the founding equity only what passes
     # the affordability test over `founding_loan_term` months; a founder who cannot carry the full share puts in what they can
     # and the firm starts with less equity (it borrows the rest itself when it needs it).

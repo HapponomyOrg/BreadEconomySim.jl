@@ -18,7 +18,9 @@ A debt village runs for a while, builds up debt, and then SuMSy is introduced **
 
 **B. Bottom-up.** Participation is chosen:
 - **First entrants** are those under financial stress (cash below the cushion, hungry, or unemployed): the guaranteed income is the incentive.
-- **Everyone else weighs it** every quarter: the gain of a step up (guaranteed income, taxes payable in SuMSy, old debt repayable in SuMSy, sales to and wages from higher-level partners) against the cost (the parking fee on SuMSy that would be unspendable at the partners' levels). Step up when the gain is larger, down when the cost is. The same rule for firms, with their own gains (sales, wages payable, taxes, old loans).
+- **Everyone else weighs it** every quarter: the gain of a step up (guaranteed income, taxes payable in SuMSy, old debt repayable in SuMSy, sales to and wages from higher-level partners) against the cost (the parking fee on SuMSy that would be unspendable at the partners' levels). Step up when the gain is larger, down when the cost is; steps of 10 %.
+- **Financial stress** (the first entrants): cash below the cushion, a month of hunger, or unemployment.
+- **Firms follow their employees:** a firm's level moves each quarter (steps of 10 %) towards the labour-weighted average level of its staff — it can take SuMSy from customers only as far as it can pay it on in wages. **Banks follow their customers** the same way (the average level of their account holders). Adoption therefore starts with villagers and spreads to firms through their staff; the government follows the bakeries.
 - **Availability** limits adoption: SuMSy is only worth having where the goods one needs can be bought with it, and wages can be paid with it — both are in the weighing.
 - **The government joins when it can use the money.** Two variants are run:
   - *bakery rule*: its participation level is the **bakeries' average commitment** (one bakery at 50 %, two at 25 %, one at 0 % → 25 %); bread is what the benefit must buy, so the government can use SuMSy exactly as far as the bakeries take it;
@@ -33,7 +35,8 @@ A debt village runs for a while, builds up debt, and then SuMSy is introduced **
 - Public debt is reported **in both currencies**.
 
 ## 4. Loans and banks
-- **Old loans** (issued before the switch) may be repaid in SuMSy **at par**, by law. **New loans** (issued after) must be repaid in euros. **A loan rolled over or refinanced after the switch is new.** A SuMSy repayment is accepted only after checking the loan's start date against the switch. After the full switch of path A every loan may be repaid in SuMSy.
+- **Old bank loans** (issued before the switch) may be repaid in SuMSy **at par**, by law. **New bank loans** (issued after) must be repaid in euros — otherwise massive new euro credit could be taken out and repaid from the guaranteed income. **A bank loan rolled over or refinanced after the switch is new.**
+- **Peer loans and seller credit create no money**, so the restriction does not apply: old ones are renegotiated between lender and borrower at the switch and, like new ones, repaid under the reciprocity principle — each payment split at min(p_lender, p_borrower). A SuMSy repayment is accepted only after checking the loan's start date against the switch. After the full switch of path A every loan may be repaid in SuMSy.
 - A bank that receives SuMSy **keeps it and pays the parking fee** on it. It can use that SuMSy, and buffers lent to it by depositors (the existing buffer-lending), as reserves.
 - Banks become **intermediaries for SuMSy peer loans** as soon as there is demand, as in the SuMSy village.
 - Banks pay their staff under reciprocity: in SuMSy to the extent their employees accept it.
@@ -54,6 +57,15 @@ A debt village runs for a while, builds up debt, and then SuMSy is introduced **
 
 ## 7. What is measured
 Survival **throughout** the transition (the lowest point, not only the end); participation over time (villagers, firms, banks, government); the two money stocks; the exchange rate; unspendable SuMSy and the parking fee paid by early adopters; public debt in both currencies, and private debt; the rich–poor gap (richest tenth against poorest tenth, in meals); bank SuMSy reserves; and a comparison of the end state with the pure debt village and the pure SuMSy village.
+
+## 7b. The model's later mechanisms under two currencies (decided 24 September)
+- **Land:** sales are split by reciprocity; the land levy applies to a landholder's land in proportion to its level and is paid in SuMSy.
+- **Invoices:** the split is fixed when the invoice is issued, as a price agreed in a contract.
+- **The protected minimum:** one loaf in total, both currencies counted together at par.
+- **Liquidation test:** overdue obligations and turnover in both currencies together; credit refused in both.
+- **Land valuation:** the money-logic rule applied to each agent's own mix of the two currencies.
+- **Bookkeeping:** a second balance entry per agent for SuMSy; a money identity per currency.
+- **Target:** the best SuMSy setup chosen by the rule (no hunger, lowest rich–poor gap) from the 24 September results, the levy and land-dividend variants included. Starting villages confirmed from the same results.
 
 ## 8. Order of work
 1. Two balances and participation levels; reciprocity in every payment path (the settlement ways already route every payment through one function — the split goes there). 2. Guaranteed income, buffer and parking fee on the SuMSy balance at p. 3. Loans: start-date check, SuMSy repayment of old loans, bank SuMSy reserves, SuMSy peer loans. 4. Government: taxes by currency, acceptance share, SuMSy benefit threshold, bonds under reciprocity. 5. Path A schedule; path B entry and weighing rules. 6. Exchange market. 7. Scenario scripts and the sweep. 8. Greed stress tests on the transition villages — last, once the transition works.

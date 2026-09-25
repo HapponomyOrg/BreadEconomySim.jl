@@ -95,10 +95,13 @@ function manage_government_reserve!(model)
     base = max(revenue, 1e-6)
     if p.tax_policy == :none
         # the 20 September rule: reductions in full, no raises; a scale below 1 climbs back when short
+        # 25 Sept (review 6 §2.5): never below `tax_scale_minimum` — at zero the multiplicative climb-back had nothing to multiply,
+        # taxes stayed at zero for good and the government borrowed everything from then on
+        scale_floor = p.tax_scale_minimum
         if reduction > 1e-6 && model.tax_this_round > 1e-6
-            model.tax_scale = clamp(model.tax_scale * (1 - reduction / model.tax_this_round), 0.0, 1.0)
+            model.tax_scale = clamp(model.tax_scale * (1 - reduction / model.tax_this_round), scale_floor, 1.0)
         elseif surplus < -1e-6 && model.tax_scale < 1 && model.tax_this_round > 1e-6
-            model.tax_scale = clamp(model.tax_scale * (1 + (-surplus) * p.surplus_tax_reduction_share / model.tax_this_round), 0.0, 1.0)
+            model.tax_scale = clamp(model.tax_scale * (1 + (-surplus) * p.surplus_tax_reduction_share / model.tax_this_round), scale_floor, 1.0)
         end
         model.tax_policy_step = 0.0
         model.consumption_tax_scale = model.tax_scale; model.wealth_tax_scale = model.tax_scale   # :none — one scale for all five
