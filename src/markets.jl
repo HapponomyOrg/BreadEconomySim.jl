@@ -332,9 +332,12 @@ function labour_market!(model, kinds)
             filled <= 1e-9 && filter!(x -> x !== e, active)
         end
     end
-    if any(e -> e.market[:wage].got < e.market[:wage].wanted - 1e-9, employers)
+    # 25 Sept: the labour employers wanted and could not get is recorded, market-wide, on every worker who sold out — so the
+    # 5 % threshold applies to wages as it does to goods (before, any shortfall at all raised every sold-out worker's ask)
+    shortfall = sum(max(e.market[:wage].wanted - e.market[:wage].got, 0.0) for e in employers; init = 0.0)
+    if shortfall > 1e-9
         for w in persons(model)
-            w.labour_offered > 1e-9 && w.labour_available <= 1e-9 && (w.market[:wage].unmet_demand = true)
+            w.labour_offered > 1e-9 && w.labour_available <= 1e-9 && (w.market[:wage].unmet_demand = true; w.market[:wage].unmet_units = shortfall)
         end
     end
     return nothing

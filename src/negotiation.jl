@@ -99,13 +99,13 @@ buys(a::Agent) = a isa Person ? (:bread, :ticket) : a.kind == :farm ? (:rent, :w
 
 Did demand for this good go unmet enough to react to? With `unmet_demand_share = 0` any miss counts (the original
 rule). Otherwise the units the market failed to serve must be at least that share of what it sold plus what it
-missed. Wages always use the original rule (see the parameter).
+missed. Wages follow the same rule when `wage_threshold` is on (25 September); off, any miss raises the wage.
 """
 function demand_unmet(model, a::Agent, good::Symbol)
     r = a.market[good]
     r.unmet_demand || return false
     share = parameters(model).unmet_demand_share
-    (share <= 0 || good == :wage) && return true
+    (share <= 0 || (good == :wage && !parameters(model).wage_threshold)) && return true
     sold = sum(e.market[good].sold for e in alive_agents(model) if good in sells(e); init = 0.0)
     return r.unmet_units >= share * (sold + r.unmet_units) - 1e-9
 end

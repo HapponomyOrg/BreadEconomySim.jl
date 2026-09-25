@@ -394,6 +394,9 @@ Base.@kwdef struct SimulationParameters
     land_levy_rate::Float64 = 0.0
     # The run stops when no farm or no bakery is left (the old rule); false = the village runs on, and starves or recovers (review 5).
     stop_without_producers::Bool = true
+    # Wages rise only when at least `unmet_demand_share` of the labour employers wanted went unfilled (25 September; false = the
+    # old rule, any shortfall raises every sold-out worker's ask — a wage ratchet that ran on with a quarter of the village idle).
+    wage_threshold::Bool = false
     # When fewer than this many farms (or bakeries) are open, villagers try to start one (24 September; 0 = never).
     refound_minimum::Int = 1
     refound_cooldown::Int = 3                         # at most one restart per kind in this many months (a village that cannot sustain a firm would otherwise restart one every month)

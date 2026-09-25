@@ -3,7 +3,7 @@ using BreadEconomySim
 # The ladder as a function of the village size, the run length and the settlement system (22 September), so that one
 # process can build several ladders (scripts/run_all.jl). ladder2_rungs.jl calls it with the command-line values.
 function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol)
-    RULES = (; ask_floor = :cost, bread_bid_base_multiplier = 2.0, number_of_persons = N, number_of_landowners = N ÷ 4, land_per_person = 1.5, initial_production_target = 10 * N ÷ 128, shares_per_person = 10, shareholder_count = 4, number_of_farms = 4, number_of_bakeries = 4, shows_per_round = 1, theatre_seat_margin = 0.25, unmet_demand_share = 0.05, unsold_share = 0.05, founding_equity = true, founders = :distinct, settlement = SETTLEMENT,   # 23 Sept: founders capitalise their firms
+    RULES = (; ask_floor = :cost, bread_bid_base_multiplier = 2.0, number_of_persons = N, number_of_landowners = N ÷ 4, land_per_person = 1.5, initial_production_target = 10 * N ÷ 128, shares_per_person = 10, shareholder_count = 4, number_of_farms = 4, number_of_bakeries = 4, shows_per_round = 1, theatre_seat_margin = 0.25, unmet_demand_share = 0.05, unsold_share = 0.05, wage_threshold = true, founding_equity = true, founders = :distinct, settlement = SETTLEMENT,   # 23 Sept: founders capitalise their firms
            # 22 September: :invoicing = the settlement design (cash at the counter, wages at month end, invoices between firms, clearing among banks)
              initial_interest_rate = 0.005, maximum_interest_rate = 0.015,   # a month: 6 % a year to start, at most about 20 %; the rate itself covers the banks' costs (one staff unit per bank: staff scaled with customers bankrupted the banks at 512, 22 Sept)
               demand_based_targets = true, wage_ceiling_from_own_ask = true, expected_price_from_asks = true, ask_increase_only_on_unmet_demand = true,
@@ -40,6 +40,7 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol)
     DIVIDEND = (; surplus_tax_reduction_share = 0.0, surplus_redistribution_share = 1.0)   # the surplus paid out per head instead of cutting taxes
     PARKPOLICY = (; tax_policy = :scale, tax_response_coverage = 1.0, tax_response_step = 0.02, tax_scale_maximum = 10.0)   # SuMSy: the parking tax covers the public payroll
     ENTRY    = (; market_entry = true, entry_coop_share = 0.0)   # 25 Sept: firms enter on unmet demand or high margins
+    level(fee) = 30 + 5 / (fee + 0.01)                              # a villager's settled money: cushion + guaranteed income ÷ (fee + parking tax)
     PRICES   = (;)   # 25 Sept: the realistic price rules are base rules from step 0 (see RULES); the old step 10 is gone
     RESERVE  = (; government_reserve_in_rounds = 3, surplus_tax_reduction_share = 1.0)                                # rung 11: a public reserve, the surplus returned as a tax cut
     FISCAL   = (; tax_policy = :scale, tax_response_coverage = 0.5, tax_response_step = 0.02, tax_scale_maximum = 2.0,
@@ -107,6 +108,15 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol)
         ("N10 step 10, market entry", (; V8_DEBT..., RESERVE..., ENTRY...), (; V8_SUMSY..., RESERVE..., ENTRY...)),
         ("NB co-op village, market entry", (; V8_DEBT..., cooperative_theatres = 2, ownership = :mixed, RESERVE..., ENTRY...), (; V8_SUMSY..., cooperative_theatres = 2, ownership = :mixed, RESERVE..., ENTRY...)),
         ("NLD10 levy and land dividend, market entry", (;), (; V8_SUMSY..., RESERVE..., DIVIDEND..., land_levy = true, ENTRY...)),
+        # The parking fee as monetary policy (25 September): a higher fee lowers the money stock each villager settles at
+        # (cushion + guaranteed income ÷ (fee + parking tax)); with starting prices scaled to that level, prices follow the money and
+        # the guaranteed income buys more. Full money stock at step 8 (F8) and filling up at step 8 (FF8); F8-2 is the control
+        # (normal fee, the same lower starting prices as F8-3). SuMSy side only.
+        ("F8-2 step 8, full money stock, fee 2 %, prices x 0.79 (control)", (;), (; V8_SUMSY..., EQ..., demurrage_rate = 0.02, initial_price_multiplier = level(0.03) / level(0.02))),
+        ("F8-3 step 8, full money stock, fee 3 %, matching prices", (;), (; V8_SUMSY..., EQ..., demurrage_rate = 0.03, initial_price_multiplier = level(0.03) / level(0.02))),
+        ("F8-4 step 8, full money stock, fee 4 %, matching prices", (;), (; V8_SUMSY..., EQ..., demurrage_rate = 0.04, initial_price_multiplier = level(0.04) / level(0.02))),
+        ("FF8-3 step 8, filling up, fee 3 %", (;), (; V8_SUMSY..., demurrage_rate = 0.03)),
+        ("FF8-4 step 8, filling up, fee 4 %", (;), (; V8_SUMSY..., demurrage_rate = 0.04)),
         # The fair SuMSy test of a large public sector (25 September): the same shares with a policy that raises the parking tax
         # (and lowers it on a surplus) to close the whole gap, up to ten times its rate. SuMSy side only.
         ("GP10-20 step 10, public employment 20 %, parking tax policy", (;), (; V8_SUMSY..., RESERVE..., PARKPOLICY..., government_employment_share = 0.2)),

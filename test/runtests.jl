@@ -1301,6 +1301,21 @@ end
     @test all(d.bank_bailouts .== 0.0)
 end
 
+
+@testset "wages rise on a real labour shortage only (25 September 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., unmet_demand_share = 0.05, wage_threshold = true, maximum_rounds = 1))
+    for x in B.persons(m); x.market[:wage].sold = 3.0; end                                  # a month's worth of hired labour
+    w = first(B.persons(m)); r = w.market[:wage]
+    sold = sum(e.market[:wage].sold for e in B.alive_agents(m) if :wage in B.sells(e); init = 0.0)
+    r.unmet_demand = true; r.unmet_units = 0.01                                               # employers a hair short
+    @test !B.demand_unmet(m, w, :wage)
+    r.unmet_units = 0.2 * max(sold, 10.0)                                                     # a real shortage
+    @test B.demand_unmet(m, w, :wage)
+    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., unmet_demand_share = 0.05, maximum_rounds = 1))
+    w0 = first(B.persons(m0)); w0.market[:wage].unmet_demand = true; w0.market[:wage].unmet_units = 0.01
+    @test B.demand_unmet(m0, w0, :wage)                                                       # the old rule, off by default
+end
+
 @testset "cooperative forms (14 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     params(m) = B.parameters(m)

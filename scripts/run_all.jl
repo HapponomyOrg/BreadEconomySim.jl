@@ -71,7 +71,7 @@ const LADDERS = [(parse(Int, split(x, ":")[1]), Symbol(split(x, ":")[2])) for x 
 const RUNGS   = filter(!isempty, split(get(ENV, "RUNGS", ""), ","))
 
 ladder_name(N, settlement) = settlement == :invoicing ? "ladder2_$(N)" : "ladder2_$(N)_$(settlement)"
-const MODEL_VERSION = "2026-09-25d"   # part of the key: runs made with an earlier model are never taken for current ones
+const MODEL_VERSION = "2026-09-25e"   # part of the key: runs made with an earlier model are never taken for current ones
 parts_dir(N, settlement) = joinpath(ROOT, "results", "parts", "$(ladder_name(N, settlement))_$(ROUNDS)months_$(MODEL_VERSION)")   # the run length is part of the key: a short test run is never taken for a real one
 safe(s) = replace(s, r"[^A-Za-z0-9]+" => "_")
 part_file(job) = joinpath(parts_dir(job.N, job.settlement), "$(safe(job.rung))__$(job.system)__$(job.seed).csv")
@@ -120,8 +120,10 @@ for (N, settlement) in LADDERS
             (startswith(name, "L") && system == "debt") && continue        # land-levy variants: SuMSy only
             (startswith(name, "GP") && system == "debt") && continue       # parking-tax policy sweep: SuMSy only
             (startswith(name, "NLD") && system == "debt") && continue      # levy with entry: SuMSy only
+            (startswith(name, "F") && system == "debt") && continue        # parking-fee policy: SuMSy only
             (startswith(name, "GP") && system == "debt") && continue       # parking-tax policy sweep: SuMSy only
             (startswith(name, "NLD") && system == "debt") && continue      # levy with entry: SuMSy only
+            (startswith(name, "F") && system == "debt") && continue        # parking-fee policy: SuMSy only
             job = (; N, settlement, rounds = ROUNDS, rung = name, system, seed)
             push!(jobs, (; job..., file = part_file(job), index = length(jobs) + 1, total = 0))
         end

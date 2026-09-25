@@ -5,8 +5,8 @@
 An agent-based simulation, in Julia, of one village built twice — debt money and SuMSy (guaranteed income + parking fee) — identical except for where money comes from. A **ladder** adds one institution per step to both villages; results are the survivors, prices, public debt and the rich–poor gap after ten years, ten runs per configuration, 512 villagers. It feeds a public report (English first, Dutch and others later), Stef's Dutch book on SuMSy, and a talk on **25 October 2026** ("A simulated economy – What it takes to survive").
 
 ## 2. Where things stand
-- **Model version `2026-09-25d`** (`MODEL_VERSION` in `scripts/run_all.jl`), **575 tests** (`julia --project=. test/runtests.jl`), Julia **1.13**, EconoSim.jl from GitHub (branch main).
-- **The full run on this version** was started by Stef on 25 September (about 2,250 runs, ~6 hours on his machine). Its results are **not on GitHub** (files too large): Stef uploads a `results.zip`. Rebuild the summaries from its `results/parts/` with `SKIP_TESTS=1 julia --project=. scripts/run_all.jl` (skips finished runs, then summarises).
+- **Model version `2026-09-25e`** (`MODEL_VERSION` in `scripts/run_all.jl`), **584 tests** (`julia --project=. test/runtests.jl`), Julia **1.13**, EconoSim.jl from GitHub (branch main).
+- **The full run on this version** was started by Stef on the evening of 25 September (about 2,250 runs, ~6 hours on his machine); it includes the wage threshold and no bailouts without a government. Its results are **not on GitHub** (files too large): Stef uploads a `results.zip`. Rebuild the summaries from its `results/parts/` with `SKIP_TESTS=1 julia --project=. scripts/run_all.jl` (skips finished runs, then summarises).
 - **Stef is away from his computer 26 September – 11 October.** No 512-villager runs are possible in that window; the 128-villager ladder is feasible in a chat container (slow).
 
 ## 3. The plan to 25 October
