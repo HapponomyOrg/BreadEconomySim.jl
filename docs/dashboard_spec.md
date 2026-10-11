@@ -1,444 +1,447 @@
 # BreadEconomySim — dashboard design document
 
-*Kept in step with `src/parameters.jl`; last updated 18 September 2026 (cooperative forms, membership contribution, random streams). The parameter tables below are generated from the source, so every field of `SimulationParameters` appears exactly once.*
+*Version 2, 5 October 2026. Supersedes the document of 18 September. The parameter tables of §5 are generated from `src/parameters.jl` (299 parameters) and must be regenerated whenever that file changes; everything else is design.*
 
 ## 1. Purpose
 
-A web dashboard from which a non-programmer can configure a village, run it under one or both kinds of money, and read the results. Every parameter and switch of the simulation is exposed; nothing is hidden in code. The dashboard drives the Julia package through a thin service layer and never re-implements any rule.
+A web dashboard from which a researcher can configure a village, switch any part of it on or off, run it under one or both kinds of money, define a sweep over any set of parameters, and read the results. Every switch and parameter of `SimulationParameters` is exposed, grouped into tabs that follow how the model is thought about rather than the order in which it was written. The ladder's steps are presets; a sweep is a set of presets with one or more parameters varied.
 
 ## 2. Architecture
 
-- **Backend**: a Julia HTTP service (HTTP.jl + JSON3) wrapping `run_simulation(SimulationParameters(; kwargs...))`. One endpoint validates and runs a job; results stream as the run progresses (one JSON row per round from `round_data`), so charts fill in live. Batch jobs run several seeds and both systems in parallel processes.
-- **Frontend**: a single-page app. State = one `SimulationParameters` object per side (debt / SuMSy) plus run controls. All widgets bind to parameter names 1:1; the JSON sent to the backend is the keyword list of `SimulationParameters`, nothing else.
-- **Validation** happens in the frontend from the rules in Section 5 (ranges, gating, consistency) and again in the backend (the same rules, plus Julia's own type checks).
-- **Persistence**: every run is saved with its full parameter set, seed list, git commit of the package, and the per-round CSV; presets are parameter sets with a name.
+- **Backend**: a Julia HTTP service wrapping `run_simulation(SimulationParameters(; kwargs...))`, the same code path as `scripts/run_all.jl`. One endpoint validates a job (one village, N seeds, M rounds) and runs it on a worker pool; results are the per-round data (`round_data`), the summary columns of `run_all.jl` and the event log. A sweep is a batch of jobs; the backend reuses finished runs by their parameter hash and model version, as `run_all.jl` does with its part files.
+- **Frontend**: a single-page app. State = one `SimulationParameters` per side (debt / SuMSy) plus the run controls and the sweep definition. Widgets bind to parameter names 1:1, so a saved configuration is a parameter set and nothing else.
+- **Validation** in the frontend from the rules of §6 and again in the backend.
+- **Persistence**: every run is saved with its parameter set, seed list, model version (`MODEL_VERSION`) and git commit; a preset is a named parameter set; a sweep is a preset plus a variation list. Runs made under an older model version are shown greyed with their version, never silently reused.
 
 ## 3. Layout
 
-Three columns on a wide screen, stacked on a narrow one.
+A tab bar across the top, one tab per group of §5 plus **Run**, **Sweeps** and **Results**. Each parameter tab has, at its head, the tab's **switches** (the Booleans that turn whole parts of the model on or off), and below them the parameters, each greyed out until the switch that governs it is on. A **compare** toggle (debt / SuMSy / both) applies to every tab; parameters that exist in only one money are shown only when that side is selected. A search box finds any parameter by name or meaning across tabs.
 
-1. **Configure** (left): the parameter panels of Section 4, one collapsible card per panel, in the order given. A search box filters parameters by name or description. Each parameter shows its name, a plain-language description, its widget, its default, and a reset button. A gated parameter is greyed out with a note naming the switch that enables it.
-2. **Run** (middle): the run controls (Section 6), the preset picker (Section 7), the *compare* toggle that runs the same village under both kinds of money, progress bars per seed, and the log of warnings from validation.
-3. **Results** (right): the charts and tables of Section 8, in two columns when comparing (debt left, SuMSy right, colour-coded as in the report), with the metric cards first and the per-round charts beneath.
+## 4. Switches and what they govern
 
-## 4. Parameter panels
+Each tab's switches, with the parameters they enable. A switch that is off removes its part of the model entirely (the ladder's lower steps are nothing else).
 
-Column meanings: *widget* is the control; *range* the dashboard's allowed span (the code accepts more; the range is what makes sense to expose); *enabled by* the switch or value that must be on for the parameter to matter (blank = always). Defaults are the code's defaults, which reproduce the original specification; the presets of Section 7 set the behaviour rules.
-
-### Agents
-
-| parameter | type | default | widget | range / options | enabled by | meaning |
-|---|---|---|---|---|---|---|
-| `number_of_banks` | Int | `2` | integer field |  |  |  |
-| `number_of_farms` | Int | `3` | integer field |  |  |  |
-| `number_of_bakeries` | Int | `3` | integer field |  |  |  |
-| `number_of_persons` | Int | `16` | integer field | 4–5000 |  |  |
-| `number_of_landowners` | Int | `2` | integer field | 1–500 |  |  |
-
-### Capacity, food and death
-
-| parameter | type | default | widget | range / options | enabled by | meaning |
-|---|---|---|---|---|---|---|
-| `maximum_capacity` | Float64 | `3.0` | slider / number | 1–6 |  |  |
-| `capacity_recovery_per_round` | Float64 | `2.0` | slider / number |  |  |  |
-| `half_meal_capacity_fraction` | Float64 | `2 / 3` | slider / number |  |  |  |
-| `rounds_without_food_until_death` | Int | `3` | integer field |  |  |  |
-| `breads_per_grain` | Int | `2` | integer field |  |  |  |
-| `breads_per_meal` | Int | `2` | integer field |  |  |  |
-| `initial_breads_per_person` | Float64 | `2.0` | slider / number |  |  | bootstrap: everyone starts with one meal in stock |
-| `maximum_breads_per_round` | Int | `3` | integer field |  |  | gluttony: up to this many breads eaten in a round |
-| `gluttony_probability` | Float64 | `0.10` | slider / number | 0–1 |  | chance a person who can pay cash eats a third bread |
-| `stocking_marginality` | Vector{Tuple{Int, Float64}} | `[(3, 1.0), (4, 0.5), (5, 0.3), (7, 0.15)]` | table editor |  |  | after gluttony: chance of one more bread while stock < units |
-
-### Goods
-
-| parameter | type | default | widget | range / options | enabled by | meaning |
-|---|---|---|---|---|---|---|
-| `spoilage_age_in_rounds` | Int | `3` | integer field |  |  |  |
-
-### Prices and negotiation
-
-| parameter | type | default | widget | range / options | enabled by | meaning |
-|---|---|---|---|---|---|---|
-| `initial_prices` | Dict{Symbol, Float64} | `Dict(:bread => 5.0, :grain => 5.2, :rent => 0.75, :wage => 3.92, :ticket => 2.0)` | table editor |  |  | static-consistent vector, see HANDOFF |
-| `land_price_rent_multiple` | Float64 | `15.0` | slider / number | 5–400 |  |  |
-| `negotiation_steps` | Int | `6` | integer field |  |  |  |
-| `minimum_concession_fraction` | Float64 | `0.25` | slider / number |  |  |  |
-| `maximum_concession_fraction` | Float64 | `0.40` | slider / number |  |  |  |
-| `ask_increase_after_sellout` | Float64 | `0.06` | slider / number |  |  |  |
-| `ask_decrease_after_partial_sale` | Float64 | `0.06` | slider / number |  |  |  |
-| `unsold_tolerance_units` | Float64 | `2.0` | slider / number |  |  | unsold ≤ this (one grain-unit of bread) is not 'partly unsold' |
-| `ask_decrease_when_idle` | Vector{Float64} | `[0.15, 0.30, 0.45]` | table editor |  |  | desperation: consecutive idle rounds |
-| `bid_decrease_after_success` | Float64 | `0.03` | slider / number |  |  |  |
-| `bid_increase_when_starved` | Vector{Float64} | `[0.06, 0.12, 0.25]` | table editor |  |  | consecutive rounds of missing out |
-| `bread_price_ageing_discount` | Float64 | `0.40` | slider / number |  |  |  |
-| `hunger_wage_discount` | Float64 | `0.25` | slider / number |  |  |  |
-| `farm_maximum_rent_fraction_of_grain_price` | Float64 | `0.6` | slider / number |  |  |  |
-| `bakery_grain_wage_fraction` | Float64 | `0.5` | slider / number |  |  |  |
-| `bread_bid_base_multiplier` | Float64 | `1.3` | slider / number |  |  |  |
-| `bread_bid_hunger_multiplier` | Float64 | `0.4` | slider / number |  |  |  |
-| `initial_production_target` | Int | `6` | integer field |  |  |  |
-
-### Enterprises
-
-| parameter | type | default | widget | range / options | enabled by | meaning |
-|---|---|---|---|---|---|---|
-| `reserve_target_in_rounds` | Float64 | `3.0` | slider / number |  |  | standard reserve = rounds × expected input cost |
-| `surplus_reserve_multiple` | Float64 | `2.0` | slider / number |  |  |  |
-| `reserve_protection_probability` | Float64 | `0.5` | slider / number |  |  | enterprises: borrow first (v1 savings rule) vs use own cash first            # wages absorb surplus once reserves reach this multiple |
-
-### Credit
-
-| parameter | type | default | widget | range / options | enabled by | meaning |
-|---|---|---|---|---|---|---|
-| `loan_term_in_rounds` | Int | `20` | integer field | 5–100 |  |  |
-| `affordability_ratio` | Float64 | `0.8` | slider / number |  |  |  |
-| `initial_interest_rate` | Float64 | `0.05` | slider / number |  |  |  |
-| `interbank_rate_discount` | Float64 | `0.5` | slider / number |  |  | bank-to-bank loans at discount × lender's rate |
-| `government_rate_discount` | Float64 | `0.5` | slider / number |  |  |  |
-| `arrears_rounds_until_seizure` | Int | `2` | integer field |  |  |  |
-| `garnishment_rate` | Float64 | `0.25` | slider / number |  |  |  |
-
-### Savings (persons)
-
-| parameter | type | default | widget | range / options | enabled by | meaning |
-|---|---|---|---|---|---|---|
-| `savings_target_in_meals` | Float64 | `3.0` | slider / number |  |  |  |
-| `savings_protection_probability` | Float64 | `0.5` | slider / number |  |  |  |
-
-### Government
-
-| parameter | type | default | widget | range / options | enabled by | meaning |
-|---|---|---|---|---|---|---|
-| `wage_tax_rate` | Float64 | `0.15` | slider / number | 0–0.6 | income_tax_schedule = :flat |  |
-| `capital_tax_rate` | Float64 | `0.15` | slider / number | 0–0.6 |  |  |
-| `government_employment_share` | Float64 | `0.10` | slider / number |  |  | of total person capacity |
-| `government_wage_in_breads` | Float64 | `2.0` | slider / number |  |  |  |
-| `government_wage_premium` | Float64 | `0.10` | slider / number |  |  | net wage for full-time = breads × (1 + premium) |
-| `unemployment_fee_in_breads` | Float64 | `2.0` | slider / number |  |  |  |
-| `minimum_fee_in_breads` | Float64 | `1.0` | slider / number |  |  |  |
-| `fee_reduction_interval` | Int | `3` | integer field |  |  |  |
-| `fee_reduction_rate` | Float64 | `0.10` | slider / number |  |  |  |
-| `employment_rounds_to_reset_fee` | Int | `3` | integer field |  |  |  |
-
-### Variants
-
-| parameter | type | default | widget | range / options | enabled by | meaning |
-|---|---|---|---|---|---|---|
-| `debt_dies_with_bank` | Bool | `false` | toggle |  |  |  |
-
-### Behavioural rules (viability study, 12 September 2026) — all off reproduces spec v2
-
-| parameter | type | default | widget | range / options | enabled by | meaning |
-|---|---|---|---|---|---|---|
-| `demand_based_targets` | Bool | `false` | toggle |  |  | producers plan output for the living population instead of the ±1 ratchet |
-| `planning_margin` | Float64 | `0.0` | slider / number | 0–0.5 | demand_based_targets | extra share of demand planned for (0.0 = plan exactly the population's meals) |
-| `plan_for_gluttony` | Bool | `false` | toggle |  | demand_based_targets | plan for the expected third loaves too (otherwise gluttony is a pure demand shock) |
-| `wage_ceiling_from_own_ask` | Bool | `false` | toggle |  |  | employer's maximum wage from the price it will ask for its output, not the market average |
-| `expected_price_from_asks` | Bool | `false` | toggle |  |  | when a good was not traded, expected price = mean posted ask (no frozen prices) |
-| `ask_increase_only_on_unmet_demand` | Bool | `false` | toggle |  |  | sellers raise the ask only when customers were turned away, not on a mere sell-out |
-| `offer_full_capacity` | Bool | `false` | toggle |  |  | persons offer all their capacity instead of the minimum that covers their needs |
-| `wage_reservation_net_of_tax` | Bool | `false` | toggle |  |  | worker's floor nets a meal after wage tax (the price vector was derived this way) |
-| `random_hiring_ties` | Bool | `false` | toggle |  |  | equal asks: random order (default: stable sort ⇒ agent-id order) |
-| `no_labour_tolerance` | Bool | `false` | toggle |  |  | unsold labour units always count as 'partly unsold' (tolerance is for goods) |
-| `partial_unemployment_fee` | Bool | `false` | toggle |  |  | fee pro rata to the unsold share of offered labour |
-| `credit_for_bread` | Bool | `false` | toggle |  |  | a person may promise a meal on credit when eligible for the loan (spec v1 §4.9 'borrowed if needed') |
-| `spoilage_aware_stocking` | Bool | `false` | toggle |  |  | stockers hold at most breads_per_meal × spoilage_age (nothing they buy will spoil) |
-| `distress_land_sales` | Bool | `false` | toggle |  |  | a hungry or indebted-in-arrears landholder sells one unit per round at a discount |
-| `distress_land_discount` | Float64 | `0.8` | slider / number |  | distress_land_sales |  |
-| `land_units_per_landowner_override` | Int | `0` | integer field |  | 0 = spec formula | 0 = spec formula floor((n − p)/(p − 1)) |
-| `land_per_person` | Float64 | `0.0` | slider / number | 0–4 | > 0 overrides both | total land = land_per_person × persons, shared equally by the landowners; 2 makes four loaves a head feasible on the land side |
-
-### Enterprise taxation (12 September 2026)
-
-| parameter | type | default | widget | range / options | enabled by | meaning |
-|---|---|---|---|---|---|---|
-| `enterprise_tax` | Symbol | `:none` | select | :none, :income, :reserves |  | :none | :income (on net operating cash flow minus interest; banks on interest received) | :reserves (on cash held at end of round) |
-| `enterprise_income_tax_rate` | Float64 | `0.10` | slider / number | 0–0.5 | enterprise_tax = :income |  |
-| `enterprise_reserve_tax_rate` | Float64 | `0.10` | slider / number | 0–0.2 | enterprise_tax = :reserves |  |
-| `reserve_tax_exempts_standard_reserve` | Bool | `false` | toggle |  | enterprise_tax = :reserves | :reserves — tax only cash above the standard working reserve |
-
-### Monetary system (SuMSy variant, 12 September 2026)
-
-| parameter | type | default | widget | range / options | enabled by | meaning |
-|---|---|---|---|---|---|---|
-| `monetary_system` | Symbol | `:debt` | select | :debt, :sumsy |  | :debt (bank credit creates money) | :sumsy (GI created, demurrage destroys, peer lending only) |
-| `guaranteed_income` | Float64 | `5.0` | slider / number | 0–15 | monetary_system = :sumsy | per person per round, fixed nominal (one bread at the initial price) |
-| `demurrage_rate` | Float64 | `0.02` | slider / number | 0–0.10 | monetary_system = :sumsy | per round, on balances above the buffer; destroys money |
-| `demurrage_tax_rate` | Float64 | `0.0` | slider / number |  | monetary_system = :sumsy | surcharge on the same base, transferred to the government |
-| `demurrage_free_buffer` | Float64 | `30.0` | slider / number | 0–60 | monetary_system = :sumsy | persons only (3 meals at initial prices); everyone else: 0 |
-| `initial_money_per_person` | Float64 | `30.0` | slider / number |  | monetary_system = :sumsy and initial_endowment = :none | debt-free initial money, created by the authority |
-| `start_at_saturation` | Symbol | `:none` | select | :none, :upper, :lower | monetary_system = :sumsy | :upper — every person starts at buffer + GI/d (stock N·b + N·GI/d); :lower — one person holds b + N·GI/d, the rest nothing |
-| `initial_price_multiplier` | Float64 | `1.0` | slider / number | 0.3–3 |  | scales the initial price vector (a saturated village runs at about 0.63 of the starting level) |
-| `account_fee_person` | Float64 | `0.5` | slider / number |  |  | per round, promised to the person's bank at clearing |
-| `account_fee_enterprise` | Float64 | `1.5` | slider / number |  |  |  |
-| `peer_lending` | Bool | `true` | toggle |  | monetary_system = :sumsy |  |
-| `peer_loan_rate` | Float64 | `-0.01` | slider / number | −0.05–0.05 | monetary_system = :sumsy | borrower's rate per round (negative: lending beats demurrage) |
-| `bank_spread` | Float64 | `0.005` | slider / number | 0–0.02 | monetary_system = :sumsy | lender receives peer_loan_rate − bank_spread |
-| `affordability_pricing` | Bool | `false` | toggle |  |  | a seller who turned buyers away for lack of cash cuts its ask towards their cash, above its cost floor |
-| `indexed_pricing` | Bool | `false` | toggle |  |  | wage, grain and rent asks/bids are re-expressed in bread units every round |
-| `wage_reservation_net_of_gi` | Bool | `false` | toggle |  | monetary_system = :sumsy | SuMSy: the worker's floor covers only the part of the meal the GI does not |
-| `reserve_pricing` | Bool | `false` | toggle |  |  | producers cut their ask (to the cost floor) while cash exceeds the working reserve, raise it when below half of it |
-| `reserve_pricing_step` | Float64 | `0.05` | slider / number |  | reserve_pricing |  |
-| `wage_reservation_includes_savings` | Bool | `false` | toggle |  |  | the worker's floor also covers building the savings buffer (3 meals) over savings_build_rounds |
-| `savings_build_rounds` | Int | `10` | integer field | 1–50 | wage_reservation_includes_savings |  |
-
-### Initial endowment (12 September 2026): every actor starts at its stock-flow norm
-
-| parameter | type | default | widget | range / options | enabled by | meaning |
-|---|---|---|---|---|---|---|
-| `initial_endowment` | Symbol | `:none` | select | :none, :norm |  | :none | :norm — persons: savings target (3 meals); farms/bakeries: standard working reserve |
-| `startup_loan_term` | Int | `50` | integer field | 10–200 | initial_endowment = :norm and monetary_system = :debt | :debt — enterprises borrow the endowment (own reserve + the persons' share) and pay it out |
-| `inherited_money` | Bool | `false` | toggle |  | monetary_system = :debt and initial_endowment = :norm | villagers start with the SuMSy starting cash debt-free — residual money of deceased villagers whose loans were written off (booked against the banks' net worth, not their operating funds) |
-| `startup_loan_rate` | Float64 | `0.005` | slider / number |  | initial_endowment = :norm and monetary_system = :debt |  |
-| `land_loans` | Bool | `false` | toggle |  |  | land may be bought on credit (collateral: the land itself, seized after 2 rounds of arrears) |
-| `bread_loan_term` | Int | `0` | integer field |  | credit_for_bread | persons' clearing credit (meals) at this term; 0 = loan_term_in_rounds |
-| `land_sales` | Symbol | `:forced` | select | :forced, :distress_only, :reservation |  | :forced (spec: any buyer with surplus takes a unit) | :distress_only | :reservation (seller sells only above the value of the rent stream) |
-| `land_reservation_multiple` | Float64 | `100.0` | slider / number | 10–400 | land_sales = :reservation and monetary_system = :debt | :reservation, debt money: rounds of rent a landowner wants for a unit; SuMSy uses rent / demurrage_rate |
-
-### Deposit interest (debt system): paid by the account holder's bank from retained interest
-
-| parameter | type | default | widget | range / options | enabled by | meaning |
-|---|---|---|---|---|---|---|
-| `deposit_interest_rate` | Float64 | `0.0` | slider / number | 0–0.05 | monetary_system = :debt | per payout period, on the average end-of-round balance over the period |
-| `deposit_interest_period` | Int | `1` | integer field |  | deposit_interest_rate > 0 | rounds between payouts (1 = every round; 12 = yearly) |
-| `loyalty_bonus_rate` | Float64 | `0.0` | slider / number | 0–0.1 | monetary_system = :debt | per period, on the lowest end-of-round balance over the period |
-| `deposit_interest_to_enterprises` | Bool | `false` | toggle |  | deposit_interest_rate > 0 | business accounts earn nothing unless switched on |
-
-### Instalment purchases (SuMSy): seller-financed land sales, paid in equal instalments, land as collateral
-
-| parameter | type | default | widget | range / options | enabled by | meaning |
-|---|---|---|---|---|---|---|
-| `instalment_purchases` | Bool | `false` | toggle |  | monetary_system = :sumsy |  |
-| `instalment_rounds` | Int | `20` | integer field | 5–60 | instalment_purchases |  |
-| `deferred_payment` | Bool | `false` | toggle |  | share_market | a share buyer short of cash may pay in instalments; the seller finances it (bank keeps its spread), shares as collateral |
-| `deferred_payment_rounds` | Int | `20` | integer field | 5–60 | deferred_payment |  |
-| `deferred_payment_rate` | Float64 | `NaN` | slider / number | −0.02–0.02 | deferred_payment | NaN = peer_loan_rate under SuMSy (−1 %), 0.5 % a round under debt money |
-
-### Buffer pool and default insurance (SuMSy, 12 September 2026)
-
-| parameter | type | default | widget | range / options | enabled by | meaning |
-|---|---|---|---|---|---|---|
-| `buffer_lending` | Bool | `false` | toggle |  | monetary_system = :sumsy | persons may lend part of their demurrage-free buffer to their bank (exemption moves with the money) |
-| `buffer_lending_participation` | Float64 | `0.5` | slider / number | 0–1 | buffer_lending | share of persons who opt in |
-| `buffer_lend_fraction` | Float64 | `0.5` | slider / number | 0–1 | buffer_lending | share of the buffer a participant lends |
-| `buffer_lender_spread_discount` | Float64 | `0.5` | slider / number |  | buffer_lending | participants pay this fraction less of the bank spread when they borrow |
-| `default_insurance` | Bool | `false` | toggle |  | monetary_system = :sumsy and instalment_purchases | instalment sellers pay a premium; the bank covers missed instalments from its reserves and takes over the claim |
-| `insurance_premium_rate` | Float64 | `0.02` | slider / number |  | default_insurance | share of each instalment paid by the insured seller to the bank |
-
-### Harvest shock
-
-| parameter | type | default | widget | range / options | enabled by | meaning |
-|---|---|---|---|---|---|---|
-| `harvest_shock_start` | Int | `0` | integer field |  |  | 0 = no shock |
-| `harvest_shock_length` | Int | `3` | integer field |  | harvest_shock_start > 0 |  |
-| `harvest_shock_factor` | Float64 | `0.5` | slider / number | 0–1 | harvest_shock_start > 0 |  |
-
-### Government bonds (13 September 2026): sold to surplus holders through the bank before any bank credit
-
-| parameter | type | default | widget | range / options | enabled by | meaning |
-|---|---|---|---|---|---|---|
-| `government_bonds` | Bool | `false` | toggle |  | monetary_system = :debt |  |
-| `bond_term_long` | Int | `60` | integer field |  | government_bonds |  |
-| `bond_term_short` | Int | `12` | integer field |  | government_bonds |  |
-
-### Income tax schedule (13 September 2026). :belgian — brackets as shares of the full-time gross wage (median gross ≈ €45k):
-
-*social contributions 13.07 % first, then 25/40/45/50 % on taxable income above 0.363/0.64/1.108 × reference, a 25 % credit on an allowance of 0.242 × reference, and a 7 % municipal surcharge. Wage tax only; rent keeps capital_tax_rate.*
-
-| parameter | type | default | widget | range / options | enabled by | meaning |
-|---|---|---|---|---|---|---|
-| `income_tax_schedule` | Symbol | `:flat` | select | :flat, :belgian |  |  |
-| `social_contribution_rate` | Float64 | `0.1307` | slider / number |  | income_tax_schedule = :belgian |  |
-| `tax_free_share` | Float64 | `0.242` | slider / number |  | income_tax_schedule = :belgian |  |
-| `tax_bracket_edges` | Vector{Float64} | `[0.363, 0.640, 1.108]` | table editor |  | income_tax_schedule = :belgian |  |
-| `tax_bracket_rates` | Vector{Float64} | `[0.25, 0.40, 0.45, 0.50]` | table editor |  | income_tax_schedule = :belgian |  |
-| `municipal_surcharge` | Float64 | `0.07` | slider / number |  | income_tax_schedule = :belgian |  |
-
-### Entertainment (13 September 2026): a pure service, labour only
-
-| parameter | type | default | widget | range / options | enabled by | meaning |
-|---|---|---|---|---|---|---|
-| `entertainment` | Bool | `false` | toggle |  |  |  |
-| `number_of_theatres` | Int | `1` | integer field |  | entertainment |  |
-| `customers_per_labour_unit` | Float64 | `2.5` | slider / number | 1–20 | entertainment | 10 customers per full-time job at capacity 4 |
-| `max_tickets_per_person` | Int | `3` | integer field |  | entertainment | 1–3 tickets a round, at random within what cash above the buffer allows |
-| `entertainment_propensity` | Float64 | `1.0` | slider / number | 0–1 | entertainment | probability a person who can afford a ticket wants one |
-| `plan_for_tickets` | Bool | `true` | toggle |  | entertainment | theatres plan hiring on expected ticket demand (like bakeries on gluttony) |
-
-### Clearing switch (13 September 2026): true = all intra-round payments are promises netted at clearing (spec v2 addendum);
-
-*false = every payment is settled immediately (cash, then credit, the unpaid tail becomes a trade arrear)*
-
-| parameter | type | default | widget | range / options | enabled by | meaning |
-|---|---|---|---|---|---|---|
-| `clearing` | Bool | `true` | toggle |  |  |  |
-
-### Ownership (13 September 2026)
-
-| parameter | type | default | widget | range / options | enabled by | meaning |
-|---|---|---|---|---|---|---|
-| `ownership` | Symbol | `:none` | select | :none, :cooperative, :shareholders, :mixed |  | :none | :cooperative (every person holds an equal share of every producer) | :shareholders (a few persons hold all shares) | :mixed (cooperative_* producers are co-ops, the rest shareholder-owned) |
-| `shareholder_count` | Int | `2` | integer field |  | ownership ≠ :none | :shareholders / :mixed — persons (lowest ids) who hold the shares |
-| `cooperative_farms` | Int | `2` | integer field |  | ownership = :mixed | :mixed |
-| `cooperative_bakeries` | Int | `2` | integer field |  | ownership = :mixed |  |
-| `cooperative_theatres` | Int | `0` | integer field | 0–number_of_theatres | ownership = :mixed and entertainment | theatres were for-profit only before 14 September 2026 |
-| `cooperative_form_farms` | Symbol | `:member` | select | :member, :worker | ownership ∈ (:cooperative, :mixed) | :member (the 13 September rule: open membership at par, one equal dividend per member) | :worker (membership follows employment, surplus by hours worked, taxed as wages). Farms cannot be consumer co-ops: they sell to bakeries, not persons |
-| `cooperative_form_bakeries` | Symbol | `:member` | select | :member, :worker, :consumer | ownership ∈ (:cooperative, :mixed) | as above; :consumer = membership follows purchases, surplus as an untaxed patronage rebate by units bought |
-| `cooperative_form_theatres` | Symbol | `:member` | select | :member, :worker, :consumer | cooperative_theatres > 0 | as above |
-| `patronage_window` | Int | `12` | integer field | 1–50 | any :worker / :consumer form | rounds of hours or purchases a distribution and the lapse rule are measured over |
-| `retained_surplus_share` | Float64 | `0.25` | slider / number | 0–0.9 | any :worker / :consumer form | share of every distribution locked in the indivisible reserve (never distributed; to the government on dissolution). Under SuMSy it pays demurrage like any balance |
-| `capital_deduction_share` | Float64 | `0.10` | slider / number | 0–1 | :worker form | share of each net wage withheld until the membership share is paid |
-| `membership_lapse_rounds_worker` | Int | `6` | integer field | 1–50 | :worker form | grace period before a member without hours is redeemed |
-| `membership_lapse_rounds_consumer` | Int | `12` | integer field | 1–50 | :consumer form | grace period before a member without purchases is redeemed |
-| `minimum_member_hours` | Float64 | `0.5` | slider / number | 0–4 | :worker form | average units a round below which worker membership lapses |
-| `members_first_hiring` | Bool | `true` | toggle |  | :worker form | members' capacity is allocated before the open market and the work spread over them in proportion to capacity; bakery members reserve capacity at the start of the round |
-| `member_price_awareness` | Bool | `true` | toggle |  | :consumer form | members rank sellers by ask net of the expected rebate |
-| `cooperative_founding` | Symbol | `:par_only` | select | :par_only, :symmetric | ownership ∈ (:cooperative, :mixed) | :symmetric — a cooperative short of capital calls on its members (spare cash first, then a personal loan), as a shareholder firm's founders are; :par_only — the cooperative borrows itself |
-| `membership_contribution` | Symbol | `:money` | select | :money, :buffer, :mixed_fixed, :mixed_flexible | ownership ∈ (:cooperative, :mixed) | what a member brings in: money at par; a pledge of demurrage-free buffer (no money moves, the exemption does); both; or one total split as the member chooses (idle buffer first, then money). A pledge is worth nothing under debt money: :buffer is then free and :mixed_flexible costs its money half |
-| `membership_buffer_pledge` | Float64 | `10.0` | slider / number | 0–demurrage_free_buffer | membership_contribution ≠ :money | buffer requirement, in currency units of exemption |
-| `buffer_contribution_value` | Float64 | `1.0` | slider / number | 0–5 | membership_contribution = :mixed_flexible | money a unit of pledged buffer counts for (0 under debt money) |
-| `dividend_build_rounds` | Int | `10` | integer field | 1–50 | ownership ≠ :none | cash above the reserve target is paid out over this many rounds |
-| `dividend_tax_rate` | Float64 | `0.30` | slider / number | 0–0.5 | ownership ≠ :none | Belgian withholding tax on dividends |
-| `share_market` | Bool | `false` | toggle |  | ownership ∈ (:shareholders, :mixed) | shareholder enterprises' shares trade once a round |
-| `shares_per_person` | Int | `0` | integer field | 0–100 | share_market | share units per firm = this × number of persons (0 = 100 units per firm), so every villager could hold shares |
-| `startup_financing` | Symbol | `:enterprise_loans` | select | :enterprise_loans, :paid_in_capital | ownership ≠ :none | :enterprise_loans (businesses borrow their own start) | :paid_in_capital (owned businesses start empty; founders borrow personally and pay capital in; co-ops raise membership capital) |
-| `membership_share_price` | Float64 | `10.0` | slider / number |  | ownership ∈ (:cooperative, :mixed) and startup_financing = :paid_in_capital | a cooperative share, at par (one meal at initial prices) |
-| `cooperative_join_probability` | Float64 | `0.5` | slider / number | 0–1 | same as membership_share_price | a person with surplus who is not yet a member joins one cooperative a round with this probability |
-| `required_yield` | Float64 | `0.01` | slider / number | 0.001–0.05 | share_market | base required dividend yield per round; a person's own yield is drawn once around it |
-| `required_yield_dispersion` | Float64 | `0.0` | slider / number | 0–0.01 | share_market | half-width of the per-person spread (0 = everyone values a firm alike → no voluntary trades) |
-| `forward_valuation` | Bool | `false` | toggle |  | share_market | value a firm by its expected dividends after its loans are repaid, not by trailing dividends and book |
-| `founder_minimum_stake` | Float64 | `0.51` | slider / number | 0–1 | share_market | founders together keep at least this fraction of each firm |
-| `expected_price_growth` | Float64 | `0.0` | slider / number | 0–0.01 | share_market | per round; buyers' valuation = dividend / (own yield − this) — the resale-expectation term, off by default |
-| `share_step` | Float64 | `0.05` | slider / number |  | share_market | ask/bid adaptation per round |
-| `arrears_de_minimis_in_meals` | Float64 | `0.01` | slider / number |  |  | a shortfall smaller than this share of a meal is not a missed payment |
-| `closure_debt_threshold_in_breads` | Float64 | `1.0` | slider / number |  |  | an enterprise with nothing left to seize is closed only if the uncovered debt exceeds this |
-
-### Greed (13 September 2026): a property of persons, above their own reserve
-
-| parameter | type | default | widget | range / options | enabled by | meaning |
-|---|---|---|---|---|---|---|
-| `greed` | Bool | `false` | toggle |  |  |  |
-| `greed_share` | Float64 | `0.25` | slider / number | 0–1 | greed | share of persons who are greedy |
-| `greed_hoarding` | Float64 | `0.5` | slider / number | 0–1 | greed | every greedy person is both: each act of greed goes to capital with this probability (most profitable of land, shares, cash first), to consumption (a loaf or a ticket, coin flip) otherwise |
-| `greed_selection` | Symbol | `:rich` | select | :rich, :random | greed | :rich (the wealthiest at the founding) | :random |
-| `greedy_max_breads_per_round` | Int | `10` | integer field | 3–20 | greed | replaces the 3-loaf ceiling for greedy consumers (eaten, not stocked) |
-| `greedy_max_tickets_per_round` | Int | `10` | integer field | 3–20 | greed | replaces the 3-ticket ceiling |
-
-### Bread rationing (13 September 2026): stage one, everyone up to the ration; stage two, leftovers to the greedy
-
-| parameter | type | default | widget | range / options | enabled by | meaning |
-|---|---|---|---|---|---|---|
-| `bread_rationing` | Bool | `false` | toggle |  |  |  |
-| `ration_breads_per_person` | Int | `4` | integer field | 2–10 | bread_rationing | lowered to what the shelves can give everyone, never below a meal |
-| `tiered_bread_price` | Bool | `false` | toggle |  |  | loaves beyond the ration sell at a second posted price that rises on unmet greed and falls on unsold leftovers (never below the ordinary price) |
-| `tier_step` | Float64 | `0.06` | slider / number |  | tiered_bread_price |  |
-| `no_self_service` | Bool | `false` | toggle |  | entertainment | a theatre's workers are not served at their own theatre that round |
-| `stop_when_half_dead` | Bool | `true` | toggle |  |  |  |
-| `stop_when_stationary` | Bool | `true` | toggle |  |  |  |
-
-### Run control
-
-| parameter | type | default | widget | range / options | enabled by | meaning |
-|---|---|---|---|---|---|---|
-| `random_streams` | Bool | `true` | toggle |  |  | one random stream per subsystem (negotiation, land, labour, grain, bread, tickets, greed, credit, estates, shares, cooperatives), each seeded from `seed` and its name; false = the single shared stream of runs before 18 September 2026 |
-| `maximum_rounds` | Int | `50` | integer field | 10–500 |  |  |
-| `government_reserve_in_rounds` | Int | `0` | integer field | 0–24 |  | 0 = the government keeps whatever tax exceeds spending (under SuMSy it pays demurrage on it; reached a fifth of the stock). n = a reserve of n rounds of expected spending (trailing mean of outlays over `government_expense_window`) |
-| `government_expense_window` | Int | `12` | integer field | 1–50 | reserve > 0 | rounds over which expected spending and revenue are averaged |
-| `surplus_redistribution_share` | Float64 | `0.0` | slider | 0–1 | reserve > 0 | share of the surplus above target paid out equally to every living person each round |
-| `surplus_tax_reduction_share` | Float64 | `0.0` | slider | 0–1 | reserve > 0 | share of the surplus returned by lowering taxes (through `tax_policy` when set, else in full) |
-| `tax_policy` | Symbol | `:none` | select | :none, :scale, :brackets | reserve > 0 | raises on a shortfall (spending above revenue plus the reserve gap), cuts on a surplus; :scale = one multiplier on all taxes; :brackets = each progressive bracket in proportion to its rate (needs `income_tax_schedule = :progressive`) |
-| `tax_response_coverage` | Float64 | `0.5` | slider | 0–1 | tax_policy ≠ :none | share of the shortfall a raise is sized to cover |
-| `tax_response_step` | Float64 | `0.02` | slider | 0.005–0.2 | tax_policy ≠ :none | largest relative change in revenue per round, both directions — the "no shocks" limit |
-| `bracket_fixed_rise` | Float64 | `0.0` | number | 0–0.05 | tax_policy = :brackets | points added to every bracket per step on top of the proportional rise |
-| `tax_scale_maximum` | Float64 | `3.0` | number | 1–10 | tax_policy ≠ :none | ceiling on the multiplier |
-| `bracket_rate_maximum` | Float64 | `0.9` | number | 0.5–1 | tax_policy = :brackets | ceiling on any bracket rate |
-| `consumption_tax_rate` | Float64 | `0.0` | slider | 0–0.3 |  | VAT on bread and tickets, paid by the buyer on top of the price and booked as government revenue; buyers' willingness to pay is gross. Belgium ≈ 6 % |
-| `tax_levers` | NamedTuple | `(income = 0, consumption = 0, wealth = 0)` | three numbers | any finite | tax_policy ≠ :none | shift then move: each family first goes by r × its lever (positive = with the policy, negative = against, 0 = none), then by r with the others. (0, 0, 0) = one scale; −1 holds a family flat; (−2, +1, 0) shifts the burden from income to consumption while the total follows the budget |
-| `wealth_tax_rate` | Float64 | `0.0` | slider | 0–0.3 |  | yearly rate on persons' land (at the land price) and shares (at book value per unit; co-op membership at capital paid), charged every round at rate ÷ `wealth_tax_rounds_per_year`, scaled by the fiscal policy; unpaid amounts carried as arrears |
-| `wealth_tax_rounds_per_year` | Int | `12` | integer field | 1–52 | wealth_tax_rate > 0 | rounds a year for the wealth tax. Its own scale: moved with the policy's r and by the shift |
-| `shows_per_round` | Int | `0` | integer field | 0–10 | entertainment | 0 = unlimited; a theatre sells at most shows × seats tickets a round and hires no more labour than that takes |
-| `seats_per_show` | Int | `0` | integer field | 0–N | shows > 0 | 0 = one seat per person at founding |
-| `unmet_demand_share` | Float64 | `0.0` | slider | 0–0.5 |  | 0 = one missed buyer raises the ask; s = the unserved units must be ≥ s of sold + unserved. Wages keep the one-miss rule |
-| `unsold_share` | Float64 | `0.0` | slider | 0–0.5 |  | 0 = more than `unsold_tolerance_units` left cuts the ask; s = the unsold units must be ≥ s of what was offered |
-| `ask_floor` | Symbol | `:none` | select | :none, :cost | | :cost = the posted ask never below unit cost (`seller_reservation` at age 0), plus `ask_floor_markup_when_short` while the reserve or buffer is not full |
-| `ask_floor_markup_when_short` | Float64 | `0.05` | slider | 0–0.5 | ask_floor = :cost | markup above cost while cash is below the reserve (producer) or buffer (person) |
-| `stationary_rounds` | Int | `5` | integer field |  | stop_when_stationary |  |
-| `stationary_tolerance` | Float64 | `0.01` | slider / number |  | stop_when_stationary |  |
-| `seed` | Int | `1` | integer field | 1–10⁶ |  |  |
-
-## 5. Validation and consistency rules
-
-- `number_of_landowners` ≥ 1 and ≤ `number_of_persons`; with `land_units_per_landowner_override = 0` the spec formula floor((n − p)/(p − 1)) must give at least one unit and total land must cover `number_of_persons` grain — the dashboard shows the resulting land total and warns when it is below the population's meals.
-- `breads_per_meal` ≤ `maximum_breads_per_round` ≤ `greedy_max_breads_per_round`; `ration_breads_per_person` ≥ `breads_per_meal`.
-- Under `monetary_system = :sumsy` the dashboard forces `wage_tax_rate = 0`, `capital_tax_rate = 0`, the unemployment fee to 0 and `partial_unemployment_fee = false` unless the user unlocks them (a SuMSy village with wage taxes is allowed but flagged as unusual); `demurrage_tax_rate` is the SuMSy tax.
-- `initial_endowment = :norm` with `startup_financing = :paid_in_capital` requires `ownership ≠ :none` (otherwise there are no founders to borrow the villagers' starting cash).
-- `share_market = true` requires `ownership ∈ (:shareholders, :mixed)`; `cooperative_farms ≤ number_of_farms`, `cooperative_bakeries ≤ number_of_bakeries`, `cooperative_theatres ≤ number_of_theatres`; `cooperative_form_farms ≠ :consumer`; `membership_contribution = :buffer` needs `membership_buffer_pledge > 0`; `0 ≤ retained_surplus_share < 1`. These are enforced at construction (`validate_cooperatives`).
-- `harvest_shock_start` + `harvest_shock_length` ≤ `maximum_rounds`; `bond_term_short` < `bond_term_long`; `tax_bracket_edges` strictly increasing with one more rate than edges.
-- `initial_production_target` should be about `number_of_persons` ÷ (2 × number of farms) for a village that feeds itself from round 1; the dashboard proposes this value when the population changes.
-- Runs that end early report why (`termination_reason`): everyone dead, half dead (if enabled), no farm or bakery left, stationary, maximum rounds.
-
-## 6. Run controls
-
-| control | default | notes |
+| tab | switch | enables |
 |---|---|---|
-| seeds | 1–6 | list or range; each seed is an independent replay; the same seeds are used for both sides in compare mode |
-| `maximum_rounds` | 50 | up to 500; a 16-person round takes milliseconds, a 1,000-person round about a second |
-| compare debt / SuMSy | on | runs the configured village under both systems with the system-specific defaults of Section 7 applied to the other side |
-| stop rules | `stop_when_half_dead`, `stop_when_stationary` | both off for fixed-length comparisons |
-| identity check | on | the money-accounting gap is reported per run and flagged if not zero to 1e-6 |
-| export | CSV of per-round data, JSON of parameters, PNG of every chart, a printable two-column comparison page in the report's format |
+| Village | `entertainment` | theatres, tickets, `number_of_theatres`, `shows_per_round`, `customers_per_labour_unit`, `theatre_seat_margin`, `volunteers_in_theatres` |
+| Village | `bread_rationing`, `tiered_bread_price` | rationing and its tiers |
+| Money | `monetary_system` (= :sumsy) | `guaranteed_income`, `demurrage_*`, the parking tax, peer lending, buffer pool, default insurance, instalments at a negative rate |
+| Money | `government_bonds` | bond terms, `bond_coupon` |
+| Money | `settlement` (= :invoicing) | `receivables_advance_rate`, `liquidation_*`, the invoice month |
+| Money | `interest_from_equity`, `bank_capital_ratio` > 0 | the capital reserve; `capital_constrains_lending` |
+| Money | `bank_rate_follows_inflation` | `bank_rate_inflation_cap` |
+| Money | `owner_guarantee` | `guarantee_write_off_rounds` |
+| Money | `bank_bailout` | the government behind the banks (off at steps 0–1) |
+| Government | `government_employment_share` > 0 | public jobs; `government_wage_*` |
+| Government | `unemployment_fee_in_breads` > 0 | the benefit; `minimum_fee_in_breads`, `fee_reduction_*`, `benefit_indexed`, `austerity_*` |
+| Government | `tax_policy` (≠ :none) | `tax_levers`, `tax_response_*`, `tax_scale_*` |
+| Government | `government_reserve_in_rounds` > 0 | the reserve rule, `surplus_tax_reduction_share`, `surplus_redistribution_share` (the dividend) |
+| Government | `public_debt_limit` > 0 | the debt ceiling, `public_spending_floor` |
+| Government | `public_project_start` > 0 | the public investment and its parameters |
+| Government | `land_levy` | `land_levy_margin`; requires the land market |
+| Prices | `fixed_prices` | freezes every price; disables the whole tab below it |
+| Prices | `land_pricing` (= :market) | the land market's discovery; `land_price_step`, `land_life_event_rate`, `instalment_bargaining` |
+| Labour | `wage_threshold`, `wage_cut_maximum` < 1 | the wage rules; `wage_floor_months`, `food_emergency_share` |
+| Labour | `employer_loyalty`, `notice_months` > 0 | continuity of employment; `notice_tenure_months` |
+| Labour | `minimum_labour_offer` > 0, `volunteer_share` > 0 | work as purpose; the commons measure |
+| Labour | `nonworking_share` > 0 | those not working for reasons of their own; `nonworking_hungry_share` |
+| Labour | `standard_of_living_tickets` > 0 | the standard of living |
+| Firms | `ownership` (≠ :none) | owners, shares, `founders`, `founding_equity`, `share_market`, the cooperative block |
+| Firms | `market_entry` | `entry_*` |
+| Firms | `refound_minimum` > 0 | restarts, `refound_cooldown` |
+| Land and gold | `gold_grams_per_villager` > 0 | the gold market and its parameters |
+| Behaviour variants | `greed` | `greed_share`, `greed_hoarding`, `greed_selection`, `greedy_max_*` |
+| Run control | `stop_when_half_dead`, `stop_when_stationary`, `stop_without_producers` | the stopping rules |
 
-## 7. Presets
+## 5. Parameter tabs
 
-A preset is a named parameter set. The ladder of the report is the first family; the user can save their own.
+Columns: *type* as in `SimulationParameters`; *default* as in the code (the ladder's `RULES` override many — the Run tab shows the ladder's values beside the code's); *sweep*: **yes** = a numeric or Boolean parameter that can be given a list or a range in a sweep; **list** = a Symbol that can be given a list of options; **no** = structured (a dictionary, a vector, a named tuple) — editable in a form, not swept. The *meaning* column is the comment from the code, shortened.
 
-| preset | what it sets |
-|---|---|
-| Original specification | all behaviour switches off (the code defaults) |
-| Behaviour rules (price of admission) | `demand_based_targets`, `wage_ceiling_from_own_ask`, `expected_price_from_asks`, `ask_increase_only_on_unmet_demand`, `random_hiring_ties`, `no_labour_tolerance`, `offer_full_capacity`, `credit_for_bread`, `spoilage_aware_stocking`, `distress_land_sales`, `wage_reservation_net_of_tax`, `initial_endowment = :norm`, `startup_loan_term = 60`, `land_sales = :reservation`, `maximum_capacity = 4`, `number_of_landowners = 4`, `land_units_per_landowner_override = 6`, `gluttony_probability = 0.1`, `plan_for_gluttony` |
-| Rung 0 bare bones | rules + no government activity, no benefit, no deposit interest, no theatre |
-| Rung 1 + planning margin | + `planning_margin = 0.1` |
-| Rung 2 + government | + taxes 15 %, benefit one meal for the fully idle, public jobs 10 % (SuMSy: `demurrage_tax_rate = 0.01`, public jobs 10 %) |
-| Rung 3 + interest on deposits | + yearly 1 % + 2 % loyalty (debt only) |
-| Rung 4 + theatre | + `entertainment` |
-| Rung 5 + bonds | + `government_bonds` (debt only) |
-| Rung 6 + charge on balances | + `enterprise_tax = :reserves`, 5 %, standard reserve exempt (debt only) |
-| Rung 7 + second theatre | `number_of_theatres = 2` |
-| Rung 8 + shareholders | + `ownership = :shareholders`, `share_market` |
-| Rung 9 co-ops vs profit | `number_of_farms = 4`, `number_of_bakeries = 4`, `ownership = :mixed`, `share_market`, `startup_financing = :paid_in_capital` |
-| Greed stress test | rung 8 + `greed`, `greed_share = 1` (with the hoarding slider, Section 9) |
-| SuMSy side defaults | `monetary_system = :sumsy`, `guaranteed_income = 5`, `demurrage_free_buffer = 30`, `demurrage_rate = 0.02`, account fees 0.5 / 1.5, `instalment_purchases`, `land_price_rent_multiple = 50`, taxes and benefit off |
-| 64-person village | `number_of_persons = 64`, `number_of_landowners = 16`, `land_per_person = 1.5`, `initial_production_target = 10`, `shares_per_person = 10`, `shareholder_count = 4`, two theatres |
-| 1,000-person village | `number_of_persons = 1000`, `number_of_landowners = 100`, `land_units_per_landowner_override = 12`, 5 farms, 4 bakeries, 3 banks, 2 theatres, `initial_production_target = 250`, `shareholder_count = 10` |
+### Village — 42 parameters
 
-## 8. Results
+| parameter | type | default | sweep | meaning |
+|---|---|---|---|---|
+| `number_of_banks` | Int | `2` | yes | Agents |
+| `number_of_farms` | Int | `3` | yes |  |
+| `number_of_bakeries` | Int | `3` | yes |  |
+| `number_of_persons` | Int | `16` | yes |  |
+| `number_of_landowners` | Int | `2` | yes |  |
+| `maximum_capacity` | Float64 | `3.0` | yes | Capacity, food and death |
+| `capacity_recovery_per_round` | Float64 | `2.0` | yes |  |
+| `half_meal_capacity_fraction` | Float64 | `2 / 3` | yes |  |
+| `rounds_without_food_until_death` | Int | `3` | yes |  |
+| `breads_per_grain` | Int | `2` | yes |  |
+| `breads_per_meal` | Int | `2` | yes |  |
+| `initial_breads_per_person` | Float64 | `2.0` | yes | bootstrap: everyone starts with one meal in stock |
+| `maximum_breads_per_round` | Int | `3` | yes | gluttony: up to this many breads eaten in a round |
+| `gluttony_probability` | Float64 | `0.10` | yes | chance a person who can pay cash eats a third bread |
+| `stocking_marginality` | Vector{Tuple{Int, Float64}} | `[(3, 1.0), (4, 0.5), (5, 0.3), (7, 0.15)]` | no | after gluttony: chance of one more bread while stock < units |
+| `spoilage_age_in_rounds` | Int | `3` | yes | Goods |
+| `initial_prices` | OrderedDict{Symbol, Float64} | `OrderedDict(:bread => 5.0, :grain => 5.2, :rent => 0.75, :wage => 3.92, :ticket => 2.0)` | no | static-consistent vector, see HANDOFF |
+| `initial_production_target` | Int | `6` | yes |  |
+| `initial_interest_rate` | Float64 | `0.05` | yes |  |
+| `demand_based_targets` | Bool | `false` | yes | producers plan output for the living population instead of the ±1 ratchet |
+| `planning_margin` | Float64 | `0.0` | yes | extra share of demand planned for (0.0 = plan exactly the population's meals) |
+| `plan_for_gluttony` | Bool | `false` | yes | plan for the expected third loaves too (otherwise gluttony is a pure demand shock) |
+| `spoilage_aware_stocking` | Bool | `false` | yes | stockers hold at most breads_per_meal × spoilage_age (nothing they buy will spoil) |
+| `land_per_person` | Float64 | `0.0` | yes | > 0: total land = land_per_person × persons, shared equally by the landowners (overrides the formula and the override); 2 makes four loaves a head feasible on t |
+| `initial_money_per_person` | Float64 | `30.0` | yes | debt-free initial money, created by the authority |
+| `initial_price_multiplier` | Float64 | `1.0` | yes | scales the initial price vector (a saturated village runs at a lower price level than a starting one) |
+| `initial_endowment` | Symbol | `:none` | list | :none \| :norm — persons: savings target (3 meals); farms/bakeries: standard working reserve |
+| `harvest_shock_start` | Int | `0` | yes | 0 = no shock |
+| `harvest_shock_length` | Int | `3` | yes |  |
+| `harvest_shock_factor` | Float64 | `0.5` | yes |  |
+| `entertainment` | Bool | `false` | yes | Entertainment (13 September 2026): a pure service, labour only |
+| `number_of_theatres` | Int | `1` | yes |  |
+| `customers_per_labour_unit` | Float64 | `2.5` | yes | 10 customers per full-time job at capacity 4 |
+| `entertainment_propensity` | Float64 | `1.0` | yes | probability a person who can afford a ticket wants one |
+| `plan_for_tickets` | Bool | `true` | yes | theatres plan hiring on expected ticket demand (like bakeries on gluttony) |
+| `shows_per_round` | Int | `0` | yes | Theatre capacity (20 September 2026). A theatre runs at most `shows_per_round` shows a round with `seats_per_show` seats each, so it can sell at most shows × se |
+| `theatre_seat_margin` | Float64 | `0.25` | yes | 21 September: with several theatres a seat per villager *per theatre* would be several times the village |
+| `bread_rationing` | Bool | `false` | yes | Bread rationing (13 September 2026): stage one, everyone up to the ration; stage two, leftovers to the greedy |
+| `ration_breads_per_person` | Int | `4` | yes | lowered to what the shelves can give everyone, never below a meal |
+| `tiered_bread_price` | Bool | `false` | yes | loaves beyond the ration sell at a second posted price that rises on unmet greed and falls on unsold leftovers (never below the ordinary price) |
+| `tier_step` | Float64 | `0.06` | yes |  |
+| `no_self_service` | Bool | `false` | yes | a theatre's workers are not served at their own theatre that round |
 
-**Metric cards** (per side, from each run's *last* round, averaged over seeds, with the range; runs that ended early are included at their last round and counted): persons alive; hungry person-rounds; persons without work per round; bread baked and needed; tickets per round; bread price, wage, rent, ticket price; money in circulation; public debt, private debt, and both as % of a year's GDP (GDP = bread sold × price + ticket revenue, annualised over the trailing twelve rounds, shown from round 12); government deficit % of GDP; Gini of cash and of net wealth among persons; enterprise cash against reserves; dividends paid; share trades and share price against book value; cooperative memberships and capital; founders' debt and capital; money-identity gap.
+### Money — 60 parameters
 
-**Per-round charts** (same scale on both sides): persons alive with the seed band and hungry bars; money in circulation; money, all debt and public debt as % of GDP (solid / dashed / dotted); prices and wages; output against need; unemployment and theatre labour; wealth by actor group (share of total and % of an equal share per actor); Gini of cash and of wealth; under SuMSy, guaranteed income created against demurrage destroyed; under greed runs, extra loaves and tickets per consumer and capital per hoarder.
+| parameter | type | default | sweep | meaning |
+|---|---|---|---|---|
+| `loan_term_in_rounds` | Int | `20` | yes | Credit |
+| `affordability_ratio` | Float64 | `0.8` | yes |  |
+| `government_rate_discount` | Float64 | `0.5` | yes |  |
+| `government_rate` | Float64 | `0.005` | yes | per round; the government's borrowing rate (a policy rate, about 6 % a year); NaN = the bank's marginal rate × government_rate_discount (a bank with a small loa |
+| `maximum_interest_rate` | Float64 | `0.05` | yes | per round; a ceiling on the rate a bank may set |
+| `capital_tax_rate` | Float64 | `0.15` | yes |  |
+| `debt_dies_with_bank` | Bool | `false` | yes | Variants |
+| `credit_for_bread` | Bool | `false` | yes | a person may promise a meal on credit when eligible for the loan (spec v1 §4.9 'borrowed if needed') |
+| `monetary_system` | Symbol | `:debt` | list | :debt (bank credit creates money) \| :sumsy (GI created, demurrage destroys, peer lending only) |
+| `guaranteed_income` | Float64 | `5.0` | yes | per person per round, fixed nominal (one bread at the initial price) |
+| `guaranteed_income_in_breads` | Float64 | `0.0` | yes | > 0: the income is this many loaves at the expected bread price each round (indexed; breaks the bounded money stock — a test, not a design) |
+| `demurrage_rate` | Float64 | `0.02` | yes | per round, on balances above the buffer; destroys money |
+| `demurrage_tax_rate` | Float64 | `0.0` | yes | surcharge on the same base, transferred to the government |
+| `demurrage_free_buffer` | Float64 | `30.0` | yes | persons only (3 meals at initial prices); everyone else: 0 |
+| `start_at_saturation` | Symbol | `:none` | list | SuMSy: :upper — every person starts at buffer + GI/d (all buffers used, stock N·b + N·GI/d); :lower — one person holds b + N·GI/d, the rest nothing; :equilibriu |
+| `peer_loan_rate` | Float64 | `-0.01` | yes | borrower's rate per round (negative: lending beats demurrage) |
+| `bank_spread` | Float64 | `0.005` | yes | lender receives peer_loan_rate − bank_spread |
+| `affordability_pricing` | Bool | `false` | yes | a seller who turned buyers away for lack of cash cuts its ask towards their cash, above its cost floor |
+| `deposit_interest_rate` | Float64 | `0.0` | yes | per payout period, on the average end-of-round balance over the period |
+| `deposit_interest_period` | Int | `1` | yes | rounds between payouts (1 = every round; 12 = yearly) |
+| `loyalty_bonus_rate` | Float64 | `0.0` | yes | per period, on the lowest end-of-round balance over the period |
+| `deposit_interest_to_enterprises` | Bool | `false` | yes | business accounts earn nothing unless switched on |
+| `instalment_purchases` | Bool | `false` | yes | Instalment purchases (SuMSy): seller-financed land sales, paid in equal instalments, land as collateral |
+| `instalment_rounds` | Int | `20` | yes |  |
+| `buffer_lending` | Bool | `false` | yes | persons may lend part of their demurrage-free buffer to their bank (exemption moves with the money) |
+| `buffer_lending_participation` | Float64 | `0.5` | yes | share of persons who opt in |
+| `buffer_lend_fraction` | Float64 | `0.5` | yes | share of the buffer a participant lends |
+| `buffer_lender_spread_discount` | Float64 | `0.5` | yes | participants pay this fraction less of the bank spread when they borrow |
+| `default_insurance` | Bool | `false` | yes | instalment sellers pay a premium; the bank covers missed instalments from its reserves and takes over the claim |
+| `bond_term_long` | Int | `60` | yes |  |
+| `bond_term_short` | Int | `12` | yes |  |
+| `bond_coupon` | Float64 | `NaN` | yes | The coupon (28 September, Stef): NaN = the market rule (midpoint of the deposit rate and the government's bank rate); a number = a coupon the government sets, p |
+| `capital_deduction_share` | Float64 | `0.10` | yes | worker cooperative: share of each net wage collected towards the membership share |
+| `buffer_contribution_value` | Float64 | `1.0` | yes | money a unit of pledged buffer counts for under :mixed_flexible (0 under debt money) |
+| `receivables_advance_rate` | Float64 | `0.8` | yes | Liquidation (design §2): a producer whose invoices overdue by `liquidation_overdue_rounds` or more reach `liquidation_arrears_share` of its book value is sold a |
+| `bank_customers_per_labour_unit` | Int | `0` | yes | Bank staff (22 September): 0 = one unit of labour per bank, as before. k > 0 = one unit per k villagers the bank serves, so a bank's wage bill grows with its cu |
+| `instalment_bargaining` | Float64 | `0.5` | yes | Seller credit on land (24 September): the monthly rate is a market decision between the seller's best alternative for the money and the buyer's best alternative |
+| `owner_guarantee` | Bool | `false` | yes | Owners' guarantee (28 September, Stef): a failed firm's bank loans are not written off but pass to its owners in proportion to their shares (or members equally) |
+| `guarantee_write_off_rounds` | Int | `6` | yes |  |
+| `interest_from_equity` | Bool | `false` | yes | Deposit interest only from equity (28 September, Stef): a bank pays what its retained interest AND its net worth allow — the effective rate can fall to zero, ne |
+| `bank_capital_ratio` | Float64 | `0.0` | yes | A capital requirement (28 September, Stef; the Basel accords): a bank keeps equity of at least `bank_capital_ratio` × its risk-weighted loans — private loans at |
+| `capital_constrains_lending` | Bool | `false` | yes |  |
+| `bank_rate_follows_inflation` | Bool | `false` | yes |  |
+| `bank_rate_inflation_cap` | Float64 | `0.10` | yes |  |
+| `founding_loan_term` | Int | `60` | yes | Founding loans on business terms (24 September): a founder borrows for their share of the founding equity only what passes the affordability test over `founding |
+| `collection_floor_in_breads` | Float64 | `1.0` | yes | A protected minimum on debt collection (24 September; cf. the legal limits on garnishment): loan repayment and garnishment never take a person's cash below this |
+| `bank_bailout` | Bool | `true` | yes | a bank whose net worth goes below zero is recapitalised by the government (failure: a future option) |
+| `peer_loan_insurance` | Bool | `false` | yes | SuMSy: every peer loan is insured (premium on repayments to the bank's pool; the pool covers a struck loan, the rest is the lenders' loss) |
+| `interbank_rate_discount` | Float64 | `0.5` | yes | bank-to-bank loans at discount × lender's rate |
+| `arrears_rounds_until_seizure` | Int | `2` | yes |  |
+| `garnishment_rate` | Float64 | `0.25` | yes |  |
+| `peer_lending` | Bool | `true` | yes |  |
+| `inherited_money` | Bool | `false` | yes | debt money: villagers start with the SuMSy starting cash debt-free — residual money of deceased villagers whose loans were written off (booked against the banks |
+| `bread_loan_term` | Int | `0` | yes | persons' clearing credit (meals) at this term; 0 = loan_term_in_rounds |
+| `deferred_payment` | Bool | `false` | yes | a share buyer short of cash may pay in instalments; the seller finances it at deferred_payment_rate (bank keeps its spread) |
+| `deferred_payment_rounds` | Int | `20` | yes |  |
+| `deferred_payment_rate` | Float64 | `NaN` | yes | NaN = peer_loan_rate under SuMSy (−1 %), 0.5 % a round under debt money |
+| `insurance_premium_rate` | Float64 | `0.02` | yes | share of each instalment paid by the insured seller to the bank |
+| `account_fee_person` | Float64 | `0.5` | yes | per round, promised to the person's bank at clearing |
+| `account_fee_enterprise` | Float64 | `1.5` | yes |  |
 
-**Tables**: the per-round CSV (`round_data`), the event log filtered by kind (loans, refusals, seizures, closures, share trades, memberships, dividends), and the end state of every agent.
+### Government — 50 parameters
 
-## 9. Staged changes (not yet in the code; the dashboard should reserve the widgets)
+| parameter | type | default | sweep | meaning |
+|---|---|---|---|---|
+| `surplus_reserve_multiple` | Float64 | `2.0` | yes |  |
+| `wage_tax_rate` | Float64 | `0.15` | yes | Government |
+| `government_employment_share` | Float64 | `0.1` | yes |  |
+| `public_project_start` | Int | `0` | yes | A public investment (3 October, Stef — public transport): from `public_project_start` the government employs `public_project_labour_share` of the village's capa |
+| `public_project_build_months` | Int | `60` | yes |  |
+| `public_project_labour_share` | Float64 | `0.05` | yes |  |
+| `public_project_fare_in_breads` | Float64 | `0.50` | yes | of total person capacity |
+| `government_wage_in_breads` | Float64 | `2.0` | yes |  |
+| `government_wage_premium` | Float64 | `0.10` | yes | net wage for full-time = breads × (1 + premium) |
+| `unemployment_fee_in_breads` | Float64 | `2.0` | yes |  |
+| `austerity_start` | Int | `0` | yes | Austerity (30 September, Stef): from `austerity_start` the benefit tapers over `austerity_months` to `austerity_fee_in_breads` loaves and stays there (0 = no au |
+| `austerity_months` | Int | `6` | yes |  |
+| `austerity_fee_in_breads` | Float64 | `1.0` | yes |  |
+| `minimum_fee_in_breads` | Float64 | `1.0` | yes |  |
+| `fee_reduction_interval` | Int | `3` | yes |  |
+| `fee_reduction_rate` | Float64 | `0.10` | yes |  |
+| `employment_rounds_to_reset_fee` | Int | `3` | yes |  |
+| `partial_unemployment_fee` | Bool | `false` | yes | fee pro rata to the unsold share of offered labour |
+| `government_reserve_in_rounds` | Int | `0` | yes | Government reserve (20 September 2026). 0 = the rule until now: whatever tax exceeds spending sits on the government's balance (under SuMSy it pays demurrage th |
+| `government_expense_window` | Int | `12` | yes |  |
+| `surplus_redistribution_share` | Float64 | `0.0` | yes |  |
+| `surplus_tax_reduction_share` | Float64 | `0.0` | yes |  |
+| `consumption_tax_rate` | Float64 | `0.0` | yes | Fiscal policy (20 September 2026): taxes that move in both directions, incrementally. The shortfall a round is what spending exceeds revenue by (trailing means  |
+| `tax_levers` | NamedTuple | `(income = 0.0, consumption = 0.0, wealth = 0.0, profit = 0.0, parking = 0.0, land = 0.0)` | no | land: the land levy (24 Sept) |
+| `income_tax_period` | Int | `1` | yes | Collection periods (design §3): 1 = every month, as before; 12 = accrued through the year and charged in the twelfth month. Monthly withholding with a yearly ba |
+| `profit_tax_rate` | Float64 | `0.0` | yes | Profit tax (design §3): per period, revenue − `deductible_materials` × (materials, rent and interest) − `deductible_labour` × wages, never below 0 (no loss carr |
+| `profit_tax_period` | Int | `1` | yes |  |
+| `wealth_tax_rate` | Float64 | `0.0` | yes | per year, on book value of land and shares held by persons |
+| `wealth_tax_rounds_per_year` | Int | `12` | yes |  |
+| `tax_policy` | Symbol | `:none` | list |  |
+| `tax_response_coverage` | Float64 | `0.5` | yes | share of the shortfall a raise is sized to cover |
+| `tax_response_step` | Float64 | `0.02` | yes | largest relative change in revenue per round (2 % = incremental) |
+| `bracket_fixed_rise` | Float64 | `0.0` | yes | :brackets — points added to every bracket per step, on top of the proportional rise |
+| `tax_scale_maximum` | Float64 | `3.0` | yes | :scale — the multiplier never exceeds this (statutory rates × 3) |
+| `bracket_rate_maximum` | Float64 | `0.9` | yes | :brackets — no bracket rate above this |
+| `government_bonds` | Bool | `false` | yes | Government bonds (13 September 2026): sold to surplus holders through the bank before any bank credit |
+| `income_tax_schedule` | Symbol | `:flat` | list | Income tax schedule (13 September 2026). :belgian — brackets as shares of the full-time gross wage (median gross ≈ €45k): social contributions 13.07 % first, th |
+| `tax_free_share` | Float64 | `0.242` | yes |  |
+| `tax_bracket_edges` | Vector{Float64} | `[0.363, 0.640, 1.108]` | no |  |
+| `tax_bracket_rates` | Vector{Float64} | `[0.25, 0.40, 0.45, 0.50]` | no |  |
+| `dividend_tax_rate` | Float64 | `0.30` | yes | Belgian withholding tax on dividends |
+| `land_levy` | Bool | `false` | yes | A levy on land (24 September; Gesell's Freiland as a variant): each month landholders pay `land_levy_rate` × the value of their land to the government. With `la |
+| `land_levy_margin` | Float64 | `0.0025` | yes |  |
+| `land_levy_rate` | Float64 | `0.0` | yes | A levy on land holdings (24 September, the Freiland variant): each month every landholder pays `land_levy_rate` × the value of its land at the current price, to |
+| `benefit_indexed` | Bool | `true` | yes | Banks price inflation into their lending rate (26 September): the cost-covering rate plus the trailing twelve-month rise in the bread price, per month, up to `b |
+| `public_debt_limit` | Float64 | `0.0` | yes |  |
+| `public_spending_floor` | Float64 | `0.25` | yes |  |
+| `tax_scale_minimum` | Float64 | `0.05` | yes | The reserve rule without a tax policy never scales taxes below this (25 September, review 6: at 0 they could never recover). |
+| `social_contribution_rate` | Float64 | `0.1307` | yes |  |
+| `municipal_surcharge` | Float64 | `0.07` | yes |  |
 
-- *(done 14 September)* `land_per_person` and `greed_hoarding` are now in the code and in the tables above; `greed_hoarder_fraction` is gone.
-- A *sweep* control: run one parameter across a list of values (e.g. `greed_hoarding` 0, 0.25, 0.5, 0.75, 1) and chart the metric cards against it.
+### Prices and bargaining — 31 parameters
 
-## 10. Change log
+| parameter | type | default | sweep | meaning |
+|---|---|---|---|---|
+| `negotiation_steps` | Int | `6` | yes |  |
+| `ask_increase_after_sellout` | Float64 | `0.06` | yes |  |
+| `ask_decrease_after_partial_sale` | Float64 | `0.06` | yes |  |
+| `ask_decrease_when_idle` | Vector{Float64} | `[0.15, 0.30, 0.45]` | no | desperation: consecutive idle rounds |
+| `bid_decrease_after_success` | Float64 | `0.03` | yes |  |
+| `bid_increase_when_starved` | Vector{Float64} | `[0.06, 0.12, 0.25]` | no | consecutive rounds of missing out |
+| `bread_bid_base_multiplier` | Float64 | `1.3` | yes |  |
+| `ticket_max_in_breads` | Float64 | `Inf` | yes | Two limits on the price of leisure (28 September; the theatres set the wage level at step 4 — a full house raised its ticket price without end, and an employer' |
+| `employer_wage_margin` | Float64 | `Inf` | yes |  |
+| `unmet_demand_share` | Float64 | `0.0` | yes | Unmet demand (19 September 2026). Sellers raise their ask and their production target when demand went unmet. 0 = the original rule: one buyer who found nothing |
+| `unsold_share` | Float64 | `0.0` | yes | Unsold stock, the mirror image (20 September 2026): 0 = the original rule, a cut of `ask_decrease_after_partial_sale` whenever more than `unsold_tolerance_units |
+| `ask_floor` | Symbol | `:none` | list | Ask floor (20 September 2026). :none = the posted ask may decay without limit (only the negotiation floors it, and aged bread is discounted below cost); :cost = |
+| `ask_floor_markup_when_short` | Float64 | `0.05` | yes |  |
+| `bread_bid_hunger_multiplier` | Float64 | `0.4` | yes |  |
+| `wage_ceiling_from_own_ask` | Bool | `false` | yes | employer's maximum wage from the price it will ask for its output, not the market average |
+| `expected_price_from_asks` | Bool | `false` | yes | when a good was not traded, expected price = mean posted ask (no frozen prices) |
+| `ask_increase_only_on_unmet_demand` | Bool | `false` | yes | sellers raise the ask only when customers were turned away, not on a mere sell-out |
+| `reserve_pricing` | Bool | `false` | yes | producers cut their ask (to the cost floor) while cash exceeds the working reserve, raise it when below half of it |
+| `reserve_pricing_step` | Float64 | `0.05` | yes |  |
+| `expected_price_growth` | Float64 | `0.0` | yes | per round; buyers' valuation = dividend / (own yield − this) — the resale-expectation term, off by default |
+| `wage_ceiling_in_breads` | Float64 | `0.0` | yes | incomes policy: no employer pays more than this many loaves per full-time round of work (0 = off); binds bids and the surplus-to-wages rule |
+| `fixed_prices` | Bool | `false` | yes | Fixed prices (26 September, Stef's question): every transaction at the starting price vector — no bargaining, no adaptation; only quantities move. Does a villag |
+| `minimum_concession_fraction` | Float64 | `0.25` | yes |  |
+| `maximum_concession_fraction` | Float64 | `0.40` | yes |  |
+| `unsold_tolerance_units` | Float64 | `2.0` | yes | unsold ≤ this (one grain-unit of bread) is not 'partly unsold' |
+| `bread_price_ageing_discount` | Float64 | `0.40` | yes |  |
+| `farm_maximum_rent_fraction_of_grain_price` | Float64 | `0.6` | yes |  |
+| `bakery_grain_wage_fraction` | Float64 | `0.5` | yes |  |
+| `indexed_pricing` | Bool | `false` | yes | wage, grain and rent asks/bids are re-expressed in bread units every round |
+| `max_tickets_per_person` | Int | `3` | yes | 1–3 tickets a round, at random within what cash above the buffer allows |
+| `seats_per_show` | Int | `0` | yes | 0 = villagers ÷ theatres × (1 + theatre_seat_margin), so the theatres together seat the village plus the margin |
 
-- 20 September 2026 (night): the mix is a lever per tax family (`tax_levers`: shift by r × lever, then move by r; replacing the weights, which could only raise, and the sliders, whose shift the raise cancelled), the wealth tax in the mix with its own scale; `mix` block.
-- 20 September 2026 (latest): wealth tax on land and shares at book value (`wealth_tax_rate`, `wealth_tax_rounds_per_year`); `wealth` block. 428 tests.
-- 20 September 2026 (later): consumption tax (`consumption_tax_rate`, `consumption_tax_share`), scaled by the fiscal policy; `vat` block. 418 tests.
-- 20 September 2026: theatre capacity (`shows_per_round`, `seats_per_show`); unmet-demand and unsold thresholds; ask floor at cost; `start_at_saturation = :equilibrium`; government reserve with per-capita and tax-cut disposal; fiscal policy (`tax_policy` :scale / :brackets, incremental, both directions). Findings in `HANDOFF_2026-09-18.md`. 395 tests. `all64.jl` resumable, takes `<block> <seeds> <systems>`. Starting prices asserted identical across systems.
+### Labour — 26 parameters
 
-- 18 September 2026: one random stream per subsystem (`random_streams`); golden values regenerated as a second set, the 15 September set kept under `random_streams = false`; every cooperative run rerun. Membership contribution forms (`membership_contribution`, `membership_buffer_pledge`, `buffer_contribution_value`): a member may pledge demurrage-free buffer instead of money. 329 tests passing.
-- 14 September 2026 (cooperatives): three cooperative forms per kind (`cooperative_form_*`: :member kept as the original rule, :worker, :consumer), `cooperative_theatres`, patronage distribution with an indivisible reserve, members-first hiring with the work spread over members, membership out of wages, patronage rebates with member price awareness, hours- and purchase-based lapse, asset lock on dissolution, `cooperative_founding = :symmetric` capital calls. New data columns `coop_*`, `patronage_wages`, `rebates`, `membership_capital`, `reserved_labour`, `unemployed_members` / `_nonmembers`. Ladder rungs 9a, 9b; `all64.jl` blocks `coops` (8 variants) and `contribution` (6).
+| parameter | type | default | sweep | meaning |
+|---|---|---|---|---|
+| `hunger_wage_discount` | Float64 | `0.25` | yes |  |
+| `offer_full_capacity` | Bool | `false` | yes | persons offer all their capacity instead of the minimum that covers their needs |
+| `random_hiring_ties` | Bool | `false` | yes | equal asks: random order (default: stable sort ⇒ agent-id order) |
+| `no_labour_tolerance` | Bool | `false` | yes | unsold labour units always count as 'partly unsold' (tolerance is for goods) |
+| `minimum_member_hours` | Float64 | `0.5` | yes | average units a round below which worker membership lapses |
+| `members_first_hiring` | Bool | `true` | yes | worker cooperatives serve their members before the open market, spreading the work over them |
+| `wage_threshold` | Bool | `false` | yes | Wages rise only when at least `unmet_demand_share` of the labour employers wanted went unfilled (25 September; false = the old rule, any shortfall raises every  |
+| `wage_cut_maximum` | Float64 | `1.0` | yes | Downward wage rigidity (27 September, Stef): a worker lowers the asking wage by at most this share a month, whatever the rules for other goods say (nominal wage |
+| `wage_floor_months` | Int | `1` | yes | How long the floor outlasts a job (28 September): a worker keeps refusing a cut for this many months after last being paid (1 = only while continuously employed |
+| `employer_loyalty` | Bool | `false` | yes | Loyalty and notice (3 October, Stef). `employer_loyalty`: an employer takes on last month's workers before strangers. `notice_months` > 0: a worker who has work |
+| `notice_tenure_months` | Int | `6` | yes |  |
+| `notice_months` | Int | `0` | yes |  |
+| `food_emergency_share` | Float64 | `0.0` | yes | The food emergency (30 September, Stef): a village does not starve because bakers and workers cannot agree a wage. When last month's bread fell short of what th |
+| `employer_loss_tolerance` | Float64 | `0.0` | yes |  |
+| `standard_of_living_tickets` | Int | `0` | yes | A standard of living (27 September, Stef): the tickets a month a household aims for — it offers labour to afford them and buys up to that many. 0 = the rule so  |
+| `minimum_labour_offer` | Float64 | `0.0` | yes | Work as purpose (4 October, Stef; docs/future_work/design_work_as_purpose_2026-10-04.md). `minimum_labour_offer`: everyone offers at least this share of their c |
+| `volunteer_share` | Float64 | `0.0` | yes |  |
+| `volunteers_in_theatres` | Bool | `false` | yes | Volunteers in the theatres (4 October, Stef): a theatre hires what its tickets can pay and villagers with unhired labour staff the rest, unpaid — after the paid |
+| `nonworking_share` | Float64 | `0.0` | yes | Not working, for reasons of their own (5 October, Stef — care, illness, art, or choice; the model knows only that they do not offer paid work): `nonworking_shar |
+| `nonworking_hungry_share` | Float64 | `1 / 3` | yes |  |
+| `wage_reservation_net_of_tax` | Bool | `false` | yes | worker's floor nets a meal after wage tax (the price vector was derived this way) |
+| `wage_reservation_net_of_gi` | Bool | `false` | yes | SuMSy: the worker's floor covers only the part of the meal the GI does not |
+| `wage_reservation_includes_savings` | Bool | `false` | yes | the worker's floor also covers building the savings buffer (3 meals) over savings_build_rounds |
+| `savings_target_in_meals` | Float64 | `3.0` | yes | Savings (persons) |
+| `savings_protection_probability` | Float64 | `0.5` | yes |  |
+| `savings_build_rounds` | Int | `10` | yes |  |
 
-- 13 September 2026: first version, generated from `parameters.jl` after the greed, rationing and tiered-price additions; 113-test suite passing.
-- 15 September 2026 (later): ladder rerun at 64 persons over 100 rounds with three seeds; `inherited_money` test variant; the report's ladder rebuilt on it.
-- 15 September 2026: `start_at_saturation` (upper / lower bound of the money-stock band) and `initial_price_multiplier`; every rung rerun from both saturated starts.
-- 14 September 2026 (night): `shares_per_person` (share units scaled to the population); greedy share purchases use the trading market's valuation, voluntary sellers and control floor; 64-person preset; 145 tests passing.
-- 14 September 2026 (evening): deferred payment for shares with share collateral; tests for the trading share market and deferred payment (140 tests passing); distress trades marked in the event log.
-- 14 September 2026 (later): share market extended — forward valuation, per-person yield spread, voluntary founder sales down to a control floor, resale-expectation switch; `wage_ceiling_in_breads`, `guaranteed_income_in_breads` (test switch), `no_self_service`, `tiered_bread_price`, `bread_rationing` added to their panels.
-- 14 September 2026: `land_per_person` and the `greed_hoarding` slider added (replacing `greed_hoarder_fraction`); clearing and peer-lending made one pass over the books (a 1,000-person SuMSy round from 30 s to 1 s); 117 tests passing.
+### Firms, ownership and entry — 63 parameters
+
+| parameter | type | default | sweep | meaning |
+|---|---|---|---|---|
+| `ownership` | Symbol | `:none` | list | :none \| :cooperative (every person holds an equal share of every producer) \| :shareholders (a few persons hold all shares) \| :mixed (cooperative_* producers  |
+| `shareholder_count` | Int | `2` | yes | :shareholders / :mixed — persons (lowest ids) who hold the shares |
+| `cooperative_farms` | Int | `2` | yes | :mixed |
+| `cooperative_bakeries` | Int | `2` | yes |  |
+| `cooperative_theatres` | Int | `0` | yes | :mixed — theatres were for-profit only until 14 September 2026 |
+| `cooperative_form_farms` | Symbol | `:member` | list | Cooperative forms (14 September 2026), per kind: :member (the original equal-share, equal-dividend rule), :worker (membership follows employment, surplus by hou |
+| `cooperative_form_bakeries` | Symbol | `:member` | list |  |
+| `cooperative_form_theatres` | Symbol | `:member` | list |  |
+| `patronage_window` | Int | `12` | yes | rounds of hours or purchases a distribution is measured over |
+| `retained_surplus_share` | Float64 | `0.25` | yes | share of every distribution locked in the indivisible reserve |
+| `membership_lapse_rounds_worker` | Int | `6` | yes | grace period before a member without hours is redeemed |
+| `membership_lapse_rounds_consumer` | Int | `12` | yes | grace period before a member without purchases is redeemed |
+| `membership_contribution` | Symbol | `:money` | list | :money \| :buffer \| :mixed_fixed (both) \| :mixed_flexible (the member splits a single total) |
+| `membership_buffer_pledge` | Float64 | `10.0` | yes | buffer requirement, in currency units of exemption |
+| `cooperative_founding` | Symbol | `:par_only` | list | :par_only (members bring one share at par) \| :symmetric (members are called on for capital like shareholder founders) |
+| `dividend_build_rounds` | Int | `10` | yes | cash above the reserve target is paid out over this many rounds |
+| `share_market` | Bool | `false` | yes | shareholder enterprises' shares trade once a round |
+| `startup_financing` | Symbol | `:enterprise_loans` | list | :enterprise_loans (businesses borrow their own start) \| :paid_in_capital (owned businesses start empty; founders borrow personally and pay capital in; co-ops r |
+| `membership_share_price` | Float64 | `10.0` | yes | a cooperative share, at par (one meal at initial prices) |
+| `cooperative_join_probability` | Float64 | `0.5` | yes | a person with surplus who is not yet a member joins one cooperative a round with this probability |
+| `required_yield` | Float64 | `0.01` | yes | base required dividend yield per round; a person's own yield is drawn once around it |
+| `required_yield_dispersion` | Float64 | `0.0` | yes | half-width of the per-person spread (0 = everyone values a firm alike → no voluntary trades) |
+| `share_step` | Float64 | `0.05` | yes | ask/bid adaptation per round (distress asks) |
+| `forward_valuation` | Bool | `false` | yes | value a firm by its expected dividends after its loans are repaid, not by trailing dividends and book |
+| `founder_minimum_stake` | Float64 | `0.51` | yes | founders together keep at least this fraction of each firm |
+| `arrears_de_minimis_in_meals` | Float64 | `0.01` | yes | a shortfall smaller than this share of a meal is not a missed payment |
+| `closure_debt_threshold_in_breads` | Float64 | `1.0` | yes | an enterprise with nothing left to seize is closed only if the uncovered debt exceeds this |
+| `stop_when_half_dead` | Bool | `true` | yes |  |
+| `stop_when_stationary` | Bool | `true` | yes |  |
+| `settlement` | Symbol | `:clearing_all` | list | :invoicing \| :clearing_all (see above) |
+| `settlement_clearing` | Vector{Symbol} | `[:bank, :government]` | no |  |
+| `settlement_invoicing` | Vector{Symbol} | `[:farm, :bakery, :theatre, :government]` | no |  |
+| `liquidation_test` | Symbol | `:cash_flow` | list | The liquidation test (23 September, closest to Belgian insolvency law: persistent non-payment *and* shaken credit): :cash_flow — overdue obligations (invoices a |
+| `founding_equity` | Bool | `false` | yes | Founders pay in equity at the founding equal to the firm's working reserve, from savings or a personal loan (23 Sept; a Belgian BV must start with sufficient eq |
+| `founders` | Symbol | `:shared` | list | Who founds the firms (24 September): :shared = the old rule, the same `shareholder_count` villagers found every firm (at 512 villagers: 4 owners of all twelve f |
+| `stop_without_producers` | Bool | `true` | yes | The run stops when no farm or no bakery is left (the old rule); false = the village runs on, and starves or recovers (review 5). |
+| `refound_minimum` | Int | `1` | yes | When fewer than this many farms (or bakeries) are open, villagers try to start one (24 September; 0 = never). |
+| `refound_cooldown` | Int | `3` | yes | at most one restart per kind in this many months (a village that cannot sustain a firm would otherwise restart one every month) |
+| `market_entry` | Bool | `false` | yes | Market entry (25 September; docs/designs_implemented/design_market_entry_2026-09-25.md): off by default and on the ladder. A new farm, bakery or theatre is foun |
+| `entry_unmet_share` | Float64 | `0.05` | yes |  |
+| `entry_unmet_months` | Int | `3` | yes |  |
+| `entry_margin` | Float64 | `0.20` | yes |  |
+| `entry_margin_months` | Int | `6` | yes |  |
+| `entry_cooldown` | Int | `3` | yes |  |
+| `entry_max_ratio` | Float64 | `2.0` | yes |  |
+| `entry_coop_share` | Float64 | `0.0` | yes |  |
+| `liquidation_arrears_share` | Float64 | `0.10` | yes |  |
+| `liquidation_overdue_rounds` | Int | `3` | yes |  |
+| `liquidation_price_share` | Float64 | `0.90` | yes |  |
+| `liquidated_coop_stays_coop` | Bool | `false` | yes | true: a cooperative is refounded by its members, one share at par each |
+| `reserve_target_in_rounds` | Float64 | `3.0` | yes | standard reserve = rounds × expected input cost |
+| `reserve_protection_probability` | Float64 | `0.5` | yes | enterprises: borrow first (v1 savings rule) vs use own cash first            # wages absorb surplus once reserves reach this multiple |
+| `startup_loan_term` | Int | `50` | yes | :debt — enterprises borrow the endowment (own reserve + the persons' share) and pay it out |
+| `startup_loan_rate` | Float64 | `0.005` | yes |  |
+| `member_price_awareness` | Bool | `true` | yes | consumer cooperative members net the expected rebate off the ask when choosing a seller |
+| `shares_per_person` | Int | `0` | yes | share units per firm = this × number of persons (0 = 100 units per firm), so every villager could hold shares |
+| `enterprise_tax` | Symbol | `:none` | list | :none \| :income (on net operating cash flow minus interest; banks on interest received) \| :reserves (on cash held at end of round) |
+| `enterprise_income_tax_rate` | Float64 | `0.10` | yes |  |
+| `enterprise_reserve_tax_rate` | Float64 | `0.10` | yes |  |
+| `reserve_tax_exempts_standard_reserve` | Bool | `false` | yes | :reserves — tax only cash above the standard working reserve |
+| `deductible_materials` | Float64 | `1.0` | yes |  |
+| `deductible_labour` | Float64 | `0.5` | yes |  |
+| `clearing` | Bool | `true` | yes | Clearing switch (13 September 2026): true = all intra-round payments are promises netted at clearing (spec v2 addendum); false = every payment is settled immedi |
+
+### Land and gold — 16 parameters
+
+| parameter | type | default | sweep | meaning |
+|---|---|---|---|---|
+| `land_price_rent_multiple` | Float64 | `15.0` | yes |  |
+| `distress_land_sales` | Bool | `false` | yes | a hungry or indebted-in-arrears landholder sells one unit per round at a discount |
+| `distress_land_discount` | Float64 | `0.8` | yes |  |
+| `land_units_per_landowner_override` | Int | `0` | yes | 0 = spec formula floor((n − p)/(p − 1)) |
+| `land_loans` | Bool | `false` | yes | land may be bought on credit (collateral: the land itself, seized after 2 rounds of arrears) |
+| `land_sales` | Symbol | `:forced` | list | :forced (spec: any buyer with surplus takes a unit) \| :distress_only \| :reservation (seller sells only above the value of the rent stream) |
+| `land_reservation_multiple` | Float64 | `100.0` | yes | :reservation, debt money: rounds of rent a landowner wants for a unit; SuMSy uses rent / demurrage_rate |
+| `land_pricing` | Symbol | `:multiple` | list | The land market (24 September). :multiple = the old rule, price = `land_price_rent_multiple` × rent. :market = the price is discovered: it starts at `land_price |
+| `land_price_step` | Float64 | `0.06` | yes |  |
+| `land_life_event_rate` | Float64 | `0.005` | yes | Landowners who sell for reasons of their own (an inheritance, a move) — the monthly probability that a landowner offers a unit at the best bid (25 September). S |
+| `gold_grams_per_villager` | Float64 | `0.0` | yes | Gold (5 October, Stef): a fixed stock of `gold_grams_per_villager` × villagers, held at the founding by the richest `gold_initial_holders_share`; a pure store o |
+| `gold_initial_holders_share` | Float64 | `0.10` | yes |  |
+| `gold_initial_price_in_breads` | Float64 | `10.0` | yes |  |
+| `gold_buyer_margin_in_meals` | Float64 | `2.0` | yes |  |
+| `gold_sale_rate` | Float64 | `0.01` | yes |  |
+| `gold_price_step` | Float64 | `0.06` | yes |  |
+
+### Behaviour variants — 6 parameters
+
+| parameter | type | default | sweep | meaning |
+|---|---|---|---|---|
+| `greed` | Bool | `false` | yes | Greed (13 September 2026): a property of persons, above their own reserve |
+| `greed_share` | Float64 | `0.25` | yes | share of persons who are greedy |
+| `greed_hoarding` | Float64 | `0.5` | yes | every greedy person is both: each act of greed goes to capital with this probability (most profitable of land, shares, cash first), to consumption (a loaf or a  |
+| `greed_selection` | Symbol | `:rich` | list | :rich (the wealthiest at the founding) \| :random |
+| `greedy_max_breads_per_round` | Int | `10` | yes | replaces the 3-loaf ceiling for greedy consumers (eaten, not stocked) |
+| `greedy_max_tickets_per_round` | Int | `10` | yes | replaces the 3-ticket ceiling |
+
+### Run control — 5 parameters
+
+| parameter | type | default | sweep | meaning |
+|---|---|---|---|---|
+| `random_streams` | Bool | `true` | yes | one random stream per subsystem (18 September 2026), each seeded from `seed`; false = the single shared stream of earlier runs |
+| `maximum_rounds` | Int | `50` | yes |  |
+| `stationary_rounds` | Int | `5` | yes |  |
+| `stationary_tolerance` | Float64 | `0.01` | yes |  |
+| `seed` | Int | `1` | yes |  |
+## 6. Validation and consistency rules
+
+- A parameter is editable only when its governing switch (§4) is on; a sweep over a disabled parameter is refused.
+- `monetary_system = :sumsy` with `wage_tax_rate`, `capital_tax_rate` or `dividend_tax_rate` > 0 is refused unless the configuration is named "(comparison)": SuMSy never taxes income.
+- `unmet_demand_share`, `unsold_share` ∈ [0, 1]; `bread_bid_base_multiplier` ≥ 1; `employer_wage_margin` ≥ 0 (values below 0.2 deadlock the labour market when prices fall — warn); `wage_cut_maximum` ∈ (0, 1]; `wage_floor_months` ≥ 1.
+- `ticket_max_in_breads` must exceed the ticket price in loaves of the configuration (else no ticket ever sells — warn).
+- `public_project_build_months` ≤ `maximum_rounds` − 12 (else no revenue is ever seen — warn).
+- `austerity_start` ≤ `maximum_rounds`; `austerity_fee_in_breads` ≤ `unemployment_fee_in_breads`.
+- `gold_initial_holders_share` ∈ (0, 1]; `nonworking_share` + `greed_share` ≤ 1.
+- `land_levy` requires `land_pricing = :market`; the dividend (`surplus_redistribution_share` > 0) requires the reserve rule.
+- `notice_months` > 0 without `employer_loyalty` is allowed but warned: without continuity of employment the notice rule never fires.
+- Seeds: 1 to 50; rounds: 12 to 600.
+
+## 7. Run tab
+
+Village size and seeds, months, the compare toggle, and the **ladder preset picker**: every step of `scripts/ladder_definition.jl` (74 steps as of 5 October) is a preset, shown with its one-line description and the parameters it sets above the base. Choosing a step fills both sides; the researcher may then change anything. A **diff** view shows what the current configuration differs in from the chosen step. Run, cancel, progress (runs done of total, as `run_all.jl` prints), estimated time from the last runs' durations.
+
+## 8. Sweeps tab
+
+A sweep is a preset (or the current configuration) plus up to three **dimensions**, each a parameter with a list of values (numeric: a list or a range with a step; Boolean: both; Symbol: a list of options). The sweep runs the Cartesian product, each cell with the chosen seeds, on both sides if compare is on. Dimensions must pass §6 for every value. The sweeps the ladder already carries are offered as templates: the overpay dial (1.1, 1.2, 1.3, 2.0), the wage floor (1, 3 months), the employer margin (0.05, 0.2, 0.25), the parking fee with matching starting prices (2, 3, 4 %), public employment (10–50 %), the debt ceiling (0.5, 1.0 × output), the levy margin, the benefit (0, 1, 2 loaves), the gold stock. A sweep's results open in the Results tab as a grid with one chosen measure per cell, and any cell opens as a full run.
+
+## 9. Results tab
+
+Grouped like the parameter tabs, so that each part of the model has its own panel, each with the ten-run mean, the worst run, and the single-run detail on demand:
+
+- **Village**: alive, hungry, bread baked and sold, prices (bread, grain, wage, ticket, rent), unemployment and its split (volunteers, truly idle, not working by choice, the not-working), capacity offered and worked.
+- **Money**: the money stock, loans, peer loans, write-offs, bailouts, the money identity gap (must be zero), the bank rate, deposit interest paid, the capital reserve.
+- **Government**: taxes by family and their scales, outlays by kind (jobs, benefit, project, coupons, interest), public debt and its course (peak, month repaid), bonds, the reserve, the dividend paid out, the levy, the spending scale under a ceiling, the project's cost and revenue and rides.
+- **Prices**: the price paths, inflation a year, the quoted and traded land price, the gold price and valuation.
+- **Labour**: wages, the floor's incidence (how often it bound), notices given, tenure, volunteer hours, the commons.
+- **Firms**: firms open by kind and form, liquidations, restarts, entries, margins, the Herfindahl index of bread, owners, dividends.
+- **Land and gold**: land held by households, sales (voluntary, distress, life-event), the levy; gold holders, grams by decile, grams traded, what the gold would fetch in meals (beside wealth, not in it).
+- **Distribution**: the rich–poor gap in meals with the poorest tenth's own holding beside it, the Ginis (cash, net wealth, net wealth with ownerless firms' equity attributed), under water, without cash, the top 1 %'s share.
+- **Ladder view**: any measure across all chosen steps, both villages side by side, as the report's panels.
+
+Every panel's data is downloadable as CSV with the run's parameter set attached.
+
+## 10. Presets
+
+The ladder's steps (§7) and the named villages of the report: the best debt village, the productive village (V8), the levy-and-dividend village (SuMSy from step 8), the fixed-price twins (P), the stress tests (S), the full-money-stock starts (E). Presets are versioned with the model; a preset saved under an older version is flagged.
+
+## 11. Change log
+
+- 18 September 2026 — first version (cooperative forms, membership contribution, random streams).
+- 5 October 2026 — version 2: regrouped into tabs with switches and sweeps; all parameters added since 18 September: settlement by invoicing and the cash-flow liquidation test; founding equity and distinct founders; the protected minimum; the land market (price discovery, best-bid sales, valuation from comparable sales, the levy and dividend); the wage rules (threshold, floor, memory, emergency, loss tolerance, employer margin, loyalty, notice); fixed prices; the standard of living; the minimum offer and volunteer hours; those not working for reasons of their own; gold; the benefit's indexation and austerity; the debt ceiling; the owners' guarantee; interest from equity and the capital requirement; the bank rate following inflation; restarts; entry; the tax-scale floor; the public investment; the bond coupon; stopping rules.

@@ -91,6 +91,7 @@ function credit_eligible(model, borrower::Agent, amount::Float64)
     lender = choose_lender(model, borrower)
     lender === nothing && return false
     has_arrears(model, borrower) && return false
+    is_government(borrower) || amount <= lending_room(model, lender) + 1e-9 || return false   # 28 Sept: the capital requirement
     return affordable(model, borrower, amount, borrowing_rate(model, lender, borrower))
 end
 
@@ -125,7 +126,7 @@ function request_loan!(model, borrower::Agent, amount::Float64, purpose::Symbol)
             owed = sum(total_due(l) for l in debtor_loans(model, borrower); init = 0.0) + amount
             if owed <= p.receivables_advance_rate * receivables(model, borrower) + 1e-9
                 bank = some_bank(model, borrower)
-                (bank === nothing || p.monetary_system == :sumsy) || (make_loan!(model, bank, borrower, amount, purpose); return true)
+                (bank === nothing || p.monetary_system == :sumsy || amount > lending_room(model, bank) + 1e-9) || (make_loan!(model, bank, borrower, amount, purpose); return true)
             end
         end
     end
@@ -615,6 +616,21 @@ function repay_extra!(model, loan::Loan, amount::Float64)
     return amount
 end
 
+"""The capital a bank must hold: `bank_capital_ratio` × its private loans (loans to the government carry no weight)."""
+function required_capital(model, bank::Enterprise)
+    p = parameters(model)
+    p.bank_capital_ratio > 0 || return 0.0
+    private = sum(outstanding_principal(l) for l in creditor_loans(model, bank) if !is_government(model[l.debtor_id]); init = 0.0)
+    return p.bank_capital_ratio * private
+end
+
+"""Room under the capital requirement for a new private loan: unlimited without `capital_constrains_lending`."""
+function lending_room(model, bank::Enterprise)
+    p = parameters(model)
+    (p.capital_constrains_lending && p.bank_capital_ratio > 0) || return Inf
+    return max((net_wealth(model, bank) - required_capital(model, bank)) / p.bank_capital_ratio, 0.0)
+end
+
 """A bank turns retained interest (equity) into a deposit of its own, up to `amount`."""
 function monetise_equity!(model, bank::Enterprise, amount::Float64)
     amount = round(min(amount, bank.retained_interest), digits = 4)
@@ -672,11 +688,18 @@ function service_debt!(model)
                 loan.arrears_rounds += 1
                 log_event!(model, :missed_payment; actor = debtor.id, agent_kind = kind_of(debtor), loan = loan.id,
                            paid = paid_installment + paid_interest, shortfall = shortfall, rest_interest = rest_interest(loan), arrears_rounds = loan.arrears_rounds)
+                if p.owner_guarantee && debtor isa Person && paid_installment + paid_interest <= 1e-9 && loan.arrears_rounds >= p.guarantee_write_off_rounds
+                    principal = outstanding_principal(loan); remaining = total_due(loan)       # 28 Sept: nothing paid for six months — written off
+                    book_liability!(debtor.balance, DEBT, -principal; skip_check = true)
+                    book_asset!(creditor.balance, DEBT, -principal; skip_check = true)
+                    loan.write_off = remaining; model.cumulative_write_offs += remaining; loan.settled = true
+                    log_event!(model, :write_off; actor = debtor.id, loan = loan.id, amount = remaining, kind = :guarantee)
+                end
             else
                 loan.in_arrears = false
                 loan.arrears_rounds = 0
             end
-            loan.settled = debt_settled(loan.debt)
+            loan.settled = loan.settled || debt_settled(loan.debt)                   # (a guarantee write-off settles it too)
             loan.settled && log_event!(model, :loan_settled; actor = debtor.id, loan = loan.id)
             if !loan.settled && loan.arrears_rounds >= p.arrears_rounds_until_seizure && !is_government(debtor)
                 debtor isa Person ? seize_land!(model, loan) : seize_enterprise!(model, loan)
@@ -1264,11 +1287,53 @@ function set_interest_rates!(model)
         deposits = sum(cash(a) for a in alive_agents(model) if (a isa Person || (p.deposit_interest_to_enterprises && is_producer(a))) && bank_of(model, a) === bank; init = 0.0)
         deposit_cost = (p.deposit_interest_rate + p.loyalty_bonus_rate) * deposits / max(p.deposit_interest_period, 1)
         bank.interest_rate = min((bank.bid[:wage] + deposit_cost) / (p.affordability_ratio * base), p.maximum_interest_rate)
+        if p.bank_rate_follows_inflation
+            bank.interest_rate += clamp(trailing_inflation(model), 0.0, p.bank_rate_inflation_cap)
+        end
     end
     return nothing
 end
 
+"""The monthly rate of the bread price's rise over the last twelve months (0 before the first year, or when prices fell)."""
+function trailing_inflation(model)
+    d = model.data                                                   # a vector of round rows
+    n = length(d)
+    n > 12 || return 0.0
+    now, then = d[n].price_bread, d[n - 12].price_bread
+    (isfinite(now) && isfinite(then) && then > 0 && now > then) || return 0.0
+    return (now / then)^(1 / 12) - 1
+end
+
 # ---- estates (spec v2 §2, §3) ------------------------------------------------
+
+"""
+    pass_to_owners!(model, dead, bank, principal) → amount passed on
+
+Owners' guarantee: the outstanding principal of a failed firm's bank loan becomes personal loans of its owners, in proportion
+to their shares (members equally), over `founding_loan_term` months at the bank's rate for them — no money is created: the
+deposit a loan would book is cancelled at once. Returns what was passed on (0 when the firm has no owners).
+"""
+function pass_to_owners!(model, dead::Enterprise, bank::Agent, principal::Float64)
+    p = parameters(model)
+    is_bank(bank) || return 0.0
+    owners = !isempty(dead.shares) ? [(model[id], u) for (id, u) in dead.shares if model[id].alive] :
+             !isempty(dead.members) ? [(model[id], 1.0) for (id, _) in dead.members if model[id].alive] : Tuple{Agent, Float64}[]
+    isempty(owners) && return 0.0
+    total = sum(u for (_, u) in owners)
+    passed = 0.0
+    for (w, u) in owners
+        amount = round(principal * u / total, digits = 4)
+        amount > 1e-6 || continue
+        rate = borrowing_rate(model, bank, w)
+        debt = bank_loan(bank.balance, w.balance, amount, rate, p.founding_loan_term, 1, current_round(model))
+        book_asset!(w.balance, DEPOSIT, -amount; skip_check = true)                  # the deposit the loan booked is cancelled:
+        book_liability!(bank.balance, DEPOSIT, -amount; skip_check = true)           # the debt moves, no money is created
+        push!(model.loans, Loan(length(model.loans) + 1, bank.id, w.id, debt, 0, false, current_round(model), false, 0.0))
+        passed += amount
+        log_event!(model, :owner_guarantee; actor = w.id, firm = dead.id, amount = amount)
+    end
+    return passed
+end
 
 """
     settle_estate!(model, dead)
@@ -1296,9 +1361,13 @@ function settle_estate!(model, dead::Agent)
                 principal = outstanding_principal(l)
                 book_liability!(dead.balance, DEBT, -principal; skip_check = true)
                 book_asset!(creditor.balance, DEBT, -principal; skip_check = true)
-                l.write_off = remaining
-                model.cumulative_write_offs += remaining
-                log_event!(model, :write_off; actor = dead.id, loan = l.id, amount = remaining)
+                guaranteed = p.owner_guarantee && dead isa Enterprise ? pass_to_owners!(model, dead, creditor, principal) : 0.0   # 28 Sept
+                loss = remaining - guaranteed
+                if loss > 1e-9
+                    l.write_off = loss
+                    model.cumulative_write_offs += loss
+                    log_event!(model, :write_off; actor = dead.id, loan = l.id, amount = loss)
+                end
             end
             l.settled = true
         end
@@ -1455,7 +1524,8 @@ function pay_deposit_interest!(model)
         end
         total = sum(c[2] for c in claims; init = 0.0)
         total <= 0 && continue
-        fraction = min(1.0, bank.retained_interest / total)
+        available = p.interest_from_equity ? min(bank.retained_interest, max(net_wealth(model, bank) - required_capital(model, bank), 0.0)) : bank.retained_interest   # 28 Sept: from equity above the requirement
+        fraction = min(1.0, available / total)
         for (a, due) in claims
             amount = round(due * fraction, digits = 4)
             amount <= 0 && continue
@@ -1479,6 +1549,7 @@ bond_holdings(model, a::Agent) = sum(b.principal for b in model.bonds if !b.sett
 """Coupon per round: midway between what a deposit earns and what the bank would charge the government."""
 function bond_coupon_rate(model)
     p = parameters(model)
+    isnan(p.bond_coupon) || return p.bond_coupon                     # 28 Sept: set by the government
     banks = enterprises(model, :bank)
     bank_rate = isnan(p.government_rate) ? (isempty(banks) ? p.initial_interest_rate : minimum(b.interest_rate for b in banks) * p.government_rate_discount) : p.government_rate
     deposit_rate = (p.deposit_interest_rate + p.loyalty_bonus_rate) / max(p.deposit_interest_period, 1)

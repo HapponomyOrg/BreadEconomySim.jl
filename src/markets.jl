@@ -236,11 +236,19 @@ end
 """Units a person offers: just enough to cover a meal and the buffer shortfall net of other expected income."""
 function labour_supply(model, w::Person)
     p = parameters(model)
+    if w.nonworking != :none                                                 # 5 Oct: not working for reasons of their own — paid work to eat, no more
+        w.nonworking == :nonworking_hungry && w.hunger == 0 && return 0.0    # and some only once hungry
+        other = w.land * expected_price(model, :rent) * (1 - p.capital_tax_rate) + w.fee
+        need = meal_price(model) - other
+        return need <= 0 ? 0.0 : min(w.effective_capacity, ceil(need / max(net_wage(model), 1e-6)))
+    end
     p.offer_full_capacity && return w.effective_capacity
     other = w.land * expected_price(model, :rent) * (1 - p.capital_tax_rate) + w.fee
     need = meal_price(model) + max(savings_buffer(model) - cash(w), 0.0) - other
+    p.entertainment && p.standard_of_living_tickets > 0 && (need += p.standard_of_living_tickets * expected_price(model, :ticket))   # 27 Sept: works to afford them
     wage = max(net_wage(model), 1e-6)
     units = need <= 0 ? 0.0 : ceil(need / wage)
+    units = max(units, p.minimum_labour_offer * w.effective_capacity)   # 4 Oct: work is wanted for its own sake too
     return min(w.effective_capacity, units)
 end
 
@@ -267,12 +275,13 @@ A worker cooperative takes the worker on as a member, counts the hours as patron
 part of the net wage towards the membership share.
 """
 function hire!(model, e::Enterprise, w::Person, units::Float64, wage::Float64)
+    w.last_wage_rate = wage; w.last_wage_round = current_round(model)
     e.wage_bill += units * wage
     e.labour_period += units * wage
     w.labour_available -= units; w.labour_sold += units; w.market[:wage].sold += units
     e.hired_labour += units; e.market[:wage].got += units
     net = pay_income!(model, e, w, units * wage, :wage)
-    push!(w.worked_for, e.id)
+    push!(w.worked_for, e.id); w.units_for[e.id] = get(w.units_for, e.id, 0.0) + units
     record_transaction!(model, :wage, wage, units)
     log_event!(model, :hire; employer = e.id, employer_kind = e.kind, worker = w.id, units = units, price = wage)
     if is_worker_coop(model, e)
@@ -306,12 +315,40 @@ function labour_market!(model, kinds)
     employers = stable_shuffle(rng, reduce(vcat, [enterprises(model, k) for k in kinds]; init = Enterprise[]))
     for e in employers
         e.market[:wage].wanted = labour_need(e)
+        if parameters(model).volunteers_in_theatres && is_theatre(e)      # 4 Oct: a theatre pays for what its tickets can cover; volunteers staff the rest
+            income = isempty(e.turnover_history) ? e.production_target * expected_price(model, :ticket) : last(e.turnover_history)
+            e.market[:wage].wanted = min(e.market[:wage].wanted, floor(income / max(going_wage(model), 1e-6)))
+        end
     end
     active = [e for e in employers if e.market[:wage].wanted > 1e-9]
     # the pool is sorted once: asks do not change within the market and exhausted workers are skipped
     pool = [w for w in persons(model) if w.labour_available > 1e-9]
     parameters(model).random_hiring_ties && stable_shuffle!(rng, pool)
     sort!(pool; by = w -> w.ask[:wage])
+    p = parameters(model)
+    # 3 Oct: notice — a worker with the tenure is kept for the notice period at last month's units, wanted or not
+    if p.notice_months > 0
+        for e in employers
+            for w in pool
+                t = get(w.tenure, e.id, 0); units_last = get(w.units_last, e.id, 0.0)
+                (t >= p.notice_tenure_months && units_last > 1e-9) || continue
+                want_left = e.market[:wage].wanted - e.hired_labour
+                units = min(units_last, w.labour_available)
+                units > 1e-9 || continue
+                wage = w.last_wage_rate > 0 ? w.last_wage_rate : going_wage(model)   # a protected worker keeps the held wage
+                if want_left + 1e-9 >= units_last
+                    haskey(w.notice, e.id) && delete!(w.notice, e.id)      # still wanted: hired first, no notice running
+                    hire!(model, e, w, units, wage)
+                else
+                    owed = get(w.notice, e.id, p.notice_months)            # the employer wants fewer: notice starts, or runs on
+                    owed > 0 || continue
+                    hire!(model, e, w, units, wage)
+                    w.notice[e.id] = owed - 1
+                    log_event!(model, :notice; employer = e.id, worker = w.id, units = units, months_left = owed - 1)
+                end
+            end
+        end
+    end
     while !isempty(active)
         for e in copy(active)
             remaining = e.market[:wage].wanted - e.hired_labour
@@ -320,7 +357,8 @@ function labour_market!(model, kinds)
             end
             unit = min(1.0, remaining)
             filled = 0.0
-            for w in pool
+            order = p.employer_loyalty ? vcat([w for w in pool if haskey(w.tenure, e.id)], [w for w in pool if !haskey(w.tenure, e.id)]) : pool   # 3 Oct: last month's workers first
+            for w in order
                 w.labour_available > 1e-9 || continue
                 filled >= unit - 1e-9 && break
                 wage = negotiate(model, w, e, :wage)
@@ -481,9 +519,51 @@ function gluttony_and_stocking!(model, buyer::Person)
     return nothing
 end
 
+"""
+    premium_market!(model)
+
+Before the plain bread market (11 October, Stef): villagers with money to spare buy their month's bread as premium loaves at
+`premium_markup` × the price, and the bakery hires `premium_labour_per_loaf` extra units at the going wage for each loaf it
+sells that way — value that grows without volume growing.
+"""
+function premium_market!(model)
+    p = parameters(model)
+    p.premium_markup > 1 || return nothing
+    rng = stream(model, :bread)
+    meal = Float64(p.breads_per_meal)
+    buyers = stable_shuffle(rng, [w for w in persons(model) if bread_units(w) < meal - 1e-9 && cash(w) - buffer_target(model, w) - p.premium_buyer_margin_in_meals * meal_price(model) >= p.premium_markup * expected_price(model, :bread) * meal])
+    wage = going_wage(model)
+    for buyer in buyers
+        size = meal - bread_units(buyer)
+        sellers = sort([b for b in enterprises(model, :bakery) if sellable_bread(b) >= size - 1e-9]; by = b -> b.ask[:bread])
+        isempty(sellers) && break
+        s = first(sellers)
+        price = p.premium_markup * max(s.ask[:bread], seller_reservation(model, s, :bread))
+        cost = round(price * size, digits = 4)
+        cash(buyer) >= gross_price(model, buyer, cost) - 1e-6 || continue
+        need = p.premium_labour_per_loaf * size                            # the extra hands, hired now from whoever has labour left
+        hands = [w for w in persons(model) if w.labour_available > 1e-9 && w !== buyer]
+        hired = 0.0
+        for w in hands
+            hired >= need - 1e-9 && break
+            units = min(w.labour_available, need - hired)
+            hire!(model, s, w, units, wage); hired += units
+        end
+        hired >= need - 1e-9 || continue                                   # no hands: no premium loaf this month
+        pay_consumption!(model, buyer, s, cost, :bread)
+        take_stock!(s.bread, size); push!(buyer.bread, StockItem(size, 0))
+        s.market[:bread].sold += size; buyer.market[:bread].got = size
+        record_transaction!(model, :bread, price, size)
+        model.premium_loaves_this_round += size; model.premium_revenue_this_round += cost; model.premium_labour_this_round += hired
+        log_event!(model, :premium_sale; bakery = s.id, buyer = buyer.id, size = size, price = price, labour = hired)
+    end
+    return nothing
+end
+
 """A full meal when affordable, otherwise one bread; persons buy only when they hold less than a meal. Gluttony and stocking follow."""
 function bread_market!(model)
     rng = stream(model, :bread); p = parameters(model)
+    premium_market!(model)
     for b in enterprises(model, :bakery)
         b.market[:bread].offered = sellable_bread(b)
     end
@@ -549,7 +629,7 @@ function ticket_market!(model)
     theatres = enterprises(model, :theatre)
     isempty(theatres) && return nothing
     for t in theatres
-        t.market[:ticket].offered = min(t.hired_labour * p.customers_per_labour_unit, ticket_capacity(model, t))
+        t.market[:ticket].offered = min((t.hired_labour + t.volunteer_labour) * p.customers_per_labour_unit, ticket_capacity(model, t))   # 4 Oct: volunteers staff what the paid hiring could not
     end
     for w in stable_shuffle(rng, persons(model))
         tp = expected_price(model, :ticket)
@@ -557,7 +637,7 @@ function ticket_market!(model)
         afford >= 1 || continue
         rand(rng) < p.entertainment_propensity || continue
         w.greed != :none && continue
-        wanted = min(afford, stable_range(rng, 1:p.max_tickets_per_person))
+        wanted = p.standard_of_living_tickets > 0 ? min(afford, p.standard_of_living_tickets) : min(afford, stable_range(rng, 1:p.max_tickets_per_person))   # 27 Sept
         w.market[:ticket].wanted = wanted
         bought = 0
         for _ in 1:wanted

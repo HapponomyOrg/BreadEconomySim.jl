@@ -8,7 +8,7 @@ Requirements: Julia 1.13 and this repository. EconoSim.jl is fetched from https:
     julia --project=. -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'
     julia --project=. test/runtests.jl                           # 497 tests, ~2 minutes
 
-    # everything: tests, the 512 ladder under both settlements, the 128 ladder, summaries and panel tables
+    # everything: tests, the 512-villager ladder, summaries and step tables (about 2.5 hours)
     julia --project=. scripts/run_all.jl
 
     # a quick check first, if you like (a few minutes)
@@ -24,3 +24,7 @@ Requirements: Julia 1.13 and this repository. EconoSim.jl is fetched from https:
 Both are resumable: stop and restart at will, finished runs are skipped. On a machine with several cores, run them side by side, or split one ladder by rung with the fifth argument (a rung-name prefix), e.g. `... all 512 "1"` in one terminal and `... all 512 "S"` in another — every process appends to the same file, so do not start two processes on the *same* rung.
 
 The "what is there" panels come from `julia --project=. scripts/dump_rungs.jl 10 120 all 512`; the report page from `python3 scripts/build_report_html.py` once the CSVs are in `results/`.
+
+The two comparison ladders (the old settlement at 512 villagers, and 128 villagers) are optional since 26 September:
+
+    LADDERS=512:invoicing,512:clearing_all,128:invoicing julia --project=. scripts/run_all.jl

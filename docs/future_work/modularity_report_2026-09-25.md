@@ -1,5 +1,5 @@
 # BreadEconomySim.jl — modularity analysis
-*25 September 2026. A report on how far the code is from plug-and-play agents, enterprises, markets and government — including agents whose behaviour is steered by AI calls — and what it would take to get there. Nothing was changed.*
+*25 September 2026, with an addendum of 5 October (§9). A report on how far the code is from plug-and-play agents, enterprises, markets and government — including agents whose behaviour is steered by AI calls — and what it would take to get there. Nothing was changed.*
 
 ## 1. The verdict in short
 
@@ -93,3 +93,38 @@ Ordering matters: stage 1 first, since it also serves the transition build; stag
 ## 8. Recommendation
 
 Do stage 1 now, before the transition: two to three weeks, no change of results, and the transition's participation rule becomes the first decision written on the interface. Decide on AI-steered agents after that, on the strength of a first experiment with one AI-steered bakery against 511 rule-based villagers, replayable from its log.
+
+
+## 9. Addendum, 5 October 2026 — what ten more days of modelling did to the picture
+
+The analysis above was written on 25 September. Since then the model has gained, in rough order: the realistic price rules from step 0, the land market with its levy and dividend, the wage rules (threshold, floor, memory, emergency, loss tolerance, the employer's shortage ceiling), continuity of employment (loyalty, tenure, notice), the standard of living, the minimum offer and the volunteer measure, those not working for reasons of their own, gold, the public investment, austerity, the debt ceiling, the owners' guarantee, interest from equity and the capital requirement, restarts and entry, and the SuMSy benefit. None of it changed the architecture; all of it made the case for the refactor stronger.
+
+| | 25 September | 5 October |
+|---|---|---|
+| source lines | 5,315 | 5,796 (`credit.jl` 1,801) |
+| parameters in one struct | 258 | **299** |
+| agent fields | Person 41, Enterprise 55 | Person **50**, Enterprise 56 |
+| role branches (`kind ==`, `is_*`) | 42 + 80 | 42 + 84 |
+| `isa Person / isa Enterprise` | 161 | 164 |
+| round steps | 38 | **44** |
+| decision points inside procedures | ≈ 15 | **≈ 22** |
+
+**Where the growth went.** Almost every addition was a *decision* written inside a procedure: how much labour a villager offers (now four rules in one function: needs, the standard of living, the minimum offer, and not working), whether an employer keeps a worker (loyalty and notice inside `labour_market!`), what a villager will pay for a seat or an employer for a hand (`buyer_reservation`), whether a theatre takes volunteers, whether a villager buys gold. The labour market alone grew from one routine to a routine with five rules threaded through it, and the person struct from 41 fields to 50 to carry their state (tenure, notice, units last month, volunteer hours, gold, the not-working flag). This is exactly the pattern §4 predicted: each new behaviour is a branch in a procedure and a field on the struct, with nothing to attach it to.
+
+**New decision points for the interface of §4.** Add to that table:
+
+| decision | today computed in | interface |
+|---|---|---|
+| how much labour to offer (needs, standard of living, minimum offer, not working) | `labour_supply` | `offer_labour(policy, person, model)` — already listed; now four rules deep |
+| whether to keep last month's workers; notice | `labour_market!` | `hire(policy, firm, applicants, model)` — the loyalty and notice rules belong to the firm's policy |
+| what an employer will pay above the market | `buyer_reservation`, `employer_wage_limit` | `wage_bid(policy, firm, model)` |
+| whether to take volunteers, and how many | `staff_theatres_with_volunteers!` | `staff(policy, theatre, model)` |
+| whether to volunteer unhired hours | `volunteer!` | `volunteer(policy, person, model)` |
+| whether to buy or sell gold | `gold_market!` | `store_value(policy, person, model)` — the same interface as land |
+| the government's project, austerity, ceiling, dividend | `government.jl` | `fiscal_policy(policy, government, model)` — already listed; now eight rules deep |
+
+**Two things the dashboard specification (5 October) needs from the refactor.** The dashboard binds widgets to parameter names and groups them into tabs by hand (§5 of that document, generated from a 299-field struct by name patterns). Stage 4 of §6, parameter groups per role, is what would make the tabs *be* the structure rather than a view imposed on it: a `LabourRules` struct, a `BankRules` struct, a `FiscalPolicy` struct, each the parameter set of one policy type. And the switches at the head of each tab (§4 of the dashboard document) are, in the refactored design, simply which policy type is installed: `RuleBased` or `NoTheatres` or `NoGovernment`, rather than thirty Booleans with gating rules.
+
+**Revised sizes.** Stage 1 (the decision interface) is now 22 decisions rather than 15 and includes the labour market's five rules: **three to four weeks** rather than two to three. Stage 4 (parameter groups) grows with the 299 fields to about a week. The rest stands. The total is seven to ten weeks.
+
+**Revised recommendation.** Unchanged in direction, sharper in reason. Every behaviour added since 25 September was asked for in the form "what if people did X", and every one was built as a branch. With the interface, each would have been a policy type: `NonWorking <: Policy`, `Hoarder <: Policy`, `Loyal <: Policy`. The transition's participation rule and the dashboard's switches are two more of the same. Stage 1 first, before the transition; and the labour market, as the most grown-over procedure, is where to start cutting.

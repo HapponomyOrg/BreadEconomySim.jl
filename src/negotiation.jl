@@ -32,7 +32,8 @@ function buyer_reservation(model, buyer::Agent, good::Symbol)
     if good == :rent
         return p.farm_maximum_rent_fraction_of_grain_price * expected_price(model, :grain)
     elseif good == :wage
-        limit = employer_wage_limit(model, buyer)
+        limit = employer_wage_limit(model, buyer) * (1 + p.employer_loss_tolerance)   # 30 Sept: a firm hires at a small loss rather than close
+        isfinite(p.employer_wage_margin) && (limit = min(limit, going_wage(model) * (1 + p.employer_wage_margin)))   # 28 Sept: at most so far above the going wage
         return p.wage_ceiling_in_breads > 0 ? min(wage_ceiling(model), limit) : limit
     elseif good == :grain
         return p.breads_per_grain * expected_price(model, :bread) - p.bakery_grain_wage_fraction * expected_price(model, :wage)
@@ -40,12 +41,35 @@ function buyer_reservation(model, buyer::Agent, good::Symbol)
         # willingness to pay is for the price including the consumption tax; the seller sees it net
         return expected_price(model, :bread) * (p.bread_bid_base_multiplier + p.bread_bid_hunger_multiplier * buyer.hunger) / (1 + (buyer isa Person ? consumption_tax_rate(model) : 0.0))
     elseif good == :ticket
-        return expected_price(model, :ticket) * p.bread_bid_base_multiplier / (1 + (buyer isa Person ? consumption_tax_rate(model) : 0.0))
+        worth = expected_price(model, :ticket) * p.bread_bid_base_multiplier
+        isfinite(p.ticket_max_in_breads) && (worth = min(worth, p.ticket_max_in_breads * expected_price(model, :bread)))   # 28 Sept: a seat is worth so many loaves
+        return worth / (1 + (buyer isa Person ? consumption_tax_rate(model) : 0.0))
     end
 end
 
 """Statutory maximum wage per labour unit: `wage_ceiling_in_breads` loaves per full-time round, at the expected bread price."""
 wage_ceiling(model) = parameters(model).wage_ceiling_in_breads * expected_price(model, :bread) / parameters(model).maximum_capacity
+
+"""Was last month's bread short of what the village needs? (`food_emergency_share` of a meal for everyone alive.)"""
+function food_emergency(model)
+    p = parameters(model)
+    p.food_emergency_share > 0 || return false
+    d = model.data
+    isempty(d) && return false
+    row = d[end]
+    return row.bread_baked < p.food_emergency_share * p.breads_per_meal * row.persons_alive
+end
+
+"""The going wage an employer measures itself against: the wage actually paid last month (not the asks — the idle cut theirs in
+desperation and would drag the reference, and with it every employer's ceiling, below what workers in work will accept)."""
+function going_wage(model)
+    d = model.data
+    if !isempty(d)
+        w = d[end].price_wage
+        isfinite(w) && w > 0 && return w
+    end
+    return expected_price(model, :wage)
+end
 
 """The employer's own limit on the wage: what it recovers per unit of labour from the price it asks for its output (or the market average)."""
 function employer_wage_limit(model, buyer::Agent)
@@ -67,7 +91,11 @@ function negotiate(model, seller::Agent, buyer::Agent, good::Symbol; age::Int = 
     key = (good, buyer.id)
     haskey(seller.negotiated, key) && return seller.negotiated[key]
     p = parameters(model); rng = stream(model, :negotiation)
+    p.fixed_prices && return p.initial_prices[good] * p.initial_price_multiplier     # 26 Sept: the starting price, always
     seller_floor = seller_reservation(model, seller, good; age = age)
+    if good == :wage && seller isa Person && p.wage_cut_maximum < 1 && seller.last_wage_rate > 0 && current_round(model) - seller.last_wage_round <= p.wage_floor_months && !food_emergency(model)
+        seller_floor = max(seller_floor, seller.last_wage_rate * (1 - p.wage_cut_maximum))   # 27 Sept: what a worker in work will accept; out of work, the floor is gone
+    end
     buyer_ceiling = buyer_reservation(model, buyer, good)
     ask = max(seller.ask[good], seller_floor)
     bid = min(buyer.bid[good], buyer_ceiling)
@@ -119,6 +147,7 @@ function ask_floor(model, a::Agent, good::Symbol)
 end
 
 function adapt_prices!(model)
+    parameters(model).fixed_prices && return nothing                                  # 26 Sept: nobody changes a price
     p = parameters(model)
     for a in alive_agents(model)
         for g in sells(a)

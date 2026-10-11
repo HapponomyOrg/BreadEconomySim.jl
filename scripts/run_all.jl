@@ -5,8 +5,8 @@
 #
 # What it does, in order:
 #   1. installs and precompiles the packages (Pkg.instantiate), and runs the test suite unless SKIP_TESTS=1;
-#   2. runs the ladders — by default the 512-villager ladder under the new settlement (invoicing), the same ladder under the
-#      old settlement (the before/after comparison), and the 128-villager ladder (the size comparison) — every rung, both
+#   2. runs the ladders — by default the 512-villager ladder under invoicing, the main ladder (26 September: the old-settlement
+#      and 128-villager comparisons are optional, see LADDERS) — every rung, both
 #      villages, SEEDS runs each, ROUNDS months each, in parallel over JOBS worker processes;
 #   3. writes, per ladder, the round-by-round data, a summary table (one row per rung and village) and the "what is there"
 #      configuration table that the report's panels are built from.
@@ -18,7 +18,8 @@
 #   JOBS=6                  worker processes (default: number of CPU threads − 1)
 #   SEEDS=10                runs per configuration
 #   ROUNDS=120              months per run (120 = ten years)
-#   LADDERS=512:invoicing,512:clearing_all,128:invoicing
+#   LADDERS=512:invoicing       (default: the main ladder only; add 512:clearing_all for the old-settlement comparison and
+#                               128:invoicing for the size comparison — both answered, worth one run on the frozen baseline)
 #   RUNGS=                  only rungs whose name starts with one of these comma-separated prefixes (for testing)
 #   SKIP_TESTS=1            skip the test suite
 #   UPDATE_ECONOSIM=1       move EconoSim.jl to the latest commit on its main branch first
@@ -67,11 +68,11 @@ end
 const JOBS    = parse(Int, get(ENV, "JOBS", string(max(Sys.CPU_THREADS - 1, 1))))
 const SEEDS   = parse(Int, get(ENV, "SEEDS", "10"))
 const ROUNDS  = parse(Int, get(ENV, "ROUNDS", "120"))
-const LADDERS = [(parse(Int, split(x, ":")[1]), Symbol(split(x, ":")[2])) for x in split(get(ENV, "LADDERS", "512:invoicing,512:clearing_all,128:invoicing"), ",")]
+const LADDERS = [(parse(Int, split(x, ":")[1]), Symbol(split(x, ":")[2])) for x in split(get(ENV, "LADDERS", "512:invoicing"), ",")]
 const RUNGS   = filter(!isempty, split(get(ENV, "RUNGS", ""), ","))
 
 ladder_name(N, settlement) = settlement == :invoicing ? "ladder2_$(N)" : "ladder2_$(N)_$(settlement)"
-const MODEL_VERSION = "2026-09-25e"   # part of the key: runs made with an earlier model are never taken for current ones
+const MODEL_VERSION = "2026-09-27"   # part of the key: runs made with an earlier model are never taken for current ones
 parts_dir(N, settlement) = joinpath(ROOT, "results", "parts", "$(ladder_name(N, settlement))_$(ROUNDS)months_$(MODEL_VERSION)")   # the run length is part of the key: a short test run is never taken for a real one
 safe(s) = replace(s, r"[^A-Za-z0-9]+" => "_")
 part_file(job) = joinpath(parts_dir(job.N, job.settlement), "$(safe(job.rung))__$(job.system)__$(job.seed).csv")
@@ -121,9 +122,21 @@ for (N, settlement) in LADDERS
             (startswith(name, "GP") && system == "debt") && continue       # parking-tax policy sweep: SuMSy only
             (startswith(name, "NLD") && system == "debt") && continue      # levy with entry: SuMSy only
             (startswith(name, "F") && system == "debt") && continue        # parking-fee policy: SuMSy only
+            (startswith(name, "D") && system == "sumsy") && continue       # public debt ceiling: debt side only
+            (startswith(name, "I") && system == "sumsy") && continue       # benefit fixed in money: debt side only
+            (startswith(name, "W") && system == "sumsy") && continue       # willingness to overpay: debt side only
+            (startswith(name, "A") && system == "sumsy") && continue       # austerity: debt side only
+            (startswith(name, "Z") && system == "debt") && continue        # SuMSy without the levy: SuMSy only
+            (startswith(name, "RZ") && system == "debt") && continue       # gold without the levy: SuMSy only
             (startswith(name, "GP") && system == "debt") && continue       # parking-tax policy sweep: SuMSy only
             (startswith(name, "NLD") && system == "debt") && continue      # levy with entry: SuMSy only
             (startswith(name, "F") && system == "debt") && continue        # parking-fee policy: SuMSy only
+            (startswith(name, "D") && system == "sumsy") && continue       # public debt ceiling: debt side only
+            (startswith(name, "I") && system == "sumsy") && continue       # benefit fixed in money: debt side only
+            (startswith(name, "W") && system == "sumsy") && continue       # willingness to overpay: debt side only
+            (startswith(name, "A") && system == "sumsy") && continue       # austerity: debt side only
+            (startswith(name, "Z") && system == "debt") && continue        # SuMSy without the levy: SuMSy only
+            (startswith(name, "RZ") && system == "debt") && continue       # gold without the levy: SuMSy only
             job = (; N, settlement, rounds = ROUNDS, rung = name, system, seed)
             push!(jobs, (; job..., file = part_file(job), index = length(jobs) + 1, total = 0))
         end
@@ -227,6 +240,7 @@ function summarise(rounds::DataFrame, N::Int)
         :wealth_gap_meals => m => :wealth_gap_meals, :wealth_bottom10_meals => m => :wealth_bottom10_meals,
         :cash_gap_meals => m => :cash_gap_meals, :cash_bottom10_meals => m => :cash_bottom10_meals,
         :negative_wealth_persons => m => :under_water, :zero_cash_persons => m => :without_cash,
+        :bank_bailouts => m => :bank_bailouts, :bad_debt => m => :loans_written_off, :new_firms => m => :firms_restarted,   # 27 Sept: the money pump made visible
         :land_households_share => m => :land_held_by_households, :gini_wealth_attributed => (x -> (v = collect(skipmissing(x)); (isempty(v) || any(g -> !(0 <= g <= 1), v)) ? missing : mean(v))) => :gini_wealth_firms_attributed,
         :liquidations => m => :liquidations, :refoundings => m => :refoundings, :bank_bailouts => m => :bank_bailouts,
         :identity => (x -> maximum(abs.(x))) => :worst_identity_gap)

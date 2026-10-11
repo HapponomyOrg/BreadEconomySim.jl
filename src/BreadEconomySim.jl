@@ -27,6 +27,7 @@ include("cooperatives.jl")
 include("negotiation.jl")
 include("markets.jl")
 include("government.jl")
+include("gold.jl")
 include("lifecycle.jl")
 include("sumsy.jl")
 include("data.jl")
@@ -34,10 +35,12 @@ include("data.jl")
 # Round structure (spec v2 §7)
 append!(ROUND_BEHAVIORS, Function[
     begin_round!,
+    apply_debt_ceiling!,                # the ceiling on public borrowing sets this month's spending scale (26 Sept)
     pay_guaranteed_income!,
     manage_buffer_pool!,
     set_interest_rates!,
     land_market!,
+    gold_market!,                       # 5 Oct: a pure store of value, traded like land
     m -> labour_market!(m, (:farm, :bank, :theatre)),
     produce_grain!,
     grain_market!,
@@ -47,7 +50,10 @@ append!(ROUND_BEHAVIORS, Function[
     government_hiring!,
     pay_unemployment_fees!,
     bread_market!,
+    staff_theatres_with_volunteers!,   # 4 Oct: after the labour markets, before the shows
     ticket_market!,
+    sell_rides!,
+    volunteer!,
     greed_spending!,
     charge_income_tax!,
     collect_land_levy!,

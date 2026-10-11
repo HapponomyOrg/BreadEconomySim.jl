@@ -91,6 +91,8 @@ end
     labour_sold::Float64 = 0.0
     labour_income::Float64 = 0.0        # net labour income this round
     last_wage_income::Float64 = 0.0     # last positive net labour income
+    last_wage_rate::Float64 = 0.0       # the wage per unit last agreed (downward wage rigidity, 27 Sept)
+    last_wage_round::Int = -1           # the month of that wage — the floor holds only for the continuously employed
     rent_income::Float64 = 0.0
     fee_received::Float64 = 0.0
     dividend_income::Float64 = 0.0
@@ -105,7 +107,14 @@ end
     death_round::Int = 0
     initial_landowner::Bool = false
     gross_wage_this_round::Float64 = 0.0 # for the progressive schedule
+    nonworking::Symbol = :none          # :none | :nonworking | :nonworking_hungry (5 Oct)
+    gold::Float64 = 0.0                 # grams held (5 Oct)
     greed::Symbol = :none               # :none | :greedy (each act of greed: capital with greed_hoarding, consumption otherwise)
+    volunteer_hours::Float64 = 0.0      # unpaid labour given to the commons this month (4 Oct)
+    tenure::OrderedDict{Int, Int} = OrderedDict{Int, Int}()        # employer → consecutive months worked for it (3 Oct)
+    units_for::OrderedDict{Int, Float64} = OrderedDict{Int, Float64}()   # employer → units worked this month
+    units_last::OrderedDict{Int, Float64} = OrderedDict{Int, Float64}()  # employer → units worked last month
+    notice::OrderedDict{Int, Int} = OrderedDict{Int, Int}()        # employer → months of notice still owed to this worker
     worked_for::Set{Int} = Set{Int}()   # employers this round (a theatre worker is not served at their own theatre)
     buffer_lender::Bool = false         # opted into lending part of the buffer to the bank
     buffer_lent::Float64 = 0.0
@@ -166,6 +175,7 @@ end
     rebate_per_unit::Float64 = 0.0      # consumer cooperative: expected rebate per unit bought (smoothed)
     refoundings::Int = 0                # times the firm has been sold as a going concern at a liquidation
     staff_target::Float64 = 1.0         # bank: labour units it employs (set at creation from bank_customers_per_labour_unit)
+    volunteer_labour::Float64 = 0.0     # theatre: unpaid labour this month (4 Oct)
     land_levy_arrears::Float64 = 0.0    # land levy due but unpaid
     revenue_period::Float64 = 0.0       # profit tax: sales since the last assessment (accrued at the sale)
     revenue_this_round::Float64 = 0.0   # sales this month (for the turnover in the liquidation test)

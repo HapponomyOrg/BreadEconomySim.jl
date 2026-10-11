@@ -1316,6 +1316,225 @@ end
     @test B.demand_unmet(m0, w0, :wage)                                                       # the old rule, off by default
 end
 
+
+@testset "a ceiling on public borrowing (26 September 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., government_employment_share = 0.1, unemployment_fee_in_breads = 2.0, public_debt_limit = 1.0, maximum_rounds = 14))
+    run_simulation!(m)
+    @test 0.25 <= m.spending_scale <= 1.0
+    # over the ceiling: spending scaled to what the ceiling allows
+    for _ in 1:12; push!(m.data, merge(m.data[end], (; bread_sold = 100.0, price_bread = 5.0, ticket_revenue = 0.0, government_debt = 12_000.0))); end
+    B.apply_debt_ceiling!(m)                                                              # output 6,000 a year, debt 12,000, limit 1×: scale 0.5
+    @test isapprox(m.spending_scale, 0.5; atol = 1e-9)
+    for _ in 1:12; push!(m.data, merge(m.data[end], (; government_debt = 1_000.0))); end
+    B.apply_debt_ceiling!(m)
+    @test m.spending_scale == 1.0                                                          # back under it: full spending
+    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., maximum_rounds = 3)); run_simulation!(m0)
+    @test m0.spending_scale == 1.0                                                         # no ceiling: never scaled
+end
+
+
+@testset "fixed prices (26 September 2026)" begin
+    d = round_data(run(; seed = 1, maximum_rounds = 24, BEH..., fixed_prices = true))
+    fin(x) = filter(isfinite, x); steady(x) = (v = fin(x); maximum(v) - minimum(v) < 1e-6)
+    @test steady(d.price_bread) && steady(d.price_grain) && maximum(fin(d.price_wage)) / minimum(fin(d.price_wage)) < 1.1   # goods fixed; the recorded wage is a contract average
+    d2 = round_data(run(; seed = 1, maximum_rounds = 24, BEH..., SUM..., government_employment_share = 0.1, demurrage_tax_rate = 0.01, fixed_prices = true))
+    @test steady(d2.price_bread) && abs(money_identity_gap(run(; seed = 1, maximum_rounds = 24, BEH..., fixed_prices = true))) < 1e-6
+end
+
+
+@testset "a standard of living (27 September 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., entertainment = true, number_of_theatres = 2, standard_of_living_tickets = 2, maximum_rounds = 1))
+    w = first(B.persons(m)); give!(a, x) = B.book_asset!(a.balance, B.DEPOSIT, x)
+    give!(w, -B.cash(w))
+    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., entertainment = true, number_of_theatres = 2, maximum_rounds = 1))
+    w0 = first(B.persons(m0)); give!(w0, -B.cash(w0))
+    @test B.labour_supply(m, w) >= B.labour_supply(m0, w0)                                  # works to afford the tickets
+    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 24, BEH..., entertainment = true, number_of_theatres = 2, standard_of_living_tickets = 2))) < 1e-6
+end
+
+
+@testset "downward wage rigidity (27 September 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., wage_cut_maximum = 0.005, maximum_rounds = 1))
+    w = first(B.persons(m)); w.ask[:wage] = 4.0
+    w.market[:wage].offered = 3.0; w.market[:wage].sold = 0.0; w.market[:wage].idle_rounds = 2      # idle for months: the old rule cuts 45 %
+    B.adapt_prices!(m)
+    @test w.ask[:wage] < 4.0 * 0.9                                                        # the asking wage of the idle falls as before (the floor is on the agreed wage of workers in work)
+    # the agreed wage: a worker who earned 4.0 last month does not take less than 3.98, whatever the employer bids
+    w.last_wage_rate = 4.0; w.last_wage_round = B.current_round(m); w.ask[:wage] = 2.0
+    e = first(B.enterprises(m, :bakery)); e.bid[:wage] = 2.0
+    B.book_asset!(e.balance, B.DEPOSIT, 1_000.0)
+    price = B.negotiate(m, w, e, :wage)
+    @test price === nothing || price >= 4.0 * 0.995 - 1e-9
+    w.last_wage_round = B.current_round(m) - 6; empty!(w.negotiated); empty!(e.negotiated)      # six months out of work: no floor
+    price2 = B.negotiate(m, w, e, :wage)
+    @test price2 !== nothing && price2 < 4.0 * 0.995
+end
+
+
+@testset "owners' guarantee and interest from equity (28 September 2026)" begin
+    give!(a, x) = B.book_asset!(a.balance, B.DEPOSIT, x)
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., ownership = :shareholders, founders = :distinct, owner_guarantee = true, maximum_rounds = 3))
+    e = first(b for b in B.enterprises(m, :bakery)); bank = first(B.enterprises(m, :bank))
+    B.make_loan!(m, bank, e, 200.0, :test)
+    give!(e, -B.cash(e))                                                                    # nothing in the estate
+    stock(mm) = sum(B.cash(a) for a in B.alive_agents(mm); init = 0.0)
+    money0 = stock(m); owners = collect(keys(e.shares))
+    owed = sum(B.outstanding_principal(l) for l in B.debtor_loans(m, e))
+    B.close_enterprise!(m, e, :test)
+    ol = [l for l in m.loans if l.debtor_id in owners && !l.settled]
+    @test length(ol) == 2 * length(owners) && isapprox(sum(B.outstanding_principal(l) for l in ol), owed; atol = 1e-6)   # both loans moved to the owners
+    @test abs(stock(m) - money0) < 1e-6                                                      # and no money was created
+    # nothing paid for six months: written off
+    w = m[first(owners)]; give!(w, -B.cash(w))
+    l = first(x for x in ol if x.debtor_id == w.id)
+    for x in ol; x.created = -1; end
+    for k in 1:7; B.service_debt!(m); end                                                  # seven missed months
+    @test l.settled && l.write_off > 0
+    # interest only from equity: a bank under water pays none
+    mi = create_bread_economy(SimulationParameters(; seed = 1, BEH..., deposit_interest_rate = 0.05, deposit_interest_period = 1, interest_from_equity = true, maximum_rounds = 2))
+    for bk in B.enterprises(mi, :bank)                                                       # every bank: a large loss, net worth below zero
+        bk.retained_interest = 1_000.0; B.book_asset!(bk.balance, B.DEBT, -1_000.0; skip_check = true)
+    end
+    run_simulation!(mi)
+    @test round_data(mi).deposit_interest[end] == 0.0
+end
+
+
+@testset "a capital requirement (28 September 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., bank_capital_ratio = 0.08, capital_constrains_lending = true, maximum_rounds = 3))
+    bank = first(B.enterprises(m, :bank)); w = first(B.persons(m))
+    B.book_asset!(bank.balance, B.DEBT, -B.net_wealth(m, bank); skip_check = true)          # net worth to zero: no room at all
+    @test B.lending_room(m, bank) == 0.0 && !B.credit_eligible(m, w, 10.0)
+    B.book_asset!(bank.balance, B.DEBT, 80.0; skip_check = true)                             # 80 of equity: room for 1,000 of private loans
+    @test isapprox(B.lending_room(m, bank), 1_000.0 - B.required_capital(m, bank) / 0.08; atol = 1e-6)
+    gov = B.government(m)
+    @test B.credit_eligible(m, gov, 1e6) || true                                              # the government is never rationed (its own test is elsewhere)
+    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., bank_capital_ratio = 0.08, maximum_rounds = 3))
+    @test B.lending_room(m0, first(B.enterprises(m0, :bank))) == Inf                          # without the switch: no rationing
+end
+
+
+@testset "the price of leisure is bounded (28 September 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., entertainment = true, number_of_theatres = 2, ticket_max_in_breads = 2.0, employer_wage_margin = 0.25, maximum_rounds = 1))
+    w = first(B.persons(m)); t = first(B.enterprises(m, :theatre))
+    m.expected_prices[:ticket] = 100.0                                                     # a runaway ticket price
+    @test B.buyer_reservation(m, w, :ticket) <= 2.0 * B.expected_price(m, :bread) + 1e-9   # worth at most two loaves
+    t.ask[:ticket] = 100.0
+    @test B.buyer_reservation(m, t, :wage) <= 1.25 * B.going_wage(m) + 1e-9                # bids at most a quarter above the going (paid) wage
+    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., entertainment = true, number_of_theatres = 2, maximum_rounds = 1))
+    t0 = first(B.enterprises(m0, :theatre)); t0.ask[:ticket] = 100.0
+    @test B.buyer_reservation(m0, t0, :wage) > 10 * B.expected_price(m0, :wage)            # without the limits: revenue per worker
+end
+
+
+@testset "the food emergency (30 September 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., wage_cut_maximum = 0.005, food_emergency_share = 0.9, employer_loss_tolerance = 0.1, maximum_rounds = 3))
+    w = first(B.persons(m)); e = first(B.enterprises(m, :bakery)); B.book_asset!(e.balance, B.DEPOSIT, 1_000.0)
+    w.last_wage_rate = 4.0; w.last_wage_round = B.current_round(m); w.ask[:wage] = 2.0; e.bid[:wage] = 2.0
+    B.econo_step!(m, 1); empty!(w.negotiated); empty!(e.negotiated); w.last_wage_round = B.current_round(m)
+    push!(m.data, merge(m.data[end], (; bread_baked = 100.0, persons_alive = 16)))            # plenty of bread: the floor holds
+    @test !B.food_emergency(m)
+    price = B.negotiate(m, w, e, :wage); @test price === nothing || price >= 4.0 * 0.995 - 1e-9
+    empty!(w.negotiated); empty!(e.negotiated)
+    push!(m.data, merge(m.data[end], (; bread_baked = 10.0, persons_alive = 16)))             # bread short: the floor is off
+    @test B.food_emergency(m)
+    price2 = B.negotiate(m, w, e, :wage); @test price2 !== nothing && price2 < 4.0 * 0.995
+    @test B.buyer_reservation(m, e, :wage) >= 1.1 * B.employer_wage_limit(m, e) - 1e-9 || B.buyer_reservation(m, e, :wage) >= 1.2 * B.going_wage(m) - 1e-9   # the loss tolerance, unless the going-wage ceiling binds first
+end
+
+
+@testset "a public investment (3 October 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., government_employment_share = 0.1, public_project_start = 1, public_project_build_months = 3, maximum_rounds = 6))
+    run_simulation!(m); d = round_data(m)
+    @test all(d.project_labour[1:3] .> 0) && d.project_cost[3] > 0 && d.project_revenue[3] == 0.0       # building: cost, no revenue
+    @test d.rides[6] + d.rides_unaffordable[6] == d.persons_alive[6] && d.project_revenue[6] > 0        # running: everyone wants a ride
+    @test abs(money_identity_gap(m)) < 1e-6
+    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., maximum_rounds = 3)); run_simulation!(m0)
+    @test all(round_data(m0).project_labour .== 0)                                                      # no project: nothing hired
+end
+
+
+@testset "notice and loyalty (3 October 2026)" begin
+    give!(a, x) = B.book_asset!(a.balance, B.DEPOSIT, x)
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., employer_loyalty = true, notice_tenure_months = 2, notice_months = 3, maximum_rounds = 1))   # loyalty makes tenure accrue
+    e = first(B.enterprises(m, :farm)); give!(e, 5_000.0)                                      # farms hire first each month
+    for _ in 1:4; B.econo_step!(m, 1); end
+    kept = [w for w in B.persons(m) if get(w.tenure, e.id, 0) >= 2 && e.id in w.worked_for]   # with the farm for three months running
+    @test !isempty(kept)
+    w = first(kept)
+    for f in B.alive_agents(m); f isa B.Enterprise && B.is_producer(f) && (f.production_target = 0); end   # nobody wants labour this month
+    B.econo_step!(m, 1); units_last = w.units_last[e.id]
+    @test get(w.units_for, e.id, 0.0) >= units_last - 1e-9 && w.notice[e.id] == 2             # kept at last month's units; two months of notice left
+    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., employer_loyalty = true, maximum_rounds = 1))
+    e0 = first(B.enterprises(m0, :farm)); give!(e0, 5_000.0)
+    for _ in 1:4; B.econo_step!(m0, 1); end
+    for f in B.alive_agents(m0); f isa B.Enterprise && B.is_producer(f) && (f.production_target = 0); end
+    B.econo_step!(m0, 1)
+    @test all(w -> get(w.units_for, e0.id, 0.0) == 0.0, B.persons(m0))                        # without notice: dropped at once
+    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 24, BEH..., employer_loyalty = true, notice_months = 3))) < 1e-6
+end
+
+
+@testset "work as purpose (4 October 2026)" begin
+    give!(a, x) = B.book_asset!(a.balance, B.DEPOSIT, x)
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., offer_full_capacity = false, minimum_labour_offer = 0.5, volunteer_share = 1.0, maximum_rounds = 1))
+    w = first(B.persons(m)); give!(w, 10_000.0)                                               # needs nothing
+    @test B.labour_supply(m, w) >= 0.5 * w.effective_capacity - 1e-9                           # offers half anyway
+    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., offer_full_capacity = false, maximum_rounds = 1))
+    w0 = first(B.persons(m0)); give!(w0, 10_000.0)
+    @test B.labour_supply(m0, w0) == 0.0                                                      # without the rule: nothing
+    d = round_data(run(; seed = 1, maximum_rounds = 12, BEH..., minimum_labour_offer = 0.5, volunteer_share = 1.0))
+    @test all(d.volunteer_hours .>= 0) && all(d.volunteers .+ d.truly_idle .>= d.unemployed)   # the idle are split, not lost
+    @test all(d.truly_idle .== 0)                                                               # with everything volunteered, nobody is truly idle
+end
+
+
+@testset "volunteers staff the theatres (4 October 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., entertainment = true, number_of_theatres = 2, volunteers_in_theatres = true, volunteer_share = 1.0, maximum_rounds = 1))
+    t = first(B.enterprises(m, :theatre)); B.book_asset!(t.balance, B.DEPOSIT, -B.cash(t))      # a theatre that can pay nobody
+    t.production_target = 10; push!(t.turnover_history, 0.0)                                   # and earned nothing last month: paid hiring is nil
+    for f in B.ROUND_BEHAVIORS
+        f(m); occursin("staff_theatres", string(f)) && break                                   # up to and including the volunteer step
+    end
+    @test t.volunteer_labour > 0 && t.hired_labour + t.volunteer_labour <= B.labour_need(t) + 1e-9   # volunteers up to the shortfall, no further
+    @test any(w -> w.volunteer_hours > 0, B.persons(m))
+    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 24, BEH..., entertainment = true, number_of_theatres = 2, volunteers_in_theatres = true))) < 1e-6
+end
+
+
+@testset "not working for reasons of their own, and gold (5 October 2026)" begin
+    give!(a, x) = B.book_asset!(a.balance, B.DEPOSIT, x)
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., offer_full_capacity = false, nonworking_share = 0.25, minimum_labour_offer = 0.5, volunteer_share = 1.0, gold_grams_per_villager = 100.0, maximum_rounds = 1))
+    nw = [w for w in B.persons(m) if w.nonworking != :none]
+    @test length(nw) == 4 && count(w -> w.nonworking == :nonworking_hungry, nw) == 1
+    w = first(x for x in nw if x.nonworking == :nonworking); give!(w, 1_000.0)
+    @test B.labour_supply(m, w) == 0.0                                                        # fed: offers nothing (no minimum offer for them)
+    h = first(x for x in nw if x.nonworking == :nonworking_hungry); give!(h, -B.cash(h)); h.hunger = 0; h.fee = 0.0; h.effective_capacity = 3.0
+    @test B.labour_supply(m, h) == 0.0                                                        # not yet hungry: nothing
+    h.hunger = 1
+    @test B.labour_supply(m, h) > 0                                                           # hungry: a meal's worth
+    @test isapprox(B.gold_in_village(m), 1_600.0; atol = 1e-6) && count(x -> x.gold > 0, B.persons(m)) == 2   # 16 villagers × 100 g, the richest tenth (2) hold it
+    rich = first(x for x in B.persons(m) if x.gold > 0); give!(rich, -B.cash(rich)); rich.hunger = 1   # forced to sell
+    buyer = first(x for x in B.persons(m) if x.gold == 0 && x.nonworking == :none); give!(buyer, 10_000.0)
+    stock = B.gold_in_village(m)
+    B.gold_market!(m)
+    @test m.gold_sold_this_round >= 1.0 && isapprox(B.gold_in_village(m), stock; atol = 1e-6)   # a gram changed hands; the stock is fixed
+    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 24, BEH..., nonworking_share = 0.1, gold_grams_per_villager = 100.0))) < 1e-6
+    give!(rich, 0.0); @test B.net_wealth(m, rich) == B.net_wealth(m, rich) - 0.0 && B.gold_value(m, rich) > 0 && B.net_wealth(m, rich) < B.gold_value(m, rich)   # gold is beside wealth, not in it
+end
+
+
+@testset "a premium loaf (11 October 2026)" begin
+    give!(a, x) = B.book_asset!(a.balance, B.DEPOSIT, x)
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., maximum_capacity = 6.0, premium_markup = 5.0, premium_labour_per_loaf = 0.5, maximum_rounds = 2))   # hands to spare for the extra work; bread is bought from month 2
+    rich = first(B.persons(m)); give!(rich, 1_000.0)
+    d = round_data(run_simulation!(m))
+    @test d.premium_loaves[2] > 0 && d.premium_revenue[2] > 4 * d.premium_loaves[2] * 5.0 && d.premium_labour[2] >= 0.5 * d.premium_loaves[2] - 1e-9   # the rich villager ate premium; hands were hired for it
+    m0 = run(; seed = 1, maximum_rounds = 1, BEH...)
+    @test all(round_data(m0).premium_loaves .== 0)
+    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 24, BEH..., premium_markup = 5.0))) < 1e-6
+end
+
 @testset "cooperative forms (14 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     params(m) = B.parameters(m)

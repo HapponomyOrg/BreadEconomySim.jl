@@ -5,7 +5,8 @@
 An agent-based simulation, in Julia, of one village built twice — debt money and SuMSy (guaranteed income + parking fee) — identical except for where money comes from. A **ladder** adds one institution per step to both villages; results are the survivors, prices, public debt and the rich–poor gap after ten years, ten runs per configuration, 512 villagers. It feeds a public report (English first, Dutch and others later), Stef's Dutch book on SuMSy, and a talk on **25 October 2026** ("A simulated economy – What it takes to survive").
 
 ## 2. Where things stand
-- **Model version `2026-09-25e`** (`MODEL_VERSION` in `scripts/run_all.jl`), **584 tests** (`julia --project=. test/runtests.jl`), Julia **1.13**, EconoSim.jl from GitHub (branch main).
+- **Model version `2026-09-27`** (`MODEL_VERSION` in `scripts/run_all.jl`), **611 tests** (`julia --project=. test/runtests.jl`), Julia **1.13**, EconoSim.jl from GitHub (branch main).
+- **Routine runs are the main ladder only** (512 villagers, invoicing; `LADDERS` default since 26 September); the old-settlement and 128-villager comparisons are run once on the frozen baseline.
 - **The full run on this version** was started by Stef on the evening of 25 September (about 2,250 runs, ~6 hours on his machine); it includes the wage threshold and no bailouts without a government. Its results are **not on GitHub** (files too large): Stef uploads a `results.zip`. Rebuild the summaries from its `results/parts/` with `SKIP_TESTS=1 julia --project=. scripts/run_all.jl` (skips finished runs, then summarises).
 - **Stef is away from his computer 26 September – 11 October.** No 512-villager runs are possible in that window; the 128-villager ladder is feasible in a chat container (slow).
 
@@ -17,9 +18,9 @@ An agent-based simulation, in Julia, of one village built twice — debt money a
 4. After the talk: modularity refactor stage 1 (`docs/future_work/modularity_report_2026-09-25.md`), then the transition (`docs/future_work/design_transition_2026-09-23.md`).
 
 ## 4. The ladder (redefined 25 September)
-Realistic price rules (5 % thresholds, cost floor, buyer ceiling 2.0) from step 0; invoicing settlement; founders distinct per firm with founding loans on business terms; the protected minimum of one loaf; villages run on without farms or bakeries and missing firms are restarted (theatres too, with a 3-month wait); land prices discovered by the money logic.
+Realistic price rules (5 % thresholds, cost floor, buyers overpay up to 1.2× — a few percent of inflation a year; 2× is the "panic buying" stress case) from step 0; invoicing settlement; founders distinct per firm with founding loans on business terms; the protected minimum of one loaf; villages run on without farms or bakeries and missing firms are restarted (theatres too, with a 3-month wait); land prices discovered by the money logic.
 Steps: 0 bare · 1 planning margin · 2 government · 3 interest on deposits · 4 theatres · 5 bonds · 6 charge on balances · 7 four theatres · 8 shareholders & share market · 9 co-ops (side step) · **10 government reserve** · **11 fiscal policy and consumption tax**.
-Variants: S1–S4 greed stress tests (steps 10, 11) · B co-op village (+ reserve) · SB1, SB2 greed on B · E2, E8, E10, EB full money stock (start at base prices) · L2, L10, LB land levy · LD10 levy + land dividend · N8, N10, NB, NLD10 market entry · G8/G10-20…50 public employment · GP10-20…50 SuMSy public employment with a parking-tax policy · X1, X2 the 2×2 (comparisons).
+Variants (Oct 2): P2/P8/P10 fixed prices · U8/UP8 full employment by public jobs · V8 the productive village · F8/FF8 the parking fee · D debt ceiling · I fixed benefit · W overpay dial · A8/A10 austerity · H8/HLD10 the 1 % hoarders · S1–S4 greed stress tests (steps 10, 11) · B co-op village (+ reserve) · SB1, SB2 greed on B · E2, E8, E10, EB full money stock (start at base prices) · L2, L10, LB land levy · LD10 levy + land dividend · N8, N10, NB, NLD10 market entry · G8/G10-20…50 public employment · GP10-20…50 SuMSy public employment with a parking-tax policy · X1, X2 the 2×2 (comparisons).
 
 ## 5. Standing decisions and principles (Stef's)
 - **SuMSy never taxes income** (income tax under SuMSy only as a labelled comparison). The parking *fee* is money, not tax; the parking *tax* is the government's revenue.
@@ -28,7 +29,9 @@ Variants: S1–S4 greed stress tests (steps 10, 11) · B co-op village (+ reserv
 - The rich–poor gap: richest tenth minus poorest tenth, **in meals**, always shown with the poorest tenth's holding. No ratios.
 - A broad rise in prices is inflation; SuMSy *caps* it when the money stock reaches its equilibrium.
 - Every tax is a family on the levers (income, consumption, wealth, profit, parking, land); the reserve rule adjusts taxes down on a surplus (floor 5 %).
-- The guaranteed income is not to be touched; the parking fee is the lever (a future monetary-policy rule).
+- The guaranteed income is not to be touched; the parking fee is the lever (F8/FF8 steps test it).
+- The willingness to overpay is the behavioural vector behind inflation: base 1.2×, stress 2×; the cost floor is the transmission; the debt village's public debt rises at any price level — it is the cost of unemployment, borrowed into existence (fixed-price twins P, full-employment steps U/UP, the productive village V8).
+- Villagers offer only the labour their needs require: part-time work appears when a unit of labour buys more than a third of a household's needs (not at the current price vector).
 - Public employment is employer of last resort (up to a share of capacity, from leftover labour).
 - Report register: general public, as the book chapters *Goed geld* / *Slecht geld* (project knowledge); technical detail in `\[ KADER … \]` frames; terms "guaranteed income", "parking fee", "parking tax"; see `docs/report_style.md` (binding).
 - Each report version links to the previous and next; errata go in a box on the older version; every link right-clickable.

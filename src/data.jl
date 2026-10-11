@@ -23,6 +23,10 @@ function decile_ends(values)
     return (sum(x[1:k]) / k, sum(x[end-k+1:end]) / k)
 end
 
+"""Gold is kept out of net wealth (5 October, Stef): it yields nothing, feeds no one, and turns into bread only if someone else
+pays money for it — the Gini and the rich–poor gap measure claims on what the village makes; gold is reported beside them."""
+gold_value(model, w::Person) = w.gold * model.gold_valuation
+
 net_wealth(model, a::Agent) = cash(a) + a.land * land_valuation_price(model) - debt_of(a) - peer_debt_of(model, a) + peer_claims(model, a) + bond_holdings(model, a) +
                               (a isa Person ? share_wealth(model, a) : (a isa Enterprise && a.ownership != :none) ? -book_value(model, a) : 0.0) +
                               (a isa Person ? a.buffer_lent : 0.0) - (is_bank(a) ? a.buffer_received : 0.0) +
@@ -97,7 +101,12 @@ function record!(model)
         land_households_share = (let tot = sum(a.land for a in agents_by_id(model) if a.alive; init = 0); tot > 0 ? sum(w.land for w in ps; init = 0) / tot : NaN end),
         gini_wealth_attributed = (let pool = sum(book_value(model, e) for e in model.enterprise_list if e.alive && is_producer(e) && isempty(e.shares) && isempty(e.members); init = 0.0)
             isempty(ps) ? NaN : gini([net_wealth(model, w) + pool / length(ps) for w in ps]) end),
-        land_supply = model.land_supply_this_round, land_demand = model.land_demand_this_round, land_sold = model.land_sold_this_round, land_levy = model.land_levy_this_round, land_levy_scale = model.land_levy_scale, new_firms = model.new_firms, entries = model.entries,
+        premium_loaves = model.premium_loaves_this_round, premium_revenue = model.premium_revenue_this_round, premium_labour = model.premium_labour_this_round,
+        gold_price = model.gold_price, gold_valuation = model.gold_valuation, gold_sold = model.gold_sold_this_round,
+        gold_holders = count(w -> w.gold >= 1.0, ps), gold_value_in_meals = sum(gold_value(model, w) for w in ps; init = 0.0) / max(meal_price(model), 1e-9), gold_top10_share = (let g = sort([w.gold for w in ps]; rev = true), t = sum(g; init = 0.0); t > 0 ? sum(g[1:max(1, length(g) ÷ 10)]) / t : NaN end),
+        nonworking = count(w -> w.nonworking != :none, ps), nonworking_hungry = count(w -> w.nonworking == :nonworking_hungry && w.hunger > 0, ps),
+        land_supply = model.land_supply_this_round, land_demand = model.land_demand_this_round, land_sold = model.land_sold_this_round, land_levy = model.land_levy_this_round, land_levy_scale = model.land_levy_scale, new_firms = model.new_firms, entries = model.entries, spending_scale = model.spending_scale,
+        project_labour = model.project_labour_this_round, project_cost = model.project_cost, project_revenue = model.project_revenue, rides = model.rides_this_round, rides_unaffordable = model.rides_unaffordable_this_round,
         coops_open = count(e -> e.alive && is_producer(e) && e.ownership == :cooperative, model.enterprise_list),
         hhi_bread = (let s = [e.market[:bread].sold for e in enterprises(model, :bakery) if haskey(e.market, :bread)], t = sum(s; init = 0.0); t > 0 ? sum((x / t)^2 for x in s) : NaN end),
         owners = length(union(Set{Int}(), (Set(keys(e.shares)) for e in model.enterprise_list if e.alive && is_producer(e))..., (Set(keys(e.members)) for e in model.enterprise_list if e.alive && is_producer(e))...)),
@@ -144,6 +153,13 @@ function record!(model)
         labour_sold = sum(w.labour_sold for w in ps; init = 0.0),
         government_labour = sum(c.units for c in model.wage_contracts if c.stage == :government; init = 0.0),
         unemployed = count(unemployed, ps),
+        # 27 Sept (Stef): part-time by choice — villagers offer only the labour they need; the rest of their capacity is leisure
+        voluntarily_idle = count(w -> w.labour_offered <= 1e-9, ps),
+        volunteer_hours = sum(w.volunteer_hours for w in ps; init = 0.0), volunteers = count(w -> w.volunteer_hours > 1e-9, ps),
+        truly_idle = count(w -> w.labour_offered > 1e-9 && w.labour_sold <= 1e-9 && w.volunteer_hours <= 1e-9, ps),
+        part_time = count(w -> w.labour_sold > 1e-9 && w.labour_offered < w.effective_capacity - 1e-9 && w.labour_sold >= w.labour_offered - 1e-9, ps),
+        labour_offered_share = (let cap = sum(w.effective_capacity for w in ps; init = 0.0); cap > 0 ? sum(w.labour_offered for w in ps; init = 0.0) / cap : NaN end),
+        labour_sold_share = (let cap = sum(w.effective_capacity for w in ps; init = 0.0); cap > 0 ? sum(w.labour_sold for w in ps; init = 0.0) / cap : NaN end),
         hungry = count(a -> a.hunger > 0, ps),
         without_bread = count(a -> a.ate_this_round == :none, ps),
         half_meals = count(a -> a.ate_this_round == :half, ps),

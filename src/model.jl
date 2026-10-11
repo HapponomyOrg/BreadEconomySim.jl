@@ -41,7 +41,7 @@ const ROUND_BEHAVIORS = Function[]
 # on, a reordered check — shifts every later draw everywhere, so the same seed no longer gives the same experiment
 # in the parts that did not change. Separate streams confine such a change to its own subsystem. Each stream is
 # seeded from the run seed and its own name, so adding a stream never re-seeds the others.
-const RANDOM_STREAMS = (:negotiation, :land, :labour, :grain, :bread, :tickets, :greed, :credit, :estates, :shares, :cooperatives, :entry)
+const RANDOM_STREAMS = (:negotiation, :land, :labour, :grain, :bread, :tickets, :greed, :credit, :estates, :shares, :cooperatives, :entry, :nonworking, :gold)
 
 """The random generator of a subsystem; the model's single generator when `random_streams` is off."""
 stream(model, name::Symbol) = parameters(model).random_streams ? model.streams[name] : model.single_stream
@@ -113,7 +113,8 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
     props[:invoices_issued_this_round] = 0.0
     props[:invoices_paid_this_round] = 0.0
     props[:liquidations] = 0; props[:refoundings] = 0; props[:cumulative_bad_debt] = 0.0; props[:cumulative_bailouts] = 0.0
-    props[:profit_tax_scale] = 1.0; props[:parking_tax_scale] = 1.0; props[:land_levy_scale] = 1.0   # 24 Sept: the land levy is a sixth tax family
+    props[:profit_tax_scale] = 1.0; props[:parking_tax_scale] = 1.0; props[:land_levy_scale] = 1.0; props[:spending_scale] = 1.0
+    props[:project_cost] = 0.0; props[:project_revenue] = 0.0; props[:project_labour_this_round] = 0.0; props[:rides_this_round] = 0; props[:rides_unaffordable_this_round] = 0   # 24 Sept: the land levy is a sixth tax family
     props[:land_price_current] = parameters.land_price_rent_multiple * parameters.initial_prices[:rent] * parameters.initial_price_multiplier   # :market land pricing: the base price
     props[:land_supply_this_round] = 0.0; props[:land_demand_this_round] = 0.0; props[:land_sold_this_round] = 0.0
     props[:land_levy_this_round] = 0.0
@@ -123,6 +124,9 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
     props[:entry_margin_history] = OrderedDict{Symbol, Vector{Float64}}()
     props[:entry_last] = OrderedDict{Symbol, Int}()
     props[:refound_last] = OrderedDict{Symbol, Int}()
+    props[:premium_loaves_this_round] = 0.0; props[:premium_revenue_this_round] = 0.0; props[:premium_labour_this_round] = 0.0
+    props[:gold_price] = parameters.gold_initial_price_in_breads * parameters.initial_prices[:bread] * parameters.initial_price_multiplier
+    props[:gold_valuation] = props[:gold_price]; props[:gold_sales_log] = Tuple{Int, Float64}[]; props[:gold_sold_this_round] = 0.0
     props[:land_last_trade_price] = props[:land_price_current]        # the valuation price: the median voluntary sale of the last 12 months
     props[:land_sales_log] = Tuple{Int, Float64}[]                   # (round, price) of voluntary sales
     props[:profit_tax_this_round] = 0.0; props[:income_tax_charged_this_round] = 0.0
@@ -255,6 +259,19 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
         chosen = parameters.greed_selection == :rich ? sort(ps; by = w -> (-wealth(w), w.id))[1:n] : stable_shuffle(stream(model, :greed), ps)[1:n]
         for w in chosen; w.greed = :greedy; end
     end
+    if parameters.nonworking_share > 0                               # 5 Oct: those not working for reasons of their own, drawn at the founding
+        ps = collect(persons(model)); n = round(Int, parameters.nonworking_share * length(ps))
+        chosen = stable_shuffle(stream(model, :nonworking), ps)[1:n]
+        nh = round(Int, parameters.nonworking_hungry_share * n)
+        for (k, w) in enumerate(chosen); w.nonworking = k <= nh ? :nonworking_hungry : :nonworking; end
+    end
+    if parameters.gold_grams_per_villager > 0                        # 5 Oct: gold, to the richest tenth
+        ps = collect(persons(model)); n = max(1, round(Int, parameters.gold_initial_holders_share * length(ps)))
+        wealth0(w) = cash(w) + w.land * parameters.land_price_rent_multiple * prices[:rent]
+        rich = sort(ps; by = w -> (-wealth0(w), w.id))[1:n]
+        each = parameters.gold_grams_per_villager * length(ps) / n
+        for w in rich; w.gold = each; end
+    end
     if sumsy && parameters.start_at_saturation != :none
         b = parameters.demurrage_free_buffer; n = parameters.number_of_persons; gi_d = parameters.guaranteed_income / parameters.demurrage_rate
         if parameters.start_at_saturation == :upper
@@ -366,7 +383,7 @@ end
 
 current_round(model) = get_step(model)
 parameters(model) = model.parameters
-expected_price(model, good::Symbol) = model.expected_prices[good]
+expected_price(model, good::Symbol) = parameters(model).fixed_prices ? parameters(model).initial_prices[good] * parameters(model).initial_price_multiplier : model.expected_prices[good]
 meal_price(model) = parameters(model).breads_per_meal * expected_price(model, :bread)
 land_price(model) = parameters(model).land_pricing == :market ? model.land_price_current : parameters(model).land_price_rent_multiple * expected_price(model, :rent)
 
@@ -408,7 +425,7 @@ function begin_round!(model)
         end
         if a isa Person
             a.effective_capacity = a.last_meal == :half ? a.capacity * p.half_meal_capacity_fraction : a.capacity
-            a.labour_available = 0.0; a.labour_offered = 0.0; a.labour_sold = 0.0
+            a.labour_available = 0.0; a.labour_offered = 0.0; a.labour_sold = 0.0; a.volunteer_hours = 0.0
             a.labour_income = 0.0; a.rent_income = 0.0; a.fee_received = 0.0; a.rebate_income = 0.0
             empty!(a.labour_reserved)
             a.ate_this_round = :none; a.glutton = false
@@ -434,6 +451,16 @@ function begin_round!(model)
     model.gluttony_attempted_this_round = 0; model.gluttony_refused_this_round = 0; model.demurrage_persons_this_round = 0.0
     model.greedy_loaves_this_round = 0; model.greedy_tickets_this_round = 0; model.tier_revenue_this_round = 0.0
     model.greedy_land_this_round = 0; model.greedy_shares_this_round = 0
+    for w in model.person_list                                       # 3 Oct: tenure — consecutive months with each employer
+        for (eid, _) in collect(w.tenure)
+            eid in w.worked_for || (delete!(w.tenure, eid); delete!(w.notice, eid))
+        end
+        for eid in w.worked_for
+            w.tenure[eid] = get(w.tenure, eid, 0) + 1
+        end
+        w.units_last = copy(w.units_for); empty!(w.units_for)
+    end
+    for e in model.enterprise_list; e.volunteer_labour = 0.0; end
     for w in model.person_list; w.gross_wage_this_round = 0.0; w.dividend_income = 0.0; empty!(w.worked_for); end
     for e in model.enterprise_list; e.tier_sold = 0; e.tier_unmet = false; end
     model.bonds_issued_this_round = 0.0; model.coupons_this_round = 0.0
@@ -443,6 +470,7 @@ function begin_round!(model)
     model.consumption_tax_this_round = 0.0; model.wealth_tax_this_round = 0.0
     model.invoices_issued_this_round = 0.0; model.invoices_paid_this_round = 0.0
     model.profit_tax_this_round = 0.0; model.income_tax_charged_this_round = 0.0; model.after_clearing = false; model.land_levy_this_round = 0.0
+    model.premium_loaves_this_round = 0.0; model.premium_revenue_this_round = 0.0; model.premium_labour_this_round = 0.0
     for e in model.enterprise_list; empty!(e.patronage_this_round); end
     model.gi_this_round = 0.0; model.demurrage_this_round = 0.0; model.demurrage_tax_this_round = 0.0
     model.account_fees_this_round = 0.0; model.peer_lent_this_round = 0.0

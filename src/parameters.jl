@@ -43,6 +43,11 @@ Base.@kwdef struct SimulationParameters
     farm_maximum_rent_fraction_of_grain_price::Float64 = 0.6
     bakery_grain_wage_fraction::Float64 = 0.5
     bread_bid_base_multiplier::Float64 = 1.3
+    # Two limits on the price of leisure (28 September; the theatres set the wage level at step 4 — a full house raised its ticket
+    # price without end, and an employer's willingness to pay is its revenue per worker): a villager pays at most this many loaves
+    # of bread for a ticket, and an employer bids at most this share above the going wage. Inf = no limit.
+    ticket_max_in_breads::Float64 = Inf
+    employer_wage_margin::Float64 = Inf
     # Unmet demand (19 September 2026). Sellers raise their ask and their production target when demand went unmet.
     # 0 = the original rule: one buyer who found nothing is enough. A share s > 0 requires the units that went unserved
     # to be at least s of what the market sold plus what it missed (5–10 % is a realistic threshold). Wages keep the
@@ -84,10 +89,23 @@ Base.@kwdef struct SimulationParameters
     # Government
     wage_tax_rate::Float64 = 0.15
     capital_tax_rate::Float64 = 0.15
-    government_employment_share::Float64 = 0.10        # of total person capacity
+    government_employment_share::Float64 = 0.1
+    # A public investment (3 October, Stef — public transport): from `public_project_start` the government employs
+    # `public_project_labour_share` of the village's capacity on it at the public wage for `public_project_build_months`, with
+    # nothing coming back; then the same workforce runs it and every villager wants one ride a month, bought if affordable after
+    # bread at `public_project_fare_in_breads` loaves; the fares are the government's. 0 = no project.
+    public_project_start::Int = 0
+    public_project_build_months::Int = 60
+    public_project_labour_share::Float64 = 0.05
+    public_project_fare_in_breads::Float64 = 0.50        # of total person capacity
     government_wage_in_breads::Float64 = 2.0
     government_wage_premium::Float64 = 0.10            # net wage for full-time = breads × (1 + premium)
     unemployment_fee_in_breads::Float64 = 2.0
+    # Austerity (30 September, Stef): from `austerity_start` the benefit tapers over `austerity_months` to `austerity_fee_in_breads`
+    # loaves and stays there (0 = no austerity).
+    austerity_start::Int = 0
+    austerity_months::Int = 6
+    austerity_fee_in_breads::Float64 = 1.0
     minimum_fee_in_breads::Float64 = 1.0
     fee_reduction_interval::Int = 3
     fee_reduction_rate::Float64 = 0.10
@@ -245,6 +263,9 @@ Base.@kwdef struct SimulationParameters
     government_bonds::Bool = false
     bond_term_long::Int = 60
     bond_term_short::Int = 12
+    # The coupon (28 September, Stef): NaN = the market rule (midpoint of the deposit rate and the government's bank rate); a
+    # number = a coupon the government sets, per month (a safe haven sells at a low rate too; 0 is the floor without a central bank).
+    bond_coupon::Float64 = NaN
     # Income tax schedule (13 September 2026). :belgian — brackets as shares of the full-time gross wage (median gross ≈ €45k):
     # social contributions 13.07 % first, then 25/40/45/50 % on taxable income above 0.363/0.64/1.108 × reference,
     # a 25 % credit on an allowance of 0.242 × reference, and a 7 % municipal surcharge. Wage tax only; rent keeps capital_tax_rate.
@@ -397,6 +418,94 @@ Base.@kwdef struct SimulationParameters
     # Wages rise only when at least `unmet_demand_share` of the labour employers wanted went unfilled (25 September; false = the
     # old rule, any shortfall raises every sold-out worker's ask — a wage ratchet that ran on with a quarter of the village idle).
     wage_threshold::Bool = false
+    # Downward wage rigidity (27 September, Stef): a worker lowers the asking wage by at most this share a month, whatever the
+    # rules for other goods say (nominal wages hardly fall) — for a worker in work last month; after a month without work the
+    # floor is gone (the unemployed take what they can get). 1.0 = no limit (the rule so far).
+    wage_cut_maximum::Float64 = 1.0
+    # How long the floor outlasts a job (28 September): a worker keeps refusing a cut for this many months after last being paid
+    # (1 = only while continuously employed).
+    wage_floor_months::Int = 1
+    # Loyalty and notice (3 October, Stef). `employer_loyalty`: an employer takes on last month's workers before strangers.
+    # `notice_months` > 0: a worker who has worked `notice_tenure_months` or more consecutive months for the same employer cannot
+    # simply be dropped — the employer keeps hiring them, at their units of last month, for `notice_months` more months (Belgian
+    # law: three months' notice after six months' service).
+    employer_loyalty::Bool = false
+    notice_tenure_months::Int = 6
+    notice_months::Int = 0
+    # The food emergency (30 September, Stef): a village does not starve because bakers and workers cannot agree a wage. When
+    # last month's bread fell short of what the village needs (below `food_emergency_share` of a meal each), the wage floor is
+    # suspended — workers take what keeps the ovens going — and every employer will hire at up to `employer_loss_tolerance`
+    # above what a unit of labour brings in (a firm runs a loss for a while rather than close; the liquidation test decides later).
+    food_emergency_share::Float64 = 0.0
+    employer_loss_tolerance::Float64 = 0.0
+    # Fixed prices (26 September, Stef's question): every transaction at the starting price vector — no bargaining, no
+    # adaptation; only quantities move. Does a village eat when nobody raises a price, and what does the public debt do?
+    fixed_prices::Bool = false
+    # A standard of living (27 September, Stef): the tickets a month a household aims for — it offers labour to afford them and
+    # buys up to that many. 0 = the rule so far (work for a meal and the cushion; one to `max_tickets_per_person` tickets when
+    # there is spare cash).
+    standard_of_living_tickets::Int = 0
+    # Work as purpose (4 October, Stef; docs/future_work/design_work_as_purpose_2026-10-04.md). `minimum_labour_offer`: everyone
+    # offers at least this share of their capacity for paid work, whatever their needs. `volunteer_share`: the share of labour
+    # offered and not hired that a villager gives, unpaid, to the commons — a measure (volunteer hours), not a market: the idle
+    # split into volunteers and the truly idle.
+    minimum_labour_offer::Float64 = 0.0
+    volunteer_share::Float64 = 0.0
+    # Volunteers in the theatres (4 October, Stef): a theatre hires what its tickets can pay and villagers with unhired labour staff
+    # the rest, unpaid — after the paid hiring, never instead of it. The volunteers' hours count as commons hours.
+    volunteers_in_theatres::Bool = false
+    # Not working, for reasons of their own (5 October, Stef — care, illness, art, or choice; the model knows only that they do
+    # not offer paid work): `nonworking_share` of villagers offer labour only to cover a meal — no cushion, no tickets, no minimum
+    # offer — and give no volunteer hours; `nonworking_hungry_share` of them would rather go hungry than take paid work: they
+    # offer labour only once hungry.
+    # A premium loaf (11 October, Stef): value that grows without volume growing. A villager with money to spare beyond the cushion
+    # and `premium_buyer_margin_in_meals` meals buys the month's bread premium instead of plain — the same loaves at `premium_markup`
+    # times the price, no more time to eat them; the bakery hires `premium_labour_per_loaf` extra units at the going wage for each.
+    # 1.0 = no premium loaf.
+    premium_markup::Float64 = 1.0
+    premium_labour_per_loaf::Float64 = 0.5
+    premium_buyer_margin_in_meals::Float64 = 2.0
+    nonworking_share::Float64 = 0.0
+    nonworking_hungry_share::Float64 = 1 / 3
+    # Gold (5 October, Stef): a fixed stock of `gold_grams_per_villager` × villagers, held at the founding by the richest
+    # `gold_initial_holders_share`; a pure store of value (no yield, no fee, no spoilage), traded on a market like land's: a villager
+    # with money to spare beyond `gold_buyer_margin_in_meals` meals buys a gram a month when it is within reach; a holder sells when
+    # short of cash or, with probability `gold_sale_rate` a month, for reasons of their own; the price moves `gold_price_step` on
+    # unserved demand or unsold offers, within what buyers can pay; valued at the median of the last twelve months' trades.
+    gold_grams_per_villager::Float64 = 0.0
+    gold_initial_holders_share::Float64 = 0.10
+    gold_initial_price_in_breads::Float64 = 10.0
+    gold_buyer_margin_in_meals::Float64 = 2.0
+    gold_sale_rate::Float64 = 0.01
+    gold_price_step::Float64 = 0.06
+    # Banks price inflation into their lending rate (26 September): the cost-covering rate plus the trailing twelve-month rise in
+    # the bread price, per month, up to `bank_rate_inflation_cap` a month on top of `maximum_interest_rate`. Off = the rate
+    # ignores inflation (a deeply negative real rate once prices rise, and unlimited credit to chase them).
+    # A ceiling on public borrowing (26 September): when the public debt exceeds `public_debt_limit` × the village's yearly output
+    # (bread and ticket sales over the last twelve months), the government scales its spending — public jobs and the benefit —
+    # down in proportion (never below `public_spending_floor`) until the ratio is back under the ceiling. 0 = no ceiling.
+    # The benefit is set in loaves at the current bread price (indexed, the rule so far). `benefit_indexed = false` (26 September):
+    # the same number of loaves at the founding price — a fixed sum of money, like SuMSy's guaranteed income.
+    benefit_indexed::Bool = true
+    public_debt_limit::Float64 = 0.0
+    public_spending_floor::Float64 = 0.25
+    # Owners' guarantee (28 September, Stef): a failed firm's bank loans are not written off but pass to its owners in proportion
+    # to their shares (or members equally), as personal loans over `founding_loan_term` months — the personal guarantees banks
+    # take from small firms' owners; unpaid invoices are still written off in the liquidation. An owner who then pays nothing for
+    # `guarantee_write_off_rounds` months is written off (the bank's loss).
+    owner_guarantee::Bool = false
+    guarantee_write_off_rounds::Int = 6
+    # Deposit interest only from equity (28 September, Stef): a bank pays what its retained interest AND its net worth allow —
+    # the effective rate can fall to zero, never below; it never books interest it has not earned.
+    interest_from_equity::Bool = false
+    # A capital requirement (28 September, Stef; the Basel accords): a bank keeps equity of at least `bank_capital_ratio` × its
+    # risk-weighted loans — private loans at 100 %, loans to the government at 0 % (own-currency sovereign debt needs no capital,
+    # under Basel too). Deposit interest is paid only from equity above it. With `capital_constrains_lending` a bank at its
+    # requirement makes no new private loan (credit rationing) — public borrowing is never constrained by it.
+    bank_capital_ratio::Float64 = 0.0
+    capital_constrains_lending::Bool = false
+    bank_rate_follows_inflation::Bool = false
+    bank_rate_inflation_cap::Float64 = 0.10
     # When fewer than this many farms (or bakeries) are open, villagers try to start one (24 September; 0 = never).
     refound_minimum::Int = 1
     refound_cooldown::Int = 3                         # at most one restart per kind in this many months (a village that cannot sustain a firm would otherwise restart one every month)

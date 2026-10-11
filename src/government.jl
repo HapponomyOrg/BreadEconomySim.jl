@@ -8,15 +8,65 @@ function government_wage_per_unit(model)
 end
 
 """Employer of last resort: hires leftover labour up to `government_employment_share` of total capacity."""
-function government_hiring!(model)
+# Is the public project under way, and is it running (past its build)?
+project_active(model) = (p = parameters(model); p.public_project_start > 0 && current_round(model) >= p.public_project_start)
+project_running(model) = project_active(model) && current_round(model) >= parameters(model).public_project_start + parameters(model).public_project_build_months
+
+"""The public project hires its workforce first — `public_project_labour_share` of capacity, at the public wage, from the market."""
+function project_hiring!(model)
     p = parameters(model); rng = stream(model, :labour)
+    project_active(model) || return nothing
     gov = government(model)
-    limit = floor(p.government_employment_share * sum(w.capacity for w in persons(model); init = 0.0))
+    limit = floor(p.public_project_labour_share * sum(w.capacity for w in persons(model); init = 0.0))
     wage = government_wage_per_unit(model)
     hired = 0.0
     for w in stable_shuffle(rng, [w for w in persons(model) if w.labour_available > 1e-9])
         hired >= limit - 1e-9 && break
         units = min(w.labour_available, limit - hired)
+        w.last_wage_rate = wage; w.last_wage_round = current_round(model)
+        gov.wage_bill += units * wage
+        w.labour_available -= units; w.labour_sold += units; w.market[:wage].sold += units
+        hired += units
+        push!(model.wage_contracts, WageContract(gov.id, w.id, units, wage, :project))
+        pay_income!(model, gov, w, units * wage, :wage)
+        record_transaction!(model, :wage, wage, units)
+        model.project_cost += units * wage                             # (pay_income! already counts the outlay)
+        log_event!(model, :hire; employer = gov.id, employer_kind = :project, worker = w.id, units = units, price = wage)
+    end
+    model.project_labour_this_round = hired
+    return nothing
+end
+
+"""Once the project runs, every villager wants one ride a month at `public_project_fare_in_breads` loaves, bought when affordable
+after bread; the fares go to the government."""
+function sell_rides!(model)
+    p = parameters(model)
+    model.rides_this_round = 0; model.rides_unaffordable_this_round = 0
+    project_running(model) || return nothing
+    gov = government(model)
+    fare = round(p.public_project_fare_in_breads * expected_price(model, :bread), digits = 4)
+    for w in persons(model)
+        if cash(w) - buffer_target(model, w) >= fare
+            transfer!(model, w, gov, fare, :fare)
+            model.project_revenue += fare; model.rides_this_round += 1
+        else
+            model.rides_unaffordable_this_round += 1
+        end
+    end
+    return nothing
+end
+
+function government_hiring!(model)
+    p = parameters(model); rng = stream(model, :labour)
+    gov = government(model)
+    project_hiring!(model)
+    limit = floor(model.spending_scale * p.government_employment_share * sum(w.capacity for w in persons(model); init = 0.0))   # scaled under a debt ceiling
+    wage = government_wage_per_unit(model)
+    hired = 0.0
+    for w in stable_shuffle(rng, [w for w in persons(model) if w.labour_available > 1e-9])
+        hired >= limit - 1e-9 && break
+        units = min(w.labour_available, limit - hired)
+        w.last_wage_rate = wage; w.last_wage_round = current_round(model)
         gov.wage_bill += units * wage
         w.labour_available -= units; w.labour_sold += units; w.market[:wage].sold += units
         hired += units
@@ -185,15 +235,23 @@ function collect_wealth_tax!(model)
     return nothing
 end
 
+"""The benefit in loaves this month: the normal level, tapering to the austerity level from `austerity_start`."""
+function benefit_in_breads(model)
+    p = parameters(model)
+    (p.austerity_start > 0 && current_round(model) >= p.austerity_start) || return p.unemployment_fee_in_breads
+    t = clamp((current_round(model) - p.austerity_start) / max(p.austerity_months, 1), 0.0, 1.0)
+    return p.unemployment_fee_in_breads + t * (p.austerity_fee_in_breads - p.unemployment_fee_in_breads)
+end
+
 function pay_unemployment_fees!(model)
     p = parameters(model)
     gov = government(model)
-    bread = expected_price(model, :bread)
+    bread = p.benefit_indexed ? expected_price(model, :bread) : p.initial_prices[:bread] * p.initial_price_multiplier   # 26 Sept
     for w in persons(model)
         if unemployed(w) || (p.partial_unemployment_fee && underemployed(w))
             w.employed_rounds = 0
             if w.unemployed_rounds == 0
-                base = p.unemployment_fee_in_breads * bread
+                base = benefit_in_breads(model) * bread
                 w.fee = w.last_wage_income >= base ? base : w.last_wage_income
                 w.fee = max(w.fee, p.minimum_fee_in_breads * bread)
             end
@@ -201,7 +259,8 @@ function pay_unemployment_fees!(model)
             if w.unemployed_rounds % p.fee_reduction_interval == 0
                 w.fee = max(w.fee * (1 - p.fee_reduction_rate), p.minimum_fee_in_breads * bread)
             end
-            fee = p.partial_unemployment_fee ? w.fee * unsold_share(w) : w.fee
+            p.austerity_start > 0 && (w.fee = min(w.fee, benefit_in_breads(model) * bread))          # austerity reaches current recipients too
+            fee = (p.partial_unemployment_fee ? w.fee * unsold_share(w) : w.fee) * model.spending_scale   # scaled under a debt ceiling
             model.government_outlay_this_round += fee
             promise!(model, gov, w, fee, :unemployment_fee, 2, :fee)
         else
@@ -233,5 +292,64 @@ function collect_land_levy!(model)
         paid > 1e-6 && (transfer!(model, a, gov, paid, :land_levy); gov.tax_collected += paid; model.tax_this_round += paid; model.land_levy_this_round += paid)
         a.land_levy_arrears = round(due - paid, digits = 4)
     end
+    return nothing
+end
+
+"""
+    volunteer!(model)
+
+Labour offered and not hired goes, in the share `volunteer_share`, to the commons as unpaid work — recorded, not traded.
+"""
+function volunteer!(model)
+    p = parameters(model)
+    for w in persons(model)
+        w.nonworking == :none || continue                                # 5 Oct: no volunteer hours from those not working
+        unhired = max(w.labour_offered - w.labour_sold, 0.0)
+        w.volunteer_hours += p.volunteer_share * unhired
+    end
+    return nothing
+end
+
+"""
+    staff_theatres_with_volunteers!(model)
+
+After the labour markets: a theatre short of the hands its seats need takes villagers' unhired labour, unpaid, up to the
+shortfall — the paid hiring first, volunteers for the rest.
+"""
+function staff_theatres_with_volunteers!(model)
+    p = parameters(model)
+    (p.volunteers_in_theatres && p.entertainment) || return nothing
+    rng = stream(model, :labour)
+    pool = stable_shuffle(rng, [w for w in persons(model) if w.labour_available > 1e-9])
+    for t in enterprises(model, :theatre)
+        need = max(labour_need(t) - t.hired_labour, 0.0)           # the seats' need beyond the paid hiring
+        for w in pool
+            need <= 1e-9 && break
+            units = min(w.labour_available, need)
+            units > 1e-9 || continue
+            w.labour_available -= units; w.volunteer_hours += units
+            t.volunteer_labour += units; need -= units
+            log_event!(model, :volunteer; theatre = t.id, worker = w.id, units = units)
+        end
+    end
+    return nothing
+end
+
+"""
+    apply_debt_ceiling!(model)
+
+`public_debt_limit`: the public debt (as recorded at the end of last month) against the village's yearly output (bread and
+ticket sales, last twelve months). Over the ceiling, spending is scaled to what the ceiling allows (proportionally, never
+below `public_spending_floor`); under it, full spending. Before the first year is complete there is no scaling.
+"""
+function apply_debt_ceiling!(model)
+    p = parameters(model)
+    p.public_debt_limit > 0 || return nothing
+    d = model.data
+    length(d) >= 12 || return nothing
+    output = sum(r.bread_sold * r.price_bread + r.ticket_revenue for r in d[end-11:end]; init = 0.0)
+    debt = d[end].government_debt
+    ceiling = p.public_debt_limit * output
+    model.spending_scale = (ceiling > 0 && debt > ceiling) ? clamp(ceiling / debt, p.public_spending_floor, 1.0) : 1.0
     return nothing
 end
