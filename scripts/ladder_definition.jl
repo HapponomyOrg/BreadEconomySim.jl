@@ -7,7 +7,7 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol)
            # 22 September: :invoicing = the settlement design (cash at the counter, wages at month end, invoices between firms, clearing among banks)
              initial_interest_rate = 0.005, maximum_interest_rate = 0.015,   # a month: 6 % a year to start, at most about 20 %; the rate itself covers the banks' costs (one staff unit per bank: staff scaled with customers bankrupted the banks at 512, 22 Sept)
               demand_based_targets = true, wage_ceiling_from_own_ask = true, expected_price_from_asks = true, ask_increase_only_on_unmet_demand = true,
-              random_hiring_ties = true, no_labour_tolerance = true, offer_full_capacity = true, credit_for_bread = true, spoilage_aware_stocking = true,
+              random_hiring_ties = true, no_labour_tolerance = true, offer_full_capacity = false, labour_for_bread = true, credit_for_bread = true, spoilage_aware_stocking = true,
               distress_land_sales = true, maximum_capacity = 4.0,
               wage_reservation_net_of_tax = true, initial_endowment = :norm, startup_loan_term = 60, land_sales = :reservation,
               gluttony_probability = 0.1, plan_for_gluttony = true, maximum_rounds = rounds, stop_when_half_dead = false, stop_when_stationary = false,
@@ -163,6 +163,13 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol)
         # whoever can pay, with half a unit of extra labour per loaf. On step 8 and on the productive village. Both villages.
         ("K8 step 8, a premium loaf", (; V8_DEBT..., premium_markup = 5.0), (; V8_SUMSY..., premium_markup = 5.0)),
         ("KV8 productive village, a premium loaf", (; V8_DEBT..., PRODUCTIVE..., premium_markup = 5.0), (; V8_SUMSY..., PRODUCTIVE..., premium_markup = 5.0)),
+        # The sharing margin (12 October): each villager offers at least their share of last month's labour wanted plus this
+        # margin. At step 0, without a benefit, it decides who is left out — 0 shares the work exactly (tight market, prices up),
+        # 10 % holds prices and leaves a residue of outsiders. Both villages.
+        ("M0-0 bare bones, sharing margin 0", (; bank_bailout = false, labour_for_bread_margin = 0.0), (; bank_bailout = false, labour_for_bread_margin = 0.0)),
+        ("M0-5 bare bones, sharing margin 5 %", (; bank_bailout = false, labour_for_bread_margin = 0.05), (; bank_bailout = false, labour_for_bread_margin = 0.05)),
+        ("M0-20 bare bones, sharing margin 20 %", (; bank_bailout = false, labour_for_bread_margin = 0.2), (; bank_bailout = false, labour_for_bread_margin = 0.2)),
+        ("M8-0 step 8, sharing margin 0", (; V8_DEBT..., labour_for_bread_margin = 0.0), (; V8_SUMSY..., labour_for_bread_margin = 0.0)),
         # The benefit fixed in money (26 September): the debt village's transfer as a fixed sum, like SuMSy's guaranteed income —
         # separates the money system from the indexation of the transfer. Debt side only.
         ("I2 step 2, benefit fixed in money", (; planning_margin = 0.1, GOV_DEBT..., benefit_indexed = false), (;)),

@@ -233,22 +233,55 @@ end
 
 # ---- labour supply (spec v2 §2): minimise work -------------------------------------
 
+"""Each villager's share of the labour the village's employers wanted last month, plus `labour_for_bread_margin` (12 October): the
+work the bread needs, spread across everyone before any shortage."""
+function shared_labour(model)
+    d = model.data
+    isempty(d) && return 0.0
+    row = d[end]
+    return (1 + parameters(model).labour_for_bread_margin) * row.labour_wanted / max(row.persons_alive, 1)
+end
+
+"""Was the village short last month — of bread (the food emergency) or of hands (employers wanting labour they could not get,
+by at least `unmet_demand_share` of what they wanted)?"""
+function hands_short(model)
+    food_emergency(model) && return true
+    d = model.data
+    isempty(d) && return false
+    row = d[end]
+    wanted = row.labour_wanted; short = row.labour_unfilled
+    return wanted > 0 && short >= parameters(model).unmet_demand_share * wanted
+end
+
+"""Income that arrives without work (12 October): under SuMSy the guaranteed income, and last month's dividend per head. Until
+now the labour-supply rule ignored it, so a SuMSy villager offered labour as if the income did not exist — three units for a
+ten-unit meal when two and the income would do — and the surplus work was exactly what the outsiders lacked."""
+function unearned_income(model)
+    p = parameters(model)
+    p.monetary_system == :sumsy || return 0.0
+    d = model.data
+    dividend = isempty(d) ? 0.0 : d[end].surplus_redistributed / max(d[end].persons_alive, 1)
+    return p.guaranteed_income + dividend
+end
+
 """Units a person offers: just enough to cover a meal and the buffer shortfall net of other expected income."""
 function labour_supply(model, w::Person)
     p = parameters(model)
     if w.nonworking != :none                                                 # 5 Oct: not working for reasons of their own — paid work to eat, no more
         w.nonworking == :nonworking_hungry && w.hunger == 0 && return 0.0    # and some only once hungry
-        other = w.land * expected_price(model, :rent) * (1 - p.capital_tax_rate) + w.fee
+        other = w.land * expected_price(model, :rent) * (1 - p.capital_tax_rate) + w.fee + unearned_income(model)
         need = meal_price(model) - other
         return need <= 0 ? 0.0 : min(w.effective_capacity, ceil(need / max(net_wage(model), 1e-6)))
     end
     p.offer_full_capacity && return w.effective_capacity
-    other = w.land * expected_price(model, :rent) * (1 - p.capital_tax_rate) + w.fee
+    p.labour_for_bread && hands_short(model) && return w.effective_capacity   # 12 Oct: the village was short of bread or of hands — everyone offers everything
+    other = w.land * expected_price(model, :rent) * (1 - p.capital_tax_rate) + w.fee + unearned_income(model)   # 12 Oct: the guaranteed income and the dividend count
     need = meal_price(model) + max(savings_buffer(model) - cash(w), 0.0) - other
+    floor_units = p.labour_for_bread ? shared_labour(model) : 0.0                 # 12 Oct: the work the village needs, shared out
     p.entertainment && p.standard_of_living_tickets > 0 && (need += p.standard_of_living_tickets * expected_price(model, :ticket))   # 27 Sept: works to afford them
     wage = max(net_wage(model), 1e-6)
     units = need <= 0 ? 0.0 : ceil(need / wage)
-    units = max(units, p.minimum_labour_offer * w.effective_capacity)   # 4 Oct: work is wanted for its own sake too
+    units = max(units, p.minimum_labour_offer * w.effective_capacity, floor_units)   # 4 Oct: work is wanted for its own sake too; 12 Oct: and shared
     return min(w.effective_capacity, units)
 end
 
@@ -373,6 +406,7 @@ function labour_market!(model, kinds)
     # 25 Sept: the labour employers wanted and could not get is recorded, market-wide, on every worker who sold out — so the
     # 5 % threshold applies to wages as it does to goods (before, any shortfall at all raised every sold-out worker's ask)
     shortfall = sum(max(e.market[:wage].wanted - e.market[:wage].got, 0.0) for e in employers; init = 0.0)
+    model.labour_shortfall_this_round += shortfall                          # 12 Oct: hands wanted and not found, over the month's markets
     if shortfall > 1e-9
         for w in persons(model)
             w.labour_offered > 1e-9 && w.labour_available <= 1e-9 && (w.market[:wage].unmet_demand = true; w.market[:wage].unmet_units = shortfall)

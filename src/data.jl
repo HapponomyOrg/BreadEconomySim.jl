@@ -155,6 +155,7 @@ function record!(model)
         unemployed = count(unemployed, ps),
         # 27 Sept (Stef): part-time by choice — villagers offer only the labour they need; the rest of their capacity is leisure
         voluntarily_idle = count(w -> w.labour_offered <= 1e-9, ps),
+        labour_unfilled = model.labour_shortfall_this_round, labour_wanted = sum(e.market[:wage].wanted for e in alive if e isa Enterprise && haskey(e.market, :wage); init = 0.0),
         volunteer_hours = sum(w.volunteer_hours for w in ps; init = 0.0), volunteers = count(w -> w.volunteer_hours > 1e-9, ps),
         truly_idle = count(w -> w.labour_offered > 1e-9 && w.labour_sold <= 1e-9 && w.volunteer_hours <= 1e-9, ps),
         part_time = count(w -> w.labour_sold > 1e-9 && w.labour_offered < w.effective_capacity - 1e-9 && w.labour_sold >= w.labour_offered - 1e-9, ps),

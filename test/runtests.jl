@@ -1535,6 +1535,17 @@ end
     @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 24, BEH..., premium_markup = 5.0))) < 1e-6
 end
 
+
+@testset "labour for the village's bread (12 October 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., offer_full_capacity = false, labour_for_bread = true, labour_for_bread_margin = 0.1, maximum_rounds = 3))
+    run_simulation!(m); d = round_data(m)
+    w = first(B.persons(m)); B.book_asset!(w.balance, B.DEPOSIT, 10_000.0)                     # needs nothing, still offers the shared part
+    @test B.labour_supply(m, w) >= min(w.effective_capacity, B.shared_labour(m)) - 1e-9 && B.shared_labour(m) > 0
+    push!(m.data, merge(m.data[end], (; bread_baked = 1.0)))                                  # bread fell short: everything
+    @test B.labour_supply(m, w) == w.effective_capacity
+    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 24, BEH..., offer_full_capacity = false, labour_for_bread = true))) < 1e-6
+end
+
 @testset "cooperative forms (14 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     params(m) = B.parameters(m)
