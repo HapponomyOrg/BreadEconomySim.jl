@@ -74,7 +74,7 @@ Before the money system does anything at all, three rules decide whether the vil
 The village is built up in twelve steps. Both villages climb the same ladder, and at every step we look at who is alive, what bread costs, what the government owes, and how far apart the richest and poorest tenth stand, measured in meals.
 
 \[ KADER  
-**The steps.** 0 bare bones · 1 planning ahead · 2 a government · 3 interest on savings · 4 theatres · 5 government bonds · 6 a charge on idle money · 7 four theatres · 8 owners and a stock market · 9 (a side step) cooperatives · 10 a public reserve · 11 a tax policy and a tax on bread. Version 3's step 10, "prices that respond", is gone: the price rules are how people behave, not a policy, and from this version they apply from step 0.
+**The steps.** 0 bare bones · 1 planning ahead · 2 a government · 3 interest on savings · 4 theatres · 5 government bonds · 6 a charge on idle money · 7 four theatres · 8 owners and a stock market · 9 (a side step) cooperatives · 10 a public reserve · 11 a tax policy and a tax on bread. Version 3's step 10, "prices that respond", is gone: the price rules are how people behave, not a policy, and from this version they apply from step 0. Each step is named once for both villages; where a step adds something only the debt village can have (interest on deposits at step 3, the bond market at step 5, a charge on idle money at step 6, which the SuMSy village has from the start), the SuMSy village is simply run again unchanged, so that the two stay side by side.
 \]
 
 ### Step 0. Bare bones

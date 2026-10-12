@@ -156,6 +156,7 @@ function manage_government_reserve!(model)
         model.tax_policy_step = 0.0
         model.consumption_tax_scale = model.tax_scale; model.wealth_tax_scale = model.tax_scale   # :none — one scale for all five
         model.profit_tax_scale = model.tax_scale; model.parking_tax_scale = model.tax_scale; model.land_levy_scale = model.tax_scale
+        p.surplus_redistribution_share > 0 && (model.land_levy_scale = 1.0)   # 12 Oct: the levy's surplus is the dividend; the levy itself is never cut
         return nothing
     end
     # the desired relative change in revenue, then the step limit
@@ -182,6 +183,7 @@ function manage_government_reserve!(model)
             setproperty!(model, f, clamp(getproperty(model, f) * (1 + shift) * (1 + r), 0.0, p.tax_scale_maximum))
         end
     end
+    p.surplus_redistribution_share > 0 && (model.land_levy_scale = 1.0)   # 12 Oct: with the dividend the levy is not a lever
     return nothing
 end
 

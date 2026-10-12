@@ -1546,6 +1546,13 @@ end
     @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 24, BEH..., offer_full_capacity = false, labour_for_bread = true))) < 1e-6
 end
 
+
+@testset "the levy is never cut when its surplus is paid out (12 October 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., land_pricing = :market, land_levy = true, government_reserve_in_rounds = 3, surplus_tax_reduction_share = 0.0, surplus_redistribution_share = 1.0, tax_policy = :scale, tax_levers = (income = 0.0, consumption = 0.0, wealth = 0.0, profit = 0.0, parking = 1.0, land = 1.0), demurrage_tax_rate = 0.01, monetary_system = :sumsy, guaranteed_income = 5.0, maximum_rounds = 36))
+    d = round_data(run_simulation!(m))
+    @test all(d.land_levy_scale .== 1.0)                                                       # a surplus pays the dividend; it never scales the levy
+end
+
 @testset "cooperative forms (14 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     params(m) = B.parameters(m)

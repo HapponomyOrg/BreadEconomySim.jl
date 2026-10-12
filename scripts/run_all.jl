@@ -95,14 +95,17 @@ JOBS > 1 && nprocs() < JOBS + 1 && addprocs(JOBS - nprocs() + 1; exeflags = ["--
         say(line) = (println("[", lpad(job.index, 4), "/", job.total, "] ", line); flush(stdout))
         isfile(job.file) && (say("skipped (already done): $(job.rung) | $(job.system) seed $(job.seed)"); return "skipped")
         def = ladder(job.N, job.rounds, job.settlement)
-        (_, kd, ks) = only(r for r in def.rungs if r[1] == job.rung)
+        i = only(k for (k, r) in enumerate(def.rungs) if r[1] == job.rung); (_, kd, ks) = def.rungs[i]
         base, kw = job.system == "debt" ? (def.BARE_DEBT, kd) : (def.BARE_SUMSY, ks)
+        # 12 Oct: a rung whose settings are unchanged for this village from the rung below is the same village run again, so that
+        # the two stay side by side — say so (the ladder names each rung once for both: "interest on deposits | sumsy" has none)
+        same_as = i > 1 && kw == (job.system == "debt" ? def.rungs[i - 1][2] : def.rungs[i - 1][3]) ? " (as " * first(split(def.rungs[i - 1][1])) * ")" : ""
         t = @elapsed m = run_simulation(SimulationParameters(; seed = job.seed, base..., kw...))
         d = round_data(m)
         d.rung .= job.rung; d.system .= job.system; d.seed .= job.seed; d.identity .= money_identity_gap(m)
         mkpath(dirname(job.file)); tmp = job.file * ".tmp"
         CSV.write(tmp, d); mv(tmp, job.file; force = true)
-        line = "$(job.N) $(job.settlement) | $(job.rung) | $(job.system) seed $(job.seed): alive $(d.persons_alive[end]) of $(job.N), $(round(t, digits = 0)) s"
+        line = "$(job.N) $(job.settlement) | $(job.rung) | $(job.system)$(same_as) seed $(job.seed): alive $(d.persons_alive[end]) of $(job.N), $(round(t, digits = 0)) s"
         say(line)
         return line
     end
