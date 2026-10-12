@@ -240,7 +240,7 @@ function summarise(rounds::DataFrame, N::Int)
         :wealth_gap_meals => m => :wealth_gap_meals, :wealth_bottom10_meals => m => :wealth_bottom10_meals,
         :cash_gap_meals => m => :cash_gap_meals, :cash_bottom10_meals => m => :cash_bottom10_meals,
         :negative_wealth_persons => m => :under_water, :zero_cash_persons => m => :without_cash,
-        :bank_bailouts => m => :bank_bailouts, :bad_debt => m => :loans_written_off, :new_firms => m => :firms_restarted,   # 27 Sept: the money pump made visible
+        :bad_debt => m => :loans_written_off, :new_firms => m => :firms_restarted,   # 27 Sept: the money pump made visible (bank_bailouts is already below)
         :land_households_share => m => :land_held_by_households, :gini_wealth_attributed => (x -> (v = collect(skipmissing(x)); (isempty(v) || any(g -> !(0 <= g <= 1), v)) ? missing : mean(v))) => :gini_wealth_firms_attributed,
         :liquidations => m => :liquidations, :refoundings => m => :refoundings, :bank_bailouts => m => :bank_bailouts,
         :identity => (x -> maximum(abs.(x))) => :worst_identity_gap)
@@ -254,7 +254,7 @@ for (N, settlement) in LADDERS
     rounds = reduce((a, b) -> vcat(a, b; cols = :union), [CSV.read(f, DataFrame) for f in files])
     name = ladder_name(N, settlement)
     write_split(joinpath(ROOT, "results", "$(name)_rounds.csv"), rounds)   # under GitHub's 100 MB limit (25 Sept)
-    CSV.write(joinpath(ROOT, "results", "$(name)_summary.csv"), summarise(rounds, N))
+    CSV.write(joinpath(ROOT, "results", "$(name)_summary.csv"), Base.invokelatest(summarise, rounds, N))   # invokelatest: the function is defined in this script (Julia 1.12 world age)
     println("wrote results/$(name)_rounds*.csv and results/$(name)_summary.csv ($(length(files)) runs)")
     if settlement == :invoicing
         run(addenv(`$(Base.julia_cmd()) --project=$ROOT $(joinpath(ROOT, "scripts", "dump_rungs.jl")) $SEEDS $ROUNDS all $N`, "SETTLEMENT" => "invoicing"))

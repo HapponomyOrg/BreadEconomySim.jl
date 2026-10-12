@@ -202,5 +202,8 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol)
         (ks_full.wage_tax_rate == 0 && ks_full.capital_tax_rate == 0 && ks_full.dividend_tax_rate == 0) || error("rung '$name': SuMSy must not tax income (wage_tax_rate = $(ks_full.wage_tax_rate), capital_tax_rate = $(ks_full.capital_tax_rate))")
     end
 
+    # 12 Oct: on the SuMSy side the land levy always comes with its dividend — the reserve block layered on later steps had set
+    # "surplus → cut taxes" to 1 and overridden it, so the levy was cut, land froze, and steps 10/11/B read a land runaway.
+    rungs = [(n, kd, (get(ks, :land_levy, false) ? (; ks..., surplus_tax_reduction_share = 0.0, surplus_redistribution_share = 1.0) : ks)) for (n, kd, ks) in rungs]
     return (; BARE_DEBT, BARE_SUMSY, rungs)
 end
