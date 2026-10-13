@@ -100,10 +100,10 @@ const img = f => 'image/png;base64,' + fs.readFileSync(f).toString('base64');
 
   // 7 · Give them shares
   s = pres.addSlide(); s.background = { color: LIGHT };
-  title(s, 'Shares widen the gap');
+  title(s, 'Shares, land, co-ops');
   s.addChart(pres.charts.BAR, [
-      { name: 'Debt money', labels: ['Before shares', 'With shares', 'With co-ops'], values: [D.gap['debt_7 '], D.gap['debt_8 '], D.gap.debt_B] },
-      { name: 'SuMSy', labels: ['Before shares', 'With shares', 'With co-ops'], values: [D.gap['sumsy_7 '], D.gap['sumsy_8 '], D.gap.sumsy_B] }], {
+      { name: 'Debt money', labels: ['Shares, no land fee', 'Shares, land fee', 'Co-ops'], values: [D.gap['debt_7 '], D.gap['debt_8 '], D.gap.debt_B] },
+      { name: 'SuMSy', labels: ['Shares, no land fee', 'Shares, land fee', 'Co-ops'], values: [D.gap['sumsy_7 '], D.gap['sumsy_8 '], D.gap.sumsy_B] }], {
     x: 0.5, y: 1.3, w: 9.0, h: 3.9, barDir: 'col', barGrouping: 'clustered', chartColors: [RUST, GREEN], showLegend: false,
     showValue: true, dataLabelPosition: 'outEnd', dataLabelFontSize: 14, dataLabelColor: INK, dataLabelFormatCode: '0',
     catAxisLabelColor: INK, catAxisLabelFontSize: 14, valAxisHidden: true, valGridLine: { style: 'none' }, catGridLine: { style: 'none' },

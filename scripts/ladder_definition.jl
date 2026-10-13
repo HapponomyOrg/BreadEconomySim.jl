@@ -146,7 +146,7 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol)
         # The labour-market sweep (3 October): how long a worker holds a wage after losing a job, and whether employers keep their
         # workers before taking strangers — the two channels through which a slack market lowers wages. Both villages, step 8.
         ("Y8-floor3 step 8, wage floor outlasts a job by 3 months", (; V8_DEBT..., wage_floor_months = 3), (; V8_SUMSY..., wage_floor_months = 3)),
-        ("Y8-loyal step 8, employers keep their workers first", (; V8_DEBT..., employer_loyalty = true), (; V8_SUMSY..., employer_loyalty = true)),
+        ("Y8-noloyalty step 8, employers take the cheapest hands, not their own", (; V8_DEBT..., employer_loyalty = false), (; V8_SUMSY..., employer_loyalty = false)),   # 13 Oct (review 7): the ladder has loyalty on; this is its mirror
         ("Y8-nonotice step 8, no notice period", (; V8_DEBT..., notice_months = 0), (; V8_SUMSY..., notice_months = 0)),
         # The SuMSy village without the land levy (4 October): the Gesell runaway, kept as the comparison. SuMSy only.
         ("Z8 step 8, SuMSy without the land levy", (;), (; V8_SUMSY..., land_levy = false, surplus_redistribution_share = 0.0)),

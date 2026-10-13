@@ -4,7 +4,7 @@
 
 Version 3 — 21 September 2026
 
-← Previous report: [version 2, 15 September 2026](https://claude.ai/code/artifact/2be74be5-2f76-43a0-954b-dfb600013158) (https://claude.ai/code/artifact/2be74be5-2f76-43a0-954b-dfb600013158) · Next report: none yet
+← Previous report: [version 2, 15 September 2026](https://claude.ai/code/artifact/2be74be5-2f76-43a0-954b-dfb600013158) (https://claude.ai/code/artifact/2be74be5-2f76-43a0-954b-dfb600013158) · Next report: [version 4, 13 October 2026](https://claude.ai/artifact/SmdB6uUn41n8SLyrWMqiXm) (https://claude.ai/artifact/SmdB6uUn41n8SLyrWMqiXm)
 
 *This is an AI-generated report. It was written by Claude (Anthropic) in an interactive session with a human researcher, who set the questions, the design of the village and the rules of engagement, and it is supported throughout by the results of the simulations described. The source code of the simulation is public at https://github.com/HapponomyOrg/BreadEconomySim.jl. Read it as a working document: every number in it comes from a run that can be repeated, and every judgement in it is open to challenge.*
 

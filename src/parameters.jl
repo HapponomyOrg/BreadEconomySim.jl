@@ -441,7 +441,9 @@ Base.@kwdef struct SimulationParameters
     # they wanted, everyone offers all their capacity until the ovens are staffed; while the village is fed, each villager offers
     # what their needs require (and the minimum offer). No village starves for want of hands.
     labour_for_bread::Bool = false
-    labour_for_bread_margin::Float64 = 0.1            # each villager offers at least their share of last month's labour wanted, plus this margin
+    labour_for_bread_margin::Float64 = 0.1            # each villager offers at least their share of last month's labour wanted, plus this margin.
+    # A price lever as much as a labour one (review 7): at 0 the market is tight every month and the SuMSy village inflates ~4–5 %/yr;
+    # at 0.1 it deflates ~9 %/yr. Report prices with the margin stated.
     employer_loss_tolerance::Float64 = 0.0
     # Fixed prices (26 September, Stef's question): every transaction at the starting price vector — no bargaining, no
     # adaptation; only quantities move. Does a village eat when nobody raises a price, and what does the public debt do?

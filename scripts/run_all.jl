@@ -146,6 +146,25 @@ for (N, settlement) in LADDERS
     end
 end
 jobs = [(; j..., total = length(jobs)) for j in jobs]                 # each run knows its number, for the progress lines
+# 13 Oct (review 7): a cell whose configuration is identical to an earlier cell's — the SuMSy village at a rung that only changes
+# the debt village, a variant that mirrors the ladder — is the same village, so its finished files are copied, not rerun
+let seen = Dict{String, Any}(), copied = 0
+    for j in jobs
+        def = ladder(j.N, j.rounds, j.settlement)
+        (_, kd, ks) = only(r for r in def.rungs if r[1] == j.rung)
+        kw = j.system == "debt" ? kd : ks
+        key = string(j.N, "|", j.settlement, "|", j.rounds, "|", j.system, "|", j.seed, "|", repr(kw))
+        if haskey(seen, key)
+            src = seen[key]
+            if !isfile(j.file) && isfile(src)
+                cp(src, j.file); copied += 1
+            end
+        else
+            seen[key] = j.file
+        end
+    end
+    copied > 0 && println("$(copied) mirror cells copied from identical configurations.")
+end
 todo = filter(j -> !isfile(j.file), jobs)
 println("\n$(length(jobs)) runs in total, $(length(jobs) - length(todo)) already done, $(length(todo)) to go, on $(max(nworkers(), 1)) worker(s).\n"); flush(stdout)
 
@@ -218,6 +237,10 @@ function summarise(rounds::DataFrame, N::Int)
     # every run is kept: a run that ended early (a village that lost its last farm or bakery) has no rows in the tail window,
     # and an inner join silently dropped it — survivorship bias (review 3). Left join; the run's last recorded row stands.
     runs = leftjoin(last_rows, tail; on = [:rung, :system, :seed], makeunique = true)
+    # 13 Oct (review 7): the price trend of each run — bread at the end against bread at month 12, as a yearly rate
+    yr1 = combine(groupby(filter(r -> r.round == min(12, maxround), rounds), [:rung, :system, :seed]), :price_bread => first => :bread_year1)
+    runs = leftjoin(runs, yr1; on = [:rung, :system, :seed])
+    runs.bread_price_change_per_year = [(ismissing(a) || ismissing(b) || !(a > 0) || !(b > 0)) ? missing : 100 * ((a / b)^(12 / max(maxround - 12, 1)) - 1) for (a, b) in zip(runs.bread_price, runs.bread_year1)]
     runs.collapsed = runs.round .< maxround
     # the public debt's course in each run: its peak, the month of the peak, and the first month after it with nothing owed
     debt_course = combine(groupby(sort(rounds, :round), [:rung, :system, :seed])) do g
@@ -246,6 +269,7 @@ function summarise(rounds::DataFrame, N::Int)
         :bad_debt => m => :loans_written_off, :new_firms => m => :firms_restarted,   # 27 Sept: the money pump made visible (bank_bailouts is already below)
         :land_households_share => m => :land_held_by_households, :gini_wealth_attributed => (x -> (v = collect(skipmissing(x)); (isempty(v) || any(g -> !(0 <= g <= 1), v)) ? missing : mean(v))) => :gini_wealth_firms_attributed,
         :liquidations => m => :liquidations, :refoundings => m => :refoundings, :bank_bailouts => m => :bank_bailouts,
+        :bread_price_change_per_year => m => :bread_price_change_per_year,   # 13 Oct (review 7): the price trend, in the summary
         :identity => (x -> maximum(abs.(x))) => :worst_identity_gap)
 end
 
