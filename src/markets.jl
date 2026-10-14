@@ -699,6 +699,9 @@ function ticket_market!(model)
 end
 
 
+"""The most bread a greedy villager will hold (13 October): what they can eat before it spoils, plus the accepted waste."""
+greedy_bread_cap(p) = isnan(p.spoilage_acceptance) ? Float64(p.greedy_max_breads_per_round) : p.breads_per_meal * p.spoilage_age_in_rounds * (1 + p.spoilage_acceptance)
+
 """
     greed_spending!(model)
 
@@ -723,7 +726,7 @@ function greed_spending!(model)
             tier_price = tiered ? expected_price(model, :bread) * minimum(b.tier_multiplier for b in enterprises(model, :bakery); init = 1.0) : expected_price(model, :bread)
             stocked = [b for b in enterprises(model, :bakery) if sellable_bread(b) >= 1]
             if tiered && isempty(stocked); foreach(b -> b.tier_unmet = true, enterprises(model, :bakery)); end
-            can_bread = bread_units(w) < p.greedy_max_breads_per_round && surplus >= tier_price && !isempty(stocked)
+            can_bread = bread_units(w) < greedy_bread_cap(p) && surplus >= tier_price && !isempty(stocked)
             open = [t for t in theatres if t.market[:ticket].offered - t.market[:ticket].sold >= 1 - 1e-9 && !(p.no_self_service && t.id in w.worked_for)]
             can_ticket = p.entertainment && tickets < p.greedy_max_tickets_per_round && !isempty(open) && surplus >= expected_price(model, :ticket)
             (can_bread || can_ticket) || (p.greed_hoarding > 0 ? continue : break)

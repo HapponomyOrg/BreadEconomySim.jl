@@ -1553,6 +1553,31 @@ end
     @test all(d.land_levy_scale .== 1.0)                                                       # a surplus pays the dividend; it never scales the levy
 end
 
+
+@testset "spoilage acceptance (13 October 2026)" begin
+    p = SimulationParameters(; BEH..., greed = true, greed_share = 1.0, spoilage_acceptance = 0.5)
+    @test B.greedy_bread_cap(p) == p.breads_per_meal * p.spoilage_age_in_rounds * 1.5         # 2 × 3 × 1.5 = 9 loaves
+    @test B.greedy_bread_cap(SimulationParameters(; BEH..., greed = true, greed_share = 1.0)) == 10.0   # NaN: the old cap
+    d = round_data(run(; seed = 1, maximum_rounds = 12, BEH..., greed = true, greed_share = 1.0, greed_hoarding = 0.0, spoilage_acceptance = 0.1))
+    @test all(d.greedy_loaves .>= 0) && abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., greed = true, greed_share = 1.0, spoilage_acceptance = 0.1))) < 1e-6
+end
+
+
+@testset "greedy pricing and distress pricing (13 October 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., greed = true, greed_share = 1.0, greedy_pricing = true, distress_pricing = true, maximum_rounds = 2))
+    b = first(B.enterprises(m, :bakery))
+    @test B.greedy_firm(m, b)                                                                  # everyone greedy: a greedy village's firms are greedy
+    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., greed = true, greed_share = 0.25, maximum_rounds = 2))
+    @test !B.greedy_firm(m0, first(B.enterprises(m0, :bakery)))
+    B.econo_step!(m, 1)
+    b.market[:bread].offered = 10.0; b.market[:bread].sold = 10.0; b.ask[:bread] = 1.0        # a sell-out
+    B.adapt_prices!(m)
+    @test b.ask[:bread] >= B.expected_price(m, :bread) * B.parameters(m).bread_bid_base_multiplier - 1e-9   # priced at what buyers will pay
+    @test !B.in_distress(m, b)
+    @test B.distress_price(m, b, :bread) >= B.seller_reservation(m, b, :bread)
+    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 24, BEH..., greed = true, greed_share = 1.0, greedy_pricing = true, distress_pricing = true))) < 1e-6
+end
+
 @testset "cooperative forms (14 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     params(m) = B.parameters(m)

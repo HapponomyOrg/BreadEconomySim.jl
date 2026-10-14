@@ -342,6 +342,19 @@ Base.@kwdef struct SimulationParameters
     greed_hoarding::Float64 = 0.5                      # every greedy person is both: each act of greed goes to capital with this probability (most profitable of land, shares, cash first), to consumption (a loaf or a ticket, coin flip) otherwise
     greed_selection::Symbol = :rich                    # :rich (the wealthiest at the founding) | :random
     greedy_max_breads_per_round::Int = 10              # replaces the 3-loaf ceiling for greedy consumers (eaten, not stocked)
+    # Spoilage acceptance (13 October, Stef): nobody buys bread they know will rot. A greedy villager holds at most what they can eat
+    # before it spoils (breads_per_meal × spoilage_age_in_rounds) plus this share of waste: 0.1 = a tenth more, 3.0 = four times.
+    # NaN = the old cap of `greedy_max_breads_per_round`.
+    spoilage_acceptance::Float64 = NaN
+    # Greedy firms (13 October, Stef): a firm whose owners are greedy (by share; without owners, a greedy village) prices as high
+    # as the market allows — on a sell-out it sets its ask to what buyers will pay (the overpay ceiling), not a step up.
+    greedy_pricing::Bool = false
+    # Distress pricing (13 October, Stef): a firm whose overdue obligations have reached `distress_share` of the winding-up
+    # threshold abandons the step limit and sets its price to what would clear them within `distress_months`, cost plus the
+    # arrears per unit it expects to sell — the last thing a firm does before it fails.
+    distress_pricing::Bool = false
+    distress_share::Float64 = 0.5
+    distress_months::Int = 3
     greedy_max_tickets_per_round::Int = 10             # replaces the 3-ticket ceiling
     # Bread rationing (13 September 2026): stage one, everyone up to the ration; stage two, leftovers to the greedy
     bread_rationing::Bool = false

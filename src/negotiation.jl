@@ -146,6 +146,38 @@ function ask_floor(model, a::Agent, good::Symbol)
     return cost * (1 + (short ? p.ask_floor_markup_when_short : 0.0))
 end
 
+"""Is this firm greedy (13 October)? Owned by greedy villagers, share-weighted; with no owners, a village whose greedy are the majority."""
+function greedy_firm(model, e::Enterprise)
+    p = parameters(model)
+    p.greed || return false
+    isempty(e.shares) && return p.greed_share >= 0.5
+    g = 0.0; t = 0.0
+    for (hid, units) in e.shares
+        h = model[hid]
+        t += units; h isa Person && h.greed == :greedy && (g += units)
+    end
+    return t > 0 && g / t >= 0.5
+end
+
+"""Is failure near (13 October)? Overdue obligations at `distress_share` of what would wind the firm up."""
+function in_distress(model, e::Enterprise)
+    p = parameters(model)
+    e.kind in (:farm, :bakery, :theatre) || return false
+    overdue = p.liquidation_test == :book ? invoices_overdue(model, e, p.liquidation_overdue_rounds) : obligations_overdue(model, e, p.liquidation_overdue_rounds)
+    overdue > 1e-6 || return false
+    turnover = isempty(e.turnover_history) ? 0.0 : sum(e.turnover_history) / length(e.turnover_history)
+    turnover > 0 || return true
+    return overdue >= p.distress_share * p.liquidation_arrears_share * turnover
+end
+
+"""The price that would clear a firm's arrears within `distress_months` (13 October): cost plus the arrears per unit it expects to sell."""
+function distress_price(model, e::Enterprise, g::Symbol)
+    p = parameters(model)
+    overdue = p.liquidation_test == :book ? invoices_overdue(model, e, p.liquidation_overdue_rounds) : obligations_overdue(model, e, p.liquidation_overdue_rounds)
+    units = max(e.market[g].sold, 1.0)
+    return seller_reservation(model, e, g) + overdue / (units * max(p.distress_months, 1))
+end
+
 function adapt_prices!(model)
     parameters(model).fixed_prices && return nothing                                  # 26 Sept: nobody changes a price
     p = parameters(model)
@@ -156,6 +188,9 @@ function adapt_prices!(model)
             if r.sold >= r.offered - 1e-9
                 r.idle_rounds = 0
                 (!p.ask_increase_only_on_unmet_demand || demand_unmet(model, a, g)) && (a.ask[g] *= 1 + p.ask_increase_after_sellout)
+                if p.greedy_pricing && a isa Enterprise && g != :wage && greedy_firm(model, a)       # 13 Oct: a greedy firm takes what the market allows
+                    a.ask[g] = max(a.ask[g], expected_price(model, g) * p.bread_bid_base_multiplier)
+                end
             elseif r.sold > 1e-9
                 r.idle_rounds = 0
                 tol = (g == :wage && p.no_labour_tolerance) ? 0.0 : p.unsold_tolerance_units
@@ -185,6 +220,10 @@ function adapt_prices!(model)
                 end
             end
             p.ask_floor == :cost && (a.ask[g] = max(a.ask[g], ask_floor(model, a, g)))
+            if p.distress_pricing && a isa Enterprise && g != :wage && in_distress(model, a)          # 13 Oct: failure near — the step limit goes
+                a.ask[g] = max(a.ask[g], distress_price(model, a, g))
+                log_event!(model, :distress_price; actor = a.id, agent_kind = a.kind, good = g, price = a.ask[g])
+            end
         end
         for g in buys(a)
             r = a.market[g]
