@@ -116,6 +116,13 @@ Base.@kwdef struct SimulationParameters
     # Behavioural rules (viability study, 12 September 2026) — all off reproduces spec v2
     demand_based_targets::Bool = false          # producers plan output for the living population instead of the ±1 ratchet
     planning_margin::Float64 = 0.0              # extra share of demand planned for (0.0 = plan exactly the population's meals)
+    # 14 October (the greedy village's bakeries): plan greedy demand on last month's greedy purchases, not on the greedy villagers'
+    # cash; and never target more grain than the ovens can bake — `bakery_capacity_share` of the village's labour, spread over the
+    # bakeries, a unit of labour baking one grain (0.5: half the village's hands at full strength — 3,072 loaves a month at 512
+    # villagers; it binds only where a planner runs away, as in the greedy village).
+    plan_greedy_on_purchases::Bool = false
+    plan_within_capacity::Bool = false
+    bakery_capacity_share::Float64 = 0.5
     plan_for_gluttony::Bool = false             # plan for the expected third loaves too (otherwise gluttony is a pure demand shock)
     wage_ceiling_from_own_ask::Bool = false     # employer's maximum wage from the price it will ask for its output, not the market average
     expected_price_from_asks::Bool = false      # when a good was not traded, expected price = mean posted ask (no frozen prices)

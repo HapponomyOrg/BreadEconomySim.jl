@@ -1578,6 +1578,18 @@ end
     @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 24, BEH..., greed = true, greed_share = 1.0, greedy_pricing = true, distress_pricing = true))) < 1e-6
 end
 
+
+@testset "bakers plan on purchases, within capacity (14 October 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., greed = true, greed_share = 1.0, plan_for_gluttony = true, plan_greedy_on_purchases = true, plan_within_capacity = true, maximum_rounds = 3))
+    run_simulation!(m)
+    cap = B.bakery_capacity_loaves(m) / B.parameters(m).breads_per_grain
+    @test all(b.production_target <= ceil(cap) + 1 for b in B.enterprises(m, :bakery))        # no bakery targets more grain than its ovens bake
+    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., greed = true, greed_share = 1.0, plan_for_gluttony = true, maximum_rounds = 3))
+    run_simulation!(m0)
+    @test maximum(b.production_target for b in B.enterprises(m0, :bakery)) >= maximum(b.production_target for b in B.enterprises(m, :bakery))   # the cash estimate plans at least as much
+    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 24, BEH..., greed = true, greed_share = 1.0, plan_greedy_on_purchases = true, plan_within_capacity = true))) < 1e-6
+end
+
 @testset "cooperative forms (14 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     params(m) = B.parameters(m)

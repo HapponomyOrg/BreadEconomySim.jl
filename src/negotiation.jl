@@ -239,6 +239,15 @@ function adapt_prices!(model)
     return nothing
 end
 
+"""The loaves one bakery can bake in a month (14 October): what the village's labour would let it, at its share of the hands —
+the planner must not target more than the ovens can turn out."""
+function bakery_capacity_loaves(model)
+    p = parameters(model)
+    hands = p.maximum_capacity * length(persons(model))                   # the village at full strength — not today's hungry capacity (that fed a spiral)
+    nb = max(length(enterprises(model, :bakery)), 1)
+    return p.breads_per_grain * hands / nb * p.bakery_capacity_share      # a unit of labour bakes one grain
+end
+
 """
     plan_targets!(model)
 
@@ -258,15 +267,26 @@ function plan_targets!(model)
         extra = p.maximum_breads_per_round - p.breads_per_meal
         can_pay = count(w -> w.greed == :none && cash(w) >= p.maximum_breads_per_round * expected_price(model, :bread), ps)
         demand_bread += p.gluttony_probability * extra * can_pay
-        bp = expected_price(model, :bread)
-        for w in ps
-            w.greed == :greedy || continue
-            share = (1 - p.greed_hoarding) * (p.entertainment ? 0.5 : 1.0)
-            demand_bread += clamp(floor(share * (cash(w) - buffer_target(model, w)) / bp), 0, p.greedy_max_breads_per_round - p.breads_per_meal)
+        # 14 Oct: greedy demand is planned on what the greedy bought last month, not on what they could afford — the cash
+        # estimate planned three times the village's baking capacity in the greedy village, and the bakeries bought the grain
+        # for it and died of it (the trace of 14 October)
+        if p.greed && p.plan_greedy_on_purchases
+            demand_bread += isempty(model.data) ? 0.0 : Float64(model.data[end].greedy_loaves)
+        else
+            bp = expected_price(model, :bread)
+            for w in ps
+                w.greed == :greedy || continue
+                share = (1 - p.greed_hoarding) * (p.entertainment ? 0.5 : 1.0)
+                demand_bread += clamp(floor(share * (cash(w) - buffer_target(model, w)) / bp), 0, p.greedy_max_breads_per_round - p.breads_per_meal)
+            end
         end
     end
     stock_bread = sum(bread_units(b) for b in bakeries; init = 0.0)
     grain_for_bread = max(ceil(Int, (demand_bread - stock_bread) / p.breads_per_grain), 0)
+    if p.plan_within_capacity && !isempty(bakeries)                                  # 14 Oct: no bakery targets grain its hands cannot bake
+        cap_each = ceil(Int, bakery_capacity_loaves(model) / p.breads_per_grain)
+        grain_for_bread = min(grain_for_bread, cap_each * length(bakeries))
+    end
     allot!(units, group) = for (k, e) in enumerate(group)
         e.production_target = units ÷ length(group) + (k <= units % length(group) ? 1 : 0)
     end
