@@ -8,6 +8,7 @@ function seller_reservation(model, seller::Agent, good::Symbol; age::Int = 0)
         need = meal_price(model)
         p.wage_reservation_includes_savings && (need += max(savings_buffer(model) - cash(seller), 0.0) / p.savings_build_rounds)
         p.wage_reservation_net_of_gi && p.monetary_system == :sumsy && (need = max(need - p.guaranteed_income, 0.0))
+        p.wage_reservation_net_of_gi && p.monetary_system != :sumsy && p.basic_income > 0 && (need = max(need - p.basic_income, 0.0))   # 14 Oct
         base = need / p.maximum_capacity                        # gross; the tax wedge is left to redistribution (see handoff)
         p.wage_reservation_net_of_tax && (base /= (1 - effective_wage_tax_rate(model)))
         return base * max(1 - p.hunger_wage_discount * seller.hunger, 0.0)
@@ -170,6 +171,42 @@ function in_distress(model, e::Enterprise)
     return overdue >= p.distress_share * p.liquidation_arrears_share * turnover
 end
 
+"""Did the firm leave stock on the shelf last month (14 October)? Unsold at least `unsold_share` of what it offered."""
+function shelf_left(model, e::Enterprise, g::Symbol)
+    r = e.market[g]
+    return r.offered > 1e-9 && r.offered - r.sold >= parameters(model).unsold_share * r.offered - 1e-9
+end
+
+"""The firm's own good: what it makes and sells."""
+own_good(e::Enterprise) = is_farm(e) ? :grain : e.kind == :bakery ? :bread : is_theatre(e) ? :ticket : :none
+
+"""
+    distress_cost_cutting!(model)
+
+After the month's plan (14 October): a firm near failure that did not sell out cuts next month's target to what it sold — the grain
+a bakery buys, the hands a theatre hires — so that it spends only on what it can sell. A firm that sold out does not cut: its
+answer is the price.
+"""
+function distress_cost_cutting!(model)
+    p = parameters(model)
+    p.distress_cost_cutting || return nothing
+    for e in alive_agents(model)
+        e isa Enterprise || continue
+        g = own_good(e); g == :none && continue
+        in_distress(model, e) || continue
+        r = e.market[g]
+        r.offered > 1e-9 || continue
+        r.sold >= r.offered - 1e-9 && continue                                     # sold out: the price is the answer
+        sold_target = e.kind == :bakery ? ceil(Int, r.sold / p.breads_per_grain) :
+                      is_theatre(e) ? ceil(Int, r.sold / p.customers_per_labour_unit) : ceil(Int, r.sold)
+        if sold_target < e.production_target
+            log_event!(model, :distress_cut; actor = e.id, agent_kind = e.kind, from = e.production_target, to = sold_target)
+            e.production_target = sold_target
+        end
+    end
+    return nothing
+end
+
 """The price that would clear a firm's arrears within `distress_months` (13 October): cost plus the arrears per unit it expects to sell."""
 function distress_price(model, e::Enterprise, g::Symbol)
     p = parameters(model)
@@ -220,7 +257,7 @@ function adapt_prices!(model)
                 end
             end
             p.ask_floor == :cost && (a.ask[g] = max(a.ask[g], ask_floor(model, a, g)))
-            if p.distress_pricing && a isa Enterprise && g != :wage && in_distress(model, a)          # 13 Oct: failure near — the step limit goes
+            if p.distress_pricing && a isa Enterprise && g != :wage && in_distress(model, a) && !(p.distress_cost_cutting && shelf_left(model, a, g))   # 13 Oct: failure near — the step limit goes (14 Oct: unless stock is left — then it cuts)
                 a.ask[g] = max(a.ask[g], distress_price(model, a, g))
                 log_event!(model, :distress_price; actor = a.id, agent_kind = a.kind, good = g, price = a.ask[g])
             end

@@ -72,7 +72,7 @@ const LADDERS = [(parse(Int, split(x, ":")[1]), Symbol(split(x, ":")[2])) for x 
 const RUNGS   = filter(!isempty, split(get(ENV, "RUNGS", ""), ","))
 
 ladder_name(N, settlement) = settlement == :invoicing ? "ladder2_$(N)" : "ladder2_$(N)_$(settlement)"
-const MODEL_VERSION = "2026-10-14"   # part of the key: runs made with an earlier model are never taken for current ones
+const MODEL_VERSION = "2026-10-15"   # part of the key: runs made with an earlier model are never taken for current ones
 parts_dir(N, settlement) = joinpath(ROOT, "results", "parts", "$(ladder_name(N, settlement))_$(ROUNDS)months_$(MODEL_VERSION)")   # the run length is part of the key: a short test run is never taken for a real one
 safe(s) = replace(s, r"[^A-Za-z0-9]+" => "_")
 part_file(job) = joinpath(parts_dir(job.N, job.settlement), "$(safe(job.rung))__$(job.system)__$(job.seed).csv")
@@ -276,7 +276,12 @@ end
 for (N, settlement) in LADDERS
     dir = parts_dir(N, settlement)
     isdir(dir) || continue
-    files = filter(endswith(".csv"), readdir(dir; join = true))
+    # 14 Oct: only the files of steps on the current ladder — a renamed or removed step leaves orphans in the folder (Y8-loyal,
+    # a duplicated S3-W block), which must not reach the summary
+    current = Set(safe(r[1]) for r in ladder(N, ROUNDS, settlement).rungs)
+    files = filter(f -> endswith(f, ".csv") && first(split(basename(f), "__")) in current, readdir(dir; join = true))
+    orphans = count(f -> endswith(f, ".csv") && !(first(split(basename(f), "__")) in current), readdir(dir; join = true))
+    orphans > 0 && println("$(orphans) part files of steps no longer on the ladder are left out of the summary.")
     isempty(files) && continue
     rounds = reduce((a, b) -> vcat(a, b; cols = :union), [CSV.read(f, DataFrame) for f in files])
     name = ladder_name(N, settlement)

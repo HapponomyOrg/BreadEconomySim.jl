@@ -49,6 +49,7 @@ append!(ROUND_BEHAVIORS, Function[
     charge_account_fees!,
     government_hiring!,
     pay_unemployment_fees!,
+    pay_basic_income!,                  # 14 Oct: a basic income under debt money
     bread_market!,
     staff_theatres_with_volunteers!,   # 4 Oct: after the labour markets, before the shows
     ticket_market!,
@@ -57,6 +58,7 @@ append!(ROUND_BEHAVIORS, Function[
     greed_spending!,
     charge_income_tax!,
     collect_land_levy!,
+    pay_levy_dividend!,                 # 14 Oct: the levy paid out per head
     settle_end_of_round!,
     settle_invoices!,
     liquidate_insolvent_firms!,

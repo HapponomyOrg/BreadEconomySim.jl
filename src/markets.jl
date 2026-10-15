@@ -17,7 +17,7 @@ under SuMSy what money above the buffer loses (minus the parking fee and the par
 function money_return_rate(model)
     p = parameters(model)
     p.monetary_system == :sumsy && return -(p.demurrage_rate + p.demurrage_tax_rate * model.parking_tax_scale)
-    return (p.deposit_interest_rate + p.loyalty_bonus_rate) / max(p.deposit_interest_period, 1)
+    return (p.deposit_interest_rate + p.loyalty_bonus_rate) / max(p.deposit_interest_period, 1) - p.demurrage_tax_rate * model.parking_tax_scale   # 14 Oct: less a demurrage tax
 end
 
 """The monthly levy on land value: the cost of holding money plus the margin, when `land_levy` is on."""
@@ -253,12 +253,15 @@ function hands_short(model)
     return wanted > 0 && short >= parameters(model).unmet_demand_share * wanted
 end
 
+"""Last month's levy dividend per head (14 October)."""
+levy_dividend_per_head(model) = isempty(model.data) ? 0.0 : model.data[end].levy_dividend / max(model.data[end].persons_alive, 1)
+
 """Income that arrives without work (12 October): under SuMSy the guaranteed income, and last month's dividend per head. Until
 now the labour-supply rule ignored it, so a SuMSy villager offered labour as if the income did not exist — three units for a
 ten-unit meal when two and the income would do — and the surplus work was exactly what the outsiders lacked."""
 function unearned_income(model)
     p = parameters(model)
-    p.monetary_system == :sumsy || return 0.0
+    p.monetary_system == :sumsy || return p.basic_income + levy_dividend_per_head(model)   # 14 Oct: a basic income and levy dividend under debt money
     d = model.data
     dividend = isempty(d) ? 0.0 : d[end].surplus_redistributed / max(d[end].persons_alive, 1)
     return p.guaranteed_income + dividend

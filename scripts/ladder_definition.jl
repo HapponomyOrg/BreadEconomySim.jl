@@ -3,7 +3,7 @@ using BreadEconomySim, OrderedCollections
 # The ladder as a function of the village size, the run length and the settlement system (22 September), so that one
 # process can build several ladders (scripts/run_all.jl). ladder2_rungs.jl calls it with the command-line values.
 function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol)
-    RULES = (; ask_floor = :cost, bread_bid_base_multiplier = 1.2, ticket_max_in_breads = 2.0, employer_wage_margin = 0.20, number_of_persons = N, number_of_landowners = N ÷ 4, land_per_person = 1.5, initial_production_target = 10 * N ÷ 128, shares_per_person = 10, shareholder_count = 4, number_of_farms = 4, number_of_bakeries = 4, shows_per_round = 1, theatre_seat_margin = 0.25, unmet_demand_share = 0.05, unsold_share = 0.05, wage_threshold = true, wage_cut_maximum = 0.005, wage_floor_months = 1, employer_loyalty = true, notice_months = 3, minimum_labour_offer = 0.5, volunteer_share = 1.0, spoilage_acceptance = 0.5, greedy_pricing = true, distress_pricing = true, plan_greedy_on_purchases = true, plan_within_capacity = true, food_emergency_share = 0.9, employer_loss_tolerance = 0.10, owner_guarantee = true, interest_from_equity = true, bank_capital_ratio = 0.08, founding_equity = true, founders = :distinct, settlement = SETTLEMENT,   # 23 Sept: founders capitalise their firms
+    RULES = (; ask_floor = :cost, bread_bid_base_multiplier = 1.2, ticket_max_in_breads = 2.0, employer_wage_margin = 0.20, number_of_persons = N, number_of_landowners = N ÷ 4, land_per_person = 1.5, initial_production_target = 10 * N ÷ 128, shares_per_person = 10, shareholder_count = 4, number_of_farms = 4, number_of_bakeries = 4, shows_per_round = 1, theatre_seat_margin = 0.25, unmet_demand_share = 0.05, unsold_share = 0.05, wage_threshold = true, wage_cut_maximum = 0.005, wage_floor_months = 1, employer_loyalty = true, notice_months = 3, minimum_labour_offer = 0.5, volunteer_share = 1.0, spoilage_acceptance = 0.5, greedy_pricing = true, distress_pricing = true, distress_cost_cutting = true, plan_greedy_on_purchases = true, plan_within_capacity = true, food_emergency_share = 0.9, employer_loss_tolerance = 0.10, owner_guarantee = true, interest_from_equity = true, bank_capital_ratio = 0.08, founding_equity = true, founders = :distinct, settlement = SETTLEMENT,   # 23 Sept: founders capitalise their firms
            # 22 September: :invoicing = the settlement design (cash at the counter, wages at month end, invoices between firms, clearing among banks)
              initial_interest_rate = 0.005, maximum_interest_rate = 0.015,   # a month: 6 % a year to start, at most about 20 %; the rate itself covers the banks' costs (one staff unit per bank: staff scaled with customers bankrupted the banks at 512, 22 Sept)
               demand_based_targets = true, wage_ceiling_from_own_ask = true, expected_price_from_asks = true, ask_increase_only_on_unmet_demand = true,
@@ -45,6 +45,7 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol)
     PARKPOLICY = (; tax_policy = :scale, tax_response_coverage = 1.0, tax_response_step = 0.02, tax_scale_maximum = 10.0)   # SuMSy: the parking tax covers the public payroll
     ENTRY    = (; market_entry = true, entry_coop_share = 0.0)   # 25 Sept: firms enter on unmet demand or high margins
     level(fee) = 30 + 5 / (fee + 0.01)                              # a villager's settled money: cushion + guaranteed income ÷ (fee + parking tax)
+    DEMTAX15 = (; wage_tax_rate = 0.0, capital_tax_rate = 0.0, dividend_tax_rate = 0.0, demurrage_tax_rate = 0.015, demurrage_free_buffer = 30.0)   # 14 Oct: a demurrage tax instead of income tax, on debt money
     PRODUCTIVE = (; breads_per_grain = 4, customers_per_labour_unit = 1.0, initial_prices = OrderedDict(:bread => 3.0, :grain => 5.2, :rent => 0.75, :wage => 3.92, :ticket => 5.0),
                   fixed_prices = true, shows_per_round = 2, standard_of_living_tickets = 2, refound_minimum = 4)
     PRICES   = (;)   # 25 Sept: the realistic price rules are base rules from step 0 (see RULES); the old step 10 is gone
@@ -181,14 +182,20 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol)
         ("S3-W11 everyone greedy, overpay up to 1.1×", (; V8_DEBT..., PRICES..., RESERVE..., GREEDY_A..., bread_bid_base_multiplier = 1.1), (; V8_SUMSY..., PRICES..., RESERVE..., GREEDY_A..., bread_bid_base_multiplier = 1.1)),
         ("S3-W13 everyone greedy, overpay up to 1.3×", (; V8_DEBT..., PRICES..., RESERVE..., GREEDY_A..., bread_bid_base_multiplier = 1.3), (; V8_SUMSY..., PRICES..., RESERVE..., GREEDY_A..., bread_bid_base_multiplier = 1.3)),
         ("S3-W20 everyone greedy, overpay up to 2×", (; V8_DEBT..., PRICES..., RESERVE..., GREEDY_A..., bread_bid_base_multiplier = 2.0), (; V8_SUMSY..., PRICES..., RESERVE..., GREEDY_A..., bread_bid_base_multiplier = 2.0)),
-        # The overpay dial on the greedy village (13 October): can a bread price free to follow its inputs save the bakeries?
-        ("S3-W11 everyone greedy, overpay 1.1×", (; V8_DEBT..., PRICES..., RESERVE..., GREEDY_A..., bread_bid_base_multiplier = 1.1), (; V8_SUMSY..., PRICES..., RESERVE..., GREEDY_A..., bread_bid_base_multiplier = 1.1)),
-        ("S3-W13 everyone greedy, overpay 1.3×", (; V8_DEBT..., PRICES..., RESERVE..., GREEDY_A..., bread_bid_base_multiplier = 1.3), (; V8_SUMSY..., PRICES..., RESERVE..., GREEDY_A..., bread_bid_base_multiplier = 1.3)),
-        ("S3-W20 everyone greedy, overpay 2×", (; V8_DEBT..., PRICES..., RESERVE..., GREEDY_A..., bread_bid_base_multiplier = 2.0), (; V8_SUMSY..., PRICES..., RESERVE..., GREEDY_A..., bread_bid_base_multiplier = 2.0)),
         # Greedy pricing and distress pricing (13 October) switched off, on the greedy village and on step 8: their own effect.
         ("S3-NGP everyone greedy, firms price by the step rule", (; V8_DEBT..., PRICES..., RESERVE..., GREEDY_A..., greedy_pricing = false), (; V8_SUMSY..., PRICES..., RESERVE..., GREEDY_A..., greedy_pricing = false)),
         ("S3-NDP everyone greedy, no distress pricing", (; V8_DEBT..., PRICES..., RESERVE..., GREEDY_A..., distress_pricing = false), (; V8_SUMSY..., PRICES..., RESERVE..., GREEDY_A..., distress_pricing = false)),
         ("NDP8 step 8, no distress pricing", (; V8_DEBT..., distress_pricing = false), (; V8_SUMSY..., distress_pricing = false)),
+        # Cost cutting under distress (14 October) switched off: its own effect, on step 8 and on the productive village. Both moneys.
+        ("NDC8 step 8, no cost cutting under distress", (; V8_DEBT..., distress_cost_cutting = false), (; V8_SUMSY..., distress_cost_cutting = false)),
+        ("V8-NDC productive village, no cost cutting under distress", (; V8_DEBT..., PRODUCTIVE..., distress_cost_cutting = false), (; V8_SUMSY..., PRODUCTIVE..., distress_cost_cutting = false)),
+        # A reader's question (14 October): does any village with a basic income and a land dividend keep its people alive, or is it
+        # the money? SuMSy's fiscal arrangement on debt money, piece by piece. Debt side only.
+        ("DGI8 debt money, basic income 5", (; V8_DEBT..., basic_income = 5.0), (;)),
+        ("DD8 debt money, demurrage tax 1.5 % instead of income tax", (; V8_DEBT..., DEMTAX15...), (;)),
+        ("DDL8 debt money, demurrage tax 1.5 %, land levy and dividend", (; V8_DEBT..., DEMTAX15..., land_levy = true, land_levy_dividend = true), (;)),
+        ("DDGL8 debt money, SuMSy's arrangement: demurrage tax 1.5 %, levy and dividend, basic income, one-loaf benefit", (; V8_DEBT..., DEMTAX15..., land_levy = true, land_levy_dividend = true, basic_income = 5.0, unemployment_fee_in_breads = 1.0, minimum_fee_in_breads = 1.0), (;)),
+        ("DDGL8-35 as DDGL8 at a demurrage tax of 3.5 %", (; V8_DEBT..., DEMTAX15..., demurrage_tax_rate = 0.035, land_levy = true, land_levy_dividend = true, basic_income = 5.0, unemployment_fee_in_breads = 1.0, minimum_fee_in_breads = 1.0), (;)),
         # The benefit fixed in money (26 September): the debt village's transfer as a fixed sum, like SuMSy's guaranteed income —
         # separates the money system from the indexation of the transfer. Debt side only.
         ("I2 step 2, benefit fixed in money", (; planning_margin = 0.1, GOV_DEBT..., benefit_indexed = false), (;)),

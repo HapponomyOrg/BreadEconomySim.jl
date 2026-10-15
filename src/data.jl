@@ -101,6 +101,7 @@ function record!(model)
         land_households_share = (let tot = sum(a.land for a in agents_by_id(model) if a.alive; init = 0); tot > 0 ? sum(w.land for w in ps; init = 0) / tot : NaN end),
         gini_wealth_attributed = (let pool = sum(book_value(model, e) for e in model.enterprise_list if e.alive && is_producer(e) && isempty(e.shares) && isempty(e.members); init = 0.0)
             isempty(ps) ? NaN : gini([net_wealth(model, w) + pool / length(ps) for w in ps]) end),
+        basic_income = model.basic_income_this_round, levy_dividend = model.levy_dividend_this_round,
         premium_loaves = model.premium_loaves_this_round, premium_revenue = model.premium_revenue_this_round, premium_labour = model.premium_labour_this_round,
         gold_price = model.gold_price, gold_valuation = model.gold_valuation, gold_sold = model.gold_sold_this_round,
         gold_holders = count(w -> w.gold >= 1.0, ps), gold_value_in_meals = sum(gold_value(model, w) for w in ps; init = 0.0) / max(meal_price(model), 1e-9), gold_top10_share = (let g = sort([w.gold for w in ps]; rev = true), t = sum(g; init = 0.0); t > 0 ? sum(g[1:max(1, length(g) ÷ 10)]) / t : NaN end),
@@ -287,6 +288,7 @@ function record_and_adapt!(model)
     roll_patronage_window!(model)
     adapt_prices!(model)
     adapt_targets!(model)
+    distress_cost_cutting!(model)                                      # 14 Oct: a firm near failure cuts to what it sold
     absorb_surplus!(model)
     update_expected_prices!(model)
     model.credit_demand_previous_round = model.credit_demand_this_round

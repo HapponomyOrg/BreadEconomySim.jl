@@ -149,6 +149,13 @@ Base.@kwdef struct SimulationParameters
     guaranteed_income_in_breads::Float64 = 0.0        # > 0: the income is this many loaves at the expected bread price each round (indexed; breaks the bounded money stock — a test, not a design)
     demurrage_rate::Float64 = 0.02                    # per round, on balances above the buffer; destroys money
     demurrage_tax_rate::Float64 = 0.0                 # surcharge on the same base, transferred to the government
+    # 14 Oct (a reader's question: does any village with a basic income and a land dividend keep its people alive?): under debt
+    # money `demurrage_tax_rate` > 0 runs too — a tax on balances above the cushion, paid to the government, nothing destroyed —
+    # and the cost of holding money becomes the demurrage tax less the deposit return, which is what the land levy follows.
+    # `basic_income`: under debt money, paid by the government to every villager each month, borrowed where taxes fall short
+    # (under SuMSy the guaranteed income is the money itself). `land_levy_dividend`: the month's levy paid out per head.
+    basic_income::Float64 = 0.0
+    land_levy_dividend::Bool = false
     # Government reserve (20 September 2026). 0 = the rule until now: whatever tax exceeds spending sits on the government's
     # balance (under SuMSy it pays demurrage there, and in the no-greed village it reached a fifth of the money stock).
     # n > 0: the government keeps a reserve of n rounds of expected spending (the trailing mean of its outlays over
@@ -362,6 +369,10 @@ Base.@kwdef struct SimulationParameters
     distress_pricing::Bool = false
     distress_share::Float64 = 0.5
     distress_months::Int = 3
+    # Cost cutting under distress (14 October, Stef): a firm near failure reads its own market. Bread (tickets, grain) left on the
+    # shelf: it cuts — next month's target falls to what it sold, so it buys and hires only for that — and does not raise its
+    # price. Sold out: it raises its price (distress pricing) and does not cut. Neither: it cuts first and prices by what remains.
+    distress_cost_cutting::Bool = true                # on by default: realistic behaviour (Stef, 14 Oct); a switch for the controls
     greedy_max_tickets_per_round::Int = 10             # replaces the 3-ticket ceiling
     # Bread rationing (13 September 2026): stage one, everyone up to the ration; stage two, leftovers to the greedy
     bread_rationing::Bool = false

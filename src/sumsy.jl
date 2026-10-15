@@ -73,13 +73,14 @@ end
 
 """Demurrage destroys money above the buffer; the demurrage tax on the same base goes to the government."""
 function apply_demurrage!(model)
-    is_sumsy(model) || return nothing
-    p = parameters(model); gov = government(model)
+    p = parameters(model)
+    (is_sumsy(model) || p.demurrage_tax_rate > 0) || return nothing          # 14 Oct: the tax part runs under debt money too
+    gov = government(model)
     for a in alive_agents(model)
         is_authority(a) && continue
         excess = cash(a) - demurrage_buffer(model, a)
         excess <= 1e-9 && continue
-        dem = destroy_money!(model, a, round(p.demurrage_rate * excess, digits = 4))
+        dem = is_sumsy(model) ? destroy_money!(model, a, round(p.demurrage_rate * excess, digits = 4)) : 0.0   # debt money: nothing destroyed
         model.demurrage_this_round += dem
         a isa Person && (model.demurrage_persons_this_round += dem)
         if p.demurrage_tax_rate > 0 && a !== gov

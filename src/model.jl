@@ -124,7 +124,7 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
     props[:entry_margin_history] = OrderedDict{Symbol, Vector{Float64}}()
     props[:entry_last] = OrderedDict{Symbol, Int}()
     props[:refound_last] = OrderedDict{Symbol, Int}()
-    props[:labour_shortfall_this_round] = 0.0
+    props[:labour_shortfall_this_round] = 0.0; props[:basic_income_this_round] = 0.0; props[:levy_dividend_this_round] = 0.0
     props[:premium_loaves_this_round] = 0.0; props[:premium_revenue_this_round] = 0.0; props[:premium_labour_this_round] = 0.0
     props[:gold_price] = parameters.gold_initial_price_in_breads * parameters.initial_prices[:bread] * parameters.initial_price_multiplier
     props[:gold_valuation] = props[:gold_price]; props[:gold_sales_log] = Tuple{Int, Float64}[]; props[:gold_sold_this_round] = 0.0
@@ -471,7 +471,7 @@ function begin_round!(model)
     model.consumption_tax_this_round = 0.0; model.wealth_tax_this_round = 0.0
     model.invoices_issued_this_round = 0.0; model.invoices_paid_this_round = 0.0
     model.profit_tax_this_round = 0.0; model.income_tax_charged_this_round = 0.0; model.after_clearing = false; model.land_levy_this_round = 0.0
-    model.premium_loaves_this_round = 0.0; model.premium_revenue_this_round = 0.0; model.premium_labour_this_round = 0.0; model.labour_shortfall_this_round = 0.0
+    model.premium_loaves_this_round = 0.0; model.premium_revenue_this_round = 0.0; model.premium_labour_this_round = 0.0; model.labour_shortfall_this_round = 0.0; model.basic_income_this_round = 0.0; model.levy_dividend_this_round = 0.0
     for e in model.enterprise_list; empty!(e.patronage_this_round); end
     model.gi_this_round = 0.0; model.demurrage_this_round = 0.0; model.demurrage_tax_this_round = 0.0
     model.account_fees_this_round = 0.0; model.peer_lent_this_round = 0.0

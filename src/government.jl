@@ -277,6 +277,44 @@ function pay_unemployment_fees!(model)
 end
 
 """
+    pay_basic_income!(model)
+
+Under debt money (14 October): the government promises every villager `basic_income` a month, as it promises the benefit —
+paid from its taxes, borrowed where they fall short.
+"""
+function pay_basic_income!(model)
+    p = parameters(model)
+    (p.basic_income > 0 && p.monetary_system != :sumsy) || return nothing
+    gov = government(model); paid = 0.0
+    for w in persons(model)
+        promise!(model, gov, w, p.basic_income, :basic_income, 2, :none); paid += p.basic_income
+    end
+    model.government_outlay_this_round += paid; model.basic_income_this_round = paid
+    return nothing
+end
+
+"""
+    pay_levy_dividend!(model)
+
+After the levy is collected (14 October): the month's levy, paid out per head, whatever the budget.
+"""
+function pay_levy_dividend!(model)
+    p = parameters(model)
+    p.land_levy_dividend || return nothing
+    ps = persons(model); isempty(ps) && return nothing
+    gov = government(model)
+    each = floor(model.land_levy_this_round / length(ps) * 1e4) / 1e4
+    each > 0 || return nothing
+    paid = 0.0
+    for w in ps
+        amount = round(min(each, cash(gov)), digits = 4); amount > 0 || break
+        transfer!(model, gov, w, amount, :levy_dividend); paid += amount
+    end
+    model.levy_dividend_this_round = paid; model.government_outlay_this_round += paid
+    return nothing
+end
+
+"""
     collect_land_levy!(model)
 
 `land_levy`: every landholder pays `land_levy_rate` × the value of its land to the government each month — persons down to the

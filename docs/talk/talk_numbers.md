@@ -3,7 +3,7 @@
 
 | slide | claim | measure | where (step, village, ten-run mean unless said) | value now | source of "now" | 25 Sept result | 11 Oct result |
 |---|---|---|---|---|---|---|---|
-| 4 | without a government, few survive in the debt village | alive at month 120, of 512 | step 0, debt | 30 | 24f | | 150 |
+| 4 | without a government, few survive in the debt village | alive at month 120, of 512 | step 0, debt | 30 | 24f | | 158 |
 | 4 | everyone lives in the SuMSy village | alive at month 120 | step 0, SuMSy | 510–512 | 24f | | 458 (about 20 hungry a month; poorest tenth 9 meals) |
 | 5 | the debt government borrows all along | public debt at month 120 | step 2 (or the best debt village), debt | ~190,000 | 24f | | 200,000 at step 2; 140,000 at step 8 |
 | 5 | share of spending borrowed | shortfall ÷ outlay, last year | step 2, debt | ~¾ | earlier ladders | | 51 % at step 2; 28 % at step 8 |
@@ -16,5 +16,5 @@
 | 8 | land price, debt village | traded price in months of rent | step 8, debt | ~44 | one check run | | 350 (rent 1.0: about 30 years of rent) |
 | 8 | land price, SuMSy without levy | traded price in months of rent | step 8, SuMSy | ~1,400 | one check run | | 6,200 (rent 0.7: about 700 years) |
 | 8 | land price and gap with levy + dividend | months of rent; wealth gap (meals) | LD10, SuMSy | ~49; 54 | one check run | | 43 (about 4 years); gap 242, poorest tenth 16.3 |
-| 9 | greedy SuMSy village: bakery restarts, everyone eats | new firms in 10 years; alive | S3 (everyone greedy), SuMSy | ~50 restarts; 512 | review 6, on 24f | | S3: SuMSy 0 alive in 10/10 (mean death month 84); debt 255. Slide 9 withdrawn as "everyone eats" |
+| 9 | greedy SuMSy village: bakery restarts, everyone eats | new firms in 10 years; alive | S3 (everyone greedy), SuMSy | ~50 restarts; 512 | review 6, on 24f | | S3 (14 Oct, corrected planner): SuMSy 512 in 10/10, gap 76; debt 509, 228,000 of debt. Under the earlier planner SuMSy died (57). Overpay 2×: both die |
 | 10 | size of the public sector each money affords | public debt at 40 % public employment | G10-40 debt, GP10-40 SuMSy | to fill | | | G10-40 debt 148,000; GP10-40 SuMSy 0 |

@@ -1590,6 +1590,31 @@ end
     @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 24, BEH..., greed = true, greed_share = 1.0, plan_greedy_on_purchases = true, plan_within_capacity = true))) < 1e-6
 end
 
+
+@testset "cost cutting under distress (14 October 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., distress_pricing = true, distress_cost_cutting = true, maximum_rounds = 2))
+    B.econo_step!(m, 1)
+    b = first(B.enterprises(m, :bakery)); p = B.parameters(m)
+    b.production_target = 40; b.market[:bread].offered = 100.0; b.market[:bread].sold = 60.0          # bread left on the shelf
+    empty!(b.turnover_history); push!(b.turnover_history, 10.0)
+    B.book_asset!(b.balance, B.DEPOSIT, -B.cash(b))
+    @test B.shelf_left(m, b, :bread)
+    B.in_distress(m, b) && (B.distress_cost_cutting!(m); @test b.production_target == ceil(Int, 60 / p.breads_per_grain))   # cut to what it sold
+    b.production_target = 40; b.market[:bread].sold = 100.0                                             # sold out: no cut
+    B.distress_cost_cutting!(m); @test b.production_target == 40
+    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 24, BEH..., distress_pricing = true, distress_cost_cutting = true))) < 1e-6
+end
+
+
+@testset "SuMSy's fiscal arrangement on debt money (14 October 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., land_pricing = :market, wage_tax_rate = 0.0, capital_tax_rate = 0.0, demurrage_tax_rate = 0.015, demurrage_free_buffer = 30.0, land_levy = true, land_levy_dividend = true, basic_income = 5.0, maximum_rounds = 6))
+    @test B.money_return_rate(m) < 0 && B.land_levy_rate(m) > 0.01                              # holding cash costs; the levy follows
+    run_simulation!(m); d = round_data(m)
+    @test all(d.basic_income[2:end] .≈ 5.0 .* d.persons_alive[2:end])                          # everyone, every month
+    @test sum(d.levy_dividend) > 0 && sum(d.demurrage_tax) > 0 && all(d.demurrage_destroyed .== 0)          # the levy paid out; the tax collected; nothing destroyed
+    @test abs(money_identity_gap(m)) < 1e-6
+end
+
 @testset "cooperative forms (14 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     params(m) = B.parameters(m)
