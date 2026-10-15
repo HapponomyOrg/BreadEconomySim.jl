@@ -1591,18 +1591,26 @@ end
 end
 
 
-@testset "cost cutting under distress (14 October 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., distress_pricing = true, distress_cost_cutting = true, maximum_rounds = 2))
-    B.econo_step!(m, 1)
+@testset "cost cutting under distress (14 October 2026; 15 Oct: distress set up deliberately)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., distress_pricing = true, distress_cost_cutting = true, liquidation_test = :cash_flow, maximum_rounds = 6))
+    for _ in 1:3; B.econo_step!(m, 1); end
     b = first(B.enterprises(m, :bakery)); p = B.parameters(m)
-    b.production_target = 40; b.market[:bread].offered = 100.0; b.market[:bread].sold = 60.0          # bread left on the shelf
-    empty!(b.turnover_history); push!(b.turnover_history, 10.0)
-    B.book_asset!(b.balance, B.DEPOSIT, -B.cash(b))
+    supplier = first(B.enterprises(m, :farm))
+    empty!(b.turnover_history); push!(b.turnover_history, 100.0)                                     # monthly turnover 100
+    push!(m.invoices, B.Invoice(b.id, supplier.id, 8.0, 8.0, :grain, :none, B.current_round(m) - p.liquidation_overdue_rounds))   # 8 overdue: past half of the threshold (10)
+    @test B.in_distress(m, b)
+    b.production_target = 40; b.market[:bread].offered = 100.0; b.market[:bread].sold = 60.0           # bread left on the shelf
     @test B.shelf_left(m, b, :bread)
-    B.in_distress(m, b) && (B.distress_cost_cutting!(m); @test b.production_target == ceil(Int, 60 / p.breads_per_grain))   # cut to what it sold
-    b.production_target = 40; b.market[:bread].sold = 100.0                                             # sold out: no cut
-    B.distress_cost_cutting!(m); @test b.production_target == 40
-    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 24, BEH..., distress_pricing = true, distress_cost_cutting = true))) < 1e-6
+    B.distress_cost_cutting!(m)
+    @test b.production_target == ceil(Int, 60 / p.breads_per_grain)                                    # cut to what it sold
+    b.production_target = 40; b.market[:bread].sold = 100.0                                             # sold out: no cut — the price is the answer
+    B.distress_cost_cutting!(m)
+    @test b.production_target == 40
+    ask0 = b.ask[:bread]; b.market[:bread].sold = 100.0
+    B.adapt_prices!(m)
+    @test b.ask[:bread] >= B.distress_price(m, b, :bread) - 1e-9 && b.ask[:bread] >= ask0              # sold out in distress: priced to clear the arrears
+    m2 = run(; seed = 1, maximum_rounds = 24, BEH..., distress_pricing = true, distress_cost_cutting = true)
+    @test abs(money_identity_gap(m2)) < 1e-6
 end
 
 
@@ -1613,6 +1621,70 @@ end
     @test all(d.basic_income[2:end] .≈ 5.0 .* d.persons_alive[2:end])                          # everyone, every month
     @test sum(d.levy_dividend) > 0 && sum(d.demurrage_tax) > 0 && all(d.demurrage_destroyed .== 0)          # the levy paid out; the tax collected; nothing destroyed
     @test abs(money_identity_gap(m)) < 1e-6
+end
+
+
+@testset "the income reversed, and cut under a debt ceiling (15 October 2026)" begin
+    m = run(; seed = 1, maximum_rounds = 8, BEH..., monetary_system = :sumsy, guaranteed_income = 5.0, demurrage_rate = 0.02, demurrage_free_buffer = 30.0, income_cut_start = 5, income_cut_share = 0.5)
+    d = round_data(m)
+    @test d.gi_created[4] ≈ 5.0 * d.persons_alive[4] && d.gi_created[6] ≈ 2.5 * d.persons_alive[6]     # halved from month 5
+    m2 = run(; seed = 1, maximum_rounds = 8, BEH..., basic_income = 5.0, income_cut_start = 5, income_cut_share = 0.5)
+    d2 = round_data(m2)
+    @test d2.basic_income[4] ≈ 5.0 * d2.persons_alive[4] && d2.basic_income[6] ≈ 2.5 * d2.persons_alive[6]
+    @test abs(money_identity_gap(m2)) < 1e-6
+end
+
+
+@testset "cash hoarders, volunteers anywhere, community theatres, theatres planning on sales (15 October 2026)" begin
+    give!(a, x) = B.book_asset!(a.balance, B.DEPOSIT, x)
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., cash_hoarder_share = 0.25, land_pricing = :market, maximum_rounds = 3))
+    hs = [w for w in B.persons(m) if B.hoards_cash(w)]
+    @test length(hs) == 4
+    h = first(hs); give!(h, 5_000.0)
+    run_simulation!(m)
+    @test isempty([e for e in m.events if e.kind in (:land_sale, :share_sale) && get(e, :buyer, 0) == h.id])   # buys no land, no shares
+    @test round_data(m).n_cash_hoarders[end] == 4
+    m2 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., volunteer_kinds = (:bakery,), maximum_rounds = 3))
+    b = first(B.enterprises(m2, :bakery)); B.book_asset!(b.balance, B.DEPOSIT, -B.cash(b)); b.production_target = 6; push!(b.turnover_history, 0.0)
+    for f in B.ROUND_BEHAVIORS; f(m2); occursin("bake!", string(f)) && break; end
+    @test b.volunteer_labour > 0                                                                 # volunteers staffed the bakery the market could not pay for
+    m3 = run(; seed = 1, maximum_rounds = 4, BEH..., entertainment = true, number_of_theatres = 2, community_theatres = 1)
+    c = first(t for t in B.enterprises(m3, :theatre) if t.community)
+    @test c.hired_labour == 0
+    @test isapprox(c.ask[:ticket], 0.25 * B.expected_price(m3, :bread); atol = 0.05)               # a quarter of a loaf
+    @test abs(money_identity_gap(m3)) < 1e-6
+    m4 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., entertainment = true, number_of_theatres = 2, firms_plan_on_sales = true, maximum_rounds = 3))
+    run_simulation!(m4)
+    t1, t2 = B.enterprises(m4, :theatre)[1:2]
+    t1.market[:ticket].sold = 30.0; t2.market[:ticket].sold = 0.0
+    B.plan_targets!(m4)
+    @test t2.production_target == 1 && t1.production_target >= 1                                   # the empty theatre stops hiring for empty seats
+end
+
+
+@testset "cash hoarders chosen by money at a month (15 October 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., cash_hoarder_share = 0.25, cash_hoarder_month = 3, maximum_rounds = 4))
+    @test count(B.hoards_cash, B.persons(m)) == 0                                                 # nobody at the founding
+    for _ in 1:2; B.econo_step!(m, 1); end
+    rich = sort(B.persons(m); by = w -> -B.cash(w))[1:4]
+    B.econo_step!(m, 1)
+    @test count(B.hoards_cash, B.persons(m)) == 4
+end
+
+
+@testset "firms plan on sales, greed chosen later, the levy passed on (15 October 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., firms_plan_on_sales = true, maximum_rounds = 3))
+    run_simulation!(m)
+    bs = B.enterprises(m, :bakery); for (k, b) in enumerate(bs); b.market[:bread].sold = k == 1 ? 100.0 : 0.0; end
+    B.plan_targets!(m)
+    @test bs[1].production_target > maximum(b.production_target for b in bs[2:end]) && all(b.production_target >= 1 for b in bs[2:end])
+    g = create_bread_economy(SimulationParameters(; seed = 1, BEH..., greed = true, greed_share = 0.25, greed_month = 2, maximum_rounds = 3))
+    @test count(w -> w.greed == :greedy, B.persons(g)) == 0
+    for _ in 1:2; B.econo_step!(g, 1); end
+    @test count(w -> w.greed == :greedy, B.persons(g)) == 4
+    s = create_bread_economy(SimulationParameters(; seed = 1, BEH..., land_pricing = :market, land_levy = true, levy_pass_through = true, monetary_system = :sumsy, guaranteed_income = 5.0, demurrage_rate = 0.02, demurrage_free_buffer = 30.0, maximum_rounds = 2))
+    owner = first(w for w in B.persons(s) if w.land > 0)
+    @test B.seller_reservation(s, owner, :rent) >= B.land_levy_rate(s) * B.land_valuation_price(s) - 1e-9
 end
 
 @testset "cooperative forms (14 September 2026)" begin

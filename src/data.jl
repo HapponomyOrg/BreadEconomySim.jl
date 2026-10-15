@@ -105,7 +105,7 @@ function record!(model)
         premium_loaves = model.premium_loaves_this_round, premium_revenue = model.premium_revenue_this_round, premium_labour = model.premium_labour_this_round,
         gold_price = model.gold_price, gold_valuation = model.gold_valuation, gold_sold = model.gold_sold_this_round,
         gold_holders = count(w -> w.gold >= 1.0, ps), gold_value_in_meals = sum(gold_value(model, w) for w in ps; init = 0.0) / max(meal_price(model), 1e-9), gold_top10_share = (let g = sort([w.gold for w in ps]; rev = true), t = sum(g; init = 0.0); t > 0 ? sum(g[1:max(1, length(g) ÷ 10)]) / t : NaN end),
-        nonworking = count(w -> w.nonworking != :none, ps), nonworking_hungry = count(w -> w.nonworking == :nonworking_hungry && w.hunger > 0, ps),
+        nonworking = count(w -> w.nonworking != :none, ps), n_cash_hoarders = count(hoards_cash, ps), cash_hoarders = sum(cash(w) for w in ps if hoards_cash(w); init = 0.0), nonworking_hungry = count(w -> w.nonworking == :nonworking_hungry && w.hunger > 0, ps),
         land_supply = model.land_supply_this_round, land_demand = model.land_demand_this_round, land_sold = model.land_sold_this_round, land_levy = model.land_levy_this_round, land_levy_scale = model.land_levy_scale, new_firms = model.new_firms, entries = model.entries, spending_scale = model.spending_scale,
         project_labour = model.project_labour_this_round, project_cost = model.project_cost, project_revenue = model.project_revenue, rides = model.rides_this_round, rides_unaffordable = model.rides_unaffordable_this_round,
         coops_open = count(e -> e.alive && is_producer(e) && e.ownership == :cooperative, model.enterprise_list),

@@ -155,7 +155,14 @@ Base.@kwdef struct SimulationParameters
     # `basic_income`: under debt money, paid by the government to every villager each month, borrowed where taxes fall short
     # (under SuMSy the guaranteed income is the money itself). `land_levy_dividend`: the month's levy paid out per head.
     basic_income::Float64 = 0.0
+    # The income reversed (15 October): from `income_cut_start` the income — SuMSy's guaranteed income or the debt village's basic
+    # income — is cut to `income_cut_share` of its level and stays there, to see what undoing it costs in each money. 0 = never.
+    income_cut_start::Int = 0
+    income_cut_share::Float64 = 0.5
     land_levy_dividend::Bool = false
+    # Gesell's objection to George (15 October): when true, a landowner will not let a plot for less than the levy it costs him
+    # (the levy rate × the plot's value) — the levy passed on to the tenant, as Gesell feared.
+    levy_pass_through::Bool = false
     # Government reserve (20 September 2026). 0 = the rule until now: whatever tax exceeds spending sits on the government's
     # balance (under SuMSy it pays demurrage there, and in the no-greed village it reached a fifth of the money stock).
     # n > 0: the government keeps a reserve of n rounds of expected spending (the trailing mean of its outlays over
@@ -353,8 +360,15 @@ Base.@kwdef struct SimulationParameters
     # Greed (13 September 2026): a property of persons, above their own reserve
     greed::Bool = false
     greed_share::Float64 = 0.25                        # share of persons who are greedy
+    # Cash hoarders (15 October, Stef): `cash_hoarder_share` of villagers (chosen like the greedy, by `greed_selection`) keep every
+    # surplus as money — they buy their bread and nothing else: no tickets, land, shares, gold or premium loaves, and lend nothing.
+    cash_hoarder_share::Float64 = 0.0
+    # 15 Oct: when > 0, the hoarders are chosen at this month among those holding the most money (whoever the economy has made
+    # cash-rich), not at the founding — the richest at the founding are land-rich, cash-poor founders with loans to repay.
+    cash_hoarder_month::Int = 0
     greed_hoarding::Float64 = 0.5                      # every greedy person is both: each act of greed goes to capital with this probability (most profitable of land, shares, cash first), to consumption (a loaf or a ticket, coin flip) otherwise
     greed_selection::Symbol = :rich                    # :rich (the wealthiest at the founding) | :random
+    greed_month::Int = 0                               # 15 Oct (Stef): > 0 — the greedy are chosen at this month, by net wealth (:rich) or at random, once a trend shows
     greedy_max_breads_per_round::Int = 10              # replaces the 3-loaf ceiling for greedy consumers (eaten, not stocked)
     # Spoilage acceptance (13 October, Stef): nobody buys bread they know will rot. A greedy villager holds at most what they can eat
     # before it spoils (breads_per_meal × spoilage_age_in_rounds) plus this share of waste: 0.1 = a tenth more, 3.0 = four times.
@@ -472,6 +486,7 @@ Base.@kwdef struct SimulationParameters
     # they wanted, everyone offers all their capacity until the ovens are staffed; while the village is fed, each villager offers
     # what their needs require (and the minimum offer). No village starves for want of hands.
     labour_for_bread::Bool = false
+    labour_for_bread_memory::Int = 3                  # 15 Oct: the share follows the most employers wanted in the last three months
     labour_for_bread_margin::Float64 = 0.1            # each villager offers at least their share of last month's labour wanted, plus this margin.
     # A price lever as much as a labour one (review 7): at 0 the market is tight every month and the SuMSy village inflates ~4–5 %/yr;
     # at 0.1 it deflates ~9 %/yr. Report prices with the margin stated.
@@ -492,6 +507,17 @@ Base.@kwdef struct SimulationParameters
     # Volunteers in the theatres (4 October, Stef): a theatre hires what its tickets can pay and villagers with unhired labour staff
     # the rest, unpaid — after the paid hiring, never instead of it. The volunteers' hours count as commons hours.
     volunteers_in_theatres::Bool = false
+    # Volunteer work as a structural flag (15 October, Stef): the enterprise kinds whose shortfall of hands volunteers may fill, after
+    # the paid hiring (e.g. (:theatre,), (:bakery,)). `volunteers_in_theatres` = true adds :theatre.
+    volunteer_kinds::Tuple{Vararg{Symbol}} = ()
+    # A volunteer-run community theatre (15 October, Stef): the first `community_theatres` theatres hire nobody; volunteers staff
+    # them, and their seats sell at `community_ticket_in_breads` loaves — competing with the paid theatres.
+    community_theatres::Int = 0
+    community_ticket_in_breads::Float64 = 0.25
+    # Firms plan on their own sales (15 October, Stef — the same logic for bakeries, farms and theatres): the village's planned
+    # demand for a good is divided among its firms in proportion to what each sold last month (each keeping at least one unit),
+    # not equally — a firm with stock left or empty seats stops buying and hiring for it. false = the equal split of before.
+    firms_plan_on_sales::Bool = false                 # on the ladder (RULES); off by default so the reference runs stay as they were
     # Not working, for reasons of their own (5 October, Stef — care, illness, art, or choice; the model knows only that they do
     # not offer paid work): `nonworking_share` of villagers offer labour only to cover a meal — no cushion, no tickets, no minimum
     # offer — and give no volunteer hours; `nonworking_hungry_share` of them would rather go hungry than take paid work: they

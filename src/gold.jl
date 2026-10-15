@@ -32,7 +32,7 @@ function gold_market!(model)
     rng = stream(model, :gold)
     price = model.gold_price
     spare(w) = cash(w) - buffer_target(model, w) - p.gold_buyer_margin_in_meals * meal_price(model)
-    buyers = stable_shuffle(rng, [w for w in persons(model) if spare(w) >= price])
+    buyers = stable_shuffle(rng, [w for w in persons(model) if !hoards_cash(w) && spare(w) >= price])
     sellers = Person[]
     for w in stable_shuffle(rng, [w for w in persons(model) if w.gold >= 1.0])
         forced = w.hunger > 0 || cash(w) < buffer_target(model, w)

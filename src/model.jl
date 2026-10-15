@@ -254,11 +254,22 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
     else
         for w in model.person_list; w.required_yield = parameters.required_yield; end
     end
-    if parameters.greed
+    if parameters.greed && parameters.greed_month <= 0                # 15 Oct: at the founding only if no later month is set
         ps = collect(persons(model)); n = round(Int, parameters.greed_share * length(ps))
         wealth(w) = cash(w) + w.land * parameters.land_price_rent_multiple * prices[:rent] + sum(get(e.shares, w.id, 0.0) for e in agents_by_id(model) if e isa Enterprise; init = 0.0)
         chosen = parameters.greed_selection == :rich ? sort(ps; by = w -> (-wealth(w), w.id))[1:n] : stable_shuffle(stream(model, :greed), ps)[1:n]
         for w in chosen; w.greed = :greedy; end
+    end
+    if parameters.cash_hoarder_share > 0 && parameters.cash_hoarder_month <= 0   # 15 Oct: cash hoarders, chosen like the greedy (at the founding)
+        ps = [w for w in persons(model) if w.greed == :none]; n = round(Int, parameters.cash_hoarder_share * length(ps))
+        wealth1(w) = cash(w) + w.land * parameters.land_price_rent_multiple * prices[:rent]
+        chosen = parameters.greed_selection == :rich ? sort(ps; by = w -> (-wealth1(w), w.id))[1:n] : stable_shuffle(stream(model, :greed), ps)[1:n]
+        for w in chosen; w.greed = :cash_hoarder; end
+    end
+    if parameters.community_theatres > 0                            # 15 Oct: volunteer-run community theatres
+        for t in sort([e for e in agents_by_id(model) if e isa Enterprise && e.kind == :theatre]; by = e -> e.id)[1:min(parameters.community_theatres, end)]
+            t.community = true
+        end
     end
     if parameters.nonworking_share > 0                               # 5 Oct: those not working for reasons of their own, drawn at the founding
         ps = collect(persons(model)); n = round(Int, parameters.nonworking_share * length(ps))
@@ -412,6 +423,29 @@ end
 
 function record_transaction!(model, good::Symbol, price::Float64, units::Float64)
     push!(model.transactions[good], (price, units))
+    return nothing
+end
+
+"""At `greed_month` (15 October): the greedy are chosen once a trend shows — by net wealth (`greed_selection = :rich`) or at random."""
+function choose_greedy!(model)
+    p = parameters(model)
+    (p.greed && p.greed_month > 0 && current_round(model) == p.greed_month) || return nothing
+    ps = [w for w in persons(model) if w.greed == :none]
+    n = round(Int, p.greed_share * length(ps)); n > 0 || return nothing
+    chosen = p.greed_selection == :rich ? sort(ps; by = w -> (-net_wealth(model, w), w.id))[1:n] : stable_shuffle(stream(model, :greed), ps)[1:n]
+    for w in chosen; w.greed = :greedy; end
+    log_event!(model, :greedy_chosen; n = n)
+    return nothing
+end
+
+"""At `cash_hoarder_month` (15 October): the `cash_hoarder_share` of villagers (not otherwise greedy) holding the most money become cash hoarders."""
+function choose_cash_hoarders!(model)
+    p = parameters(model)
+    (p.cash_hoarder_share > 0 && p.cash_hoarder_month > 0 && current_round(model) == p.cash_hoarder_month) || return nothing
+    ps = [w for w in persons(model) if w.greed == :none]
+    n = round(Int, p.cash_hoarder_share * length(ps)); n > 0 || return nothing
+    for w in sort(ps; by = w -> (-cash(w), w.id))[1:n]; w.greed = :cash_hoarder; end
+    log_event!(model, :cash_hoarders_chosen; n = n)
     return nothing
 end
 

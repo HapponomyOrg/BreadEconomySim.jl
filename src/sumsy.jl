@@ -29,11 +29,15 @@ function destroy_money!(model, from::Agent, amount::Float64)
     return amount
 end
 
+"""The share of the income in force (15 October): `income_cut_share` from `income_cut_start` on, else 1."""
+income_cut_factor(model) = (p = parameters(model); (p.income_cut_start > 0 && current_round(model) >= p.income_cut_start) ? p.income_cut_share : 1.0)
+
 """Guaranteed income: created for every living person at the start of the round."""
 function pay_guaranteed_income!(model)
     is_sumsy(model) || return nothing
     p = parameters(model)
     gi = p.guaranteed_income_in_breads > 0 ? round(p.guaranteed_income_in_breads * expected_price(model, :bread), digits = 4) : p.guaranteed_income
+    gi = round(gi * income_cut_factor(model), digits = 4)                       # 15 Oct: the income reversed
     for w in persons(model)
         model.gi_this_round += create_money!(model, w, gi)
     end
@@ -158,7 +162,7 @@ function request_peer_loan!(model, borrower::Agent, amount::Float64, purpose::Sy
         log_event!(model, :credit_refused; actor = borrower.id, agent_kind = kind_of(borrower), amount = amount, purpose = purpose, reason = reason)
         return false
     end
-    lenders = [a for a in alive_agents(model) if a.id != borrower.id && !is_authority(a) && !is_government(a)]
+    lenders = [a for a in alive_agents(model) if a.id != borrower.id && !is_authority(a) && !is_government(a) && !hoards_cash(a)]
     stable_shuffle!(rng, lenders)
     avail = OrderedDict(a.id => lendable(model, a) for a in lenders)
     filter!(a -> avail[a.id] >= 0.01, lenders)

@@ -85,7 +85,7 @@ function land_market!(model)
         f.market[:rent].wanted = max(f.production_target - f.land, 0)
     end
     # purchases: enterprises first, then persons
-    buyers = vcat(farms, stable_shuffle(rng, persons(model)))
+    buyers = vcat(farms, stable_shuffle(rng, [w for w in persons(model) if !hoards_cash(w)]))   # 15 Oct: cash hoarders buy no land
     land_unmet = 0.0; land_sold = 0.0; best_unmet_bid = 0.0
     offering = parameters(model).land_pricing == :market ? [s for s in sellers() if !(s isa Person) || price >= land_reservation(model, s)] : Agent[]
     land_supply = sum(Float64(land_to_let(s)) for s in offering; init = 0.0)
@@ -186,7 +186,7 @@ function land_market!(model)
     if parameters(model).distress_land_sales && parameters(model).land_pricing != :market
         dprice = round(price * parameters(model).distress_land_discount, digits = 4)
         for o in stable_shuffle(rng, [o for o in persons(model) if land_to_let(o) > 0 && (o.hunger > 0 || has_arrears(model, o) || cash(o) < meal_price(model))])
-            buyers = [b for b in alive_agents(model) if b.id != o.id && !is_government(b) &&
+            buyers = [b for b in alive_agents(model) if b.id != o.id && !is_government(b) && !hoards_cash(b) &&
                       (b isa Person ? cash(b) - buffer_target(model, b) : (is_farm(b) ? available_cash(b) : 0.0)) >= dprice]
             isempty(buyers) && continue
             b = first(sort(buyers; by = x -> -(x isa Person ? cash(x) : available_cash(x))))
@@ -233,13 +233,24 @@ end
 
 # ---- labour supply (spec v2 §2): minimise work -------------------------------------
 
+"""Does this villager keep every surplus as money (15 October)?"""
+hoards_cash(a) = a isa Person && a.greed == :cash_hoarder
+
+"""May volunteers fill this enterprise's shortfall of hands (15 October)? Its kind is a volunteer kind, or it is a community theatre."""
+volunteer_staffed(model, e::Enterprise) = (p = parameters(model); e.community || e.kind in p.volunteer_kinds || (p.volunteers_in_theatres && e.kind == :theatre))
+
 """Each villager's share of the labour the village's employers wanted last month, plus `labour_for_bread_margin` (12 October): the
 work the bread needs, spread across everyone before any shortage."""
 function shared_labour(model)
     d = model.data
     isempty(d) && return 0.0
     row = d[end]
-    return (1 + parameters(model).labour_for_bread_margin) * row.labour_wanted / max(row.persons_alive, 1)
+    # 15 Oct: the most employers wanted in the last `labour_for_bread_memory` months — firms wound up at a month's end take their
+    # share of the plan with them, and the firms restarted in their place want it back the next month; a village that sized its
+    # offers on that one low month left the restarted bakeries short (DGI8: ~217 hungry in month 6 in every seed)
+    n = max(parameters(model).labour_for_bread_memory, 1)
+    wanted = maximum(d[i].labour_wanted for i in max(1, length(d) - n + 1):length(d))
+    return (1 + parameters(model).labour_for_bread_margin) * wanted / max(row.persons_alive, 1)
 end
 
 """Was the village short last month — of bread (the food emergency) or of hands (employers wanting labour they could not get,
@@ -261,10 +272,10 @@ now the labour-supply rule ignored it, so a SuMSy villager offered labour as if 
 ten-unit meal when two and the income would do — and the surplus work was exactly what the outsiders lacked."""
 function unearned_income(model)
     p = parameters(model)
-    p.monetary_system == :sumsy || return p.basic_income + levy_dividend_per_head(model)   # 14 Oct: a basic income and levy dividend under debt money
+    p.monetary_system == :sumsy || return p.basic_income * income_cut_factor(model) * model.spending_scale + levy_dividend_per_head(model)   # 14 Oct: a basic income and levy dividend under debt money
     d = model.data
     dividend = isempty(d) ? 0.0 : d[end].surplus_redistributed / max(d[end].persons_alive, 1)
-    return p.guaranteed_income + dividend
+    return p.guaranteed_income * income_cut_factor(model) + dividend
 end
 
 """Units a person offers: just enough to cover a meal and the buffer shortfall net of other expected income."""
@@ -351,7 +362,9 @@ function labour_market!(model, kinds)
     employers = stable_shuffle(rng, reduce(vcat, [enterprises(model, k) for k in kinds]; init = Enterprise[]))
     for e in employers
         e.market[:wage].wanted = labour_need(e)
-        if parameters(model).volunteers_in_theatres && is_theatre(e)      # 4 Oct: a theatre pays for what its tickets can cover; volunteers staff the rest
+        if e.community
+            e.market[:wage].wanted = 0.0                                  # 15 Oct: a community theatre hires nobody
+        elseif volunteer_staffed(model, e)      # 4 Oct: a theatre pays for what its tickets can cover; volunteers staff the rest
             income = isempty(e.turnover_history) ? e.production_target * expected_price(model, :ticket) : last(e.turnover_history)
             e.market[:wage].wanted = min(e.market[:wage].wanted, floor(income / max(going_wage(model), 1e-6)))
         end
@@ -422,7 +435,7 @@ end
 
 function produce_grain!(model)
     for f in enterprises(model, :farm)
-        labour = floor(f.hired_labour + 1e-9)
+        labour = floor(f.hired_labour + f.volunteer_labour + 1e-9)       # 15 Oct: volunteers where allowed
         grain = min(labour, f.land + f.rented_land, f.production_target)
         ps = parameters(model)
         if ps.harvest_shock_start > 0 && ps.harvest_shock_start <= current_round(model) < ps.harvest_shock_start + ps.harvest_shock_length
@@ -447,7 +460,7 @@ end
 
 function bake!(model)
     for b in enterprises(model, :bakery)
-        labour = floor(b.hired_labour + 1e-9)
+        labour = floor(b.hired_labour + b.volunteer_labour + 1e-9)       # 15 Oct: volunteers where allowed
         grain = min(labour, floor(grain_units(b) + 1e-9))
         bread = parameters(model).breads_per_grain * grain
         if bread > 0
@@ -568,7 +581,7 @@ function premium_market!(model)
     p.premium_markup > 1 || return nothing
     rng = stream(model, :bread)
     meal = Float64(p.breads_per_meal)
-    buyers = stable_shuffle(rng, [w for w in persons(model) if bread_units(w) < meal - 1e-9 && cash(w) - buffer_target(model, w) - p.premium_buyer_margin_in_meals * meal_price(model) >= p.premium_markup * expected_price(model, :bread) * meal])
+    buyers = stable_shuffle(rng, [w for w in persons(model) if !hoards_cash(w) && bread_units(w) < meal - 1e-9 && cash(w) - buffer_target(model, w) - p.premium_buyer_margin_in_meals * meal_price(model) >= p.premium_markup * expected_price(model, :bread) * meal])
     wage = going_wage(model)
     for buyer in buyers
         size = meal - bread_units(buyer)

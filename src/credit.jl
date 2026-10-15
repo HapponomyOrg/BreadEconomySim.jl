@@ -50,7 +50,7 @@ function expected_income(model, a::Agent)
     p = parameters(model)
     if a isa Person
         return a.effective_capacity * net_wage(model) + a.land * expected_price(model, :rent) * (1 - p.capital_tax_rate) + a.fee +
-               (p.monetary_system == :sumsy ? p.guaranteed_income : 0.0)
+               (p.monetary_system == :sumsy ? p.guaranteed_income * income_cut_factor(model) : p.basic_income * income_cut_factor(model))
     elseif a.kind == :farm                                       # the operating margin, not the turnover (review 1, §4.2)
         return max(a.production_target * (expected_price(model, :grain) - expected_price(model, :wage) - expected_price(model, :rent)), 0.0)
     elseif a.kind == :bakery
@@ -1693,7 +1693,7 @@ function share_market!(model)
     cash_yield = p.monetary_system == :sumsy ? -p.demurrage_rate : (p.deposit_interest_rate + p.loyalty_bonus_rate) / max(p.deposit_interest_period, 1)
     for e in alive_agents(model)
         (e isa Enterprise && e.ownership == :shareholders) || continue
-        buyers = stable_shuffle(rng, [w for w in persons(model) if cash(w) - buffer_target(model, w) > 0])
+        buyers = stable_shuffle(rng, [w for w in persons(model) if !hoards_cash(w) && cash(w) - buffer_target(model, w) > 0])
         sort!(buyers; by = w -> (w.greed == :greedy ? 0 : 1, -valuation(model, w, e)))
         # --- distress sellers (unchanged): a tenth of the holding at a falling ask ---
         for (hid, units) in collect(e.shares)

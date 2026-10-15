@@ -7,8 +7,8 @@ function seller_reservation(model, seller::Agent, good::Symbol; age::Int = 0)
     if good == :wage          # person: one meal per round at full capacity, net of tax
         need = meal_price(model)
         p.wage_reservation_includes_savings && (need += max(savings_buffer(model) - cash(seller), 0.0) / p.savings_build_rounds)
-        p.wage_reservation_net_of_gi && p.monetary_system == :sumsy && (need = max(need - p.guaranteed_income, 0.0))
-        p.wage_reservation_net_of_gi && p.monetary_system != :sumsy && p.basic_income > 0 && (need = max(need - p.basic_income, 0.0))   # 14 Oct
+        p.wage_reservation_net_of_gi && p.monetary_system == :sumsy && (need = max(need - p.guaranteed_income * income_cut_factor(model), 0.0))
+        p.wage_reservation_net_of_gi && p.monetary_system != :sumsy && p.basic_income > 0 && (need = max(need - p.basic_income * income_cut_factor(model) * model.spending_scale, 0.0))   # 14 Oct
         base = need / p.maximum_capacity                        # gross; the tax wedge is left to redistribution (see handoff)
         p.wage_reservation_net_of_tax && (base /= (1 - effective_wage_tax_rate(model)))
         return base * max(1 - p.hunger_wage_discount * seller.hunger, 0.0)
@@ -24,7 +24,9 @@ function seller_reservation(model, seller::Agent, good::Symbol; age::Int = 0)
         return base * max(1 - p.bread_price_ageing_discount * age, 0.0)
     elseif good == :rent      # landowner: a meal from full letting; bank: the going rent
         seller isa Person || return expected_price(model, :rent) * 0.5
-        return min(meal_price(model) / max(seller.land, 1), expected_price(model, :rent))
+        r = min(meal_price(model) / max(seller.land, 1), expected_price(model, :rent))
+        parameters(model).levy_pass_through && (r = max(r, land_levy_rate(model) * land_valuation_price(model)))   # 15 Oct: the levy passed on
+        return r
     end
 end
 
@@ -174,7 +176,7 @@ end
 """Did the firm leave stock on the shelf last month (14 October)? Unsold at least `unsold_share` of what it offered."""
 function shelf_left(model, e::Enterprise, g::Symbol)
     r = e.market[g]
-    return r.offered > 1e-9 && r.offered - r.sold >= parameters(model).unsold_share * r.offered - 1e-9
+    return r.offered > 1e-9 && r.sold < r.offered - 1e-9 && r.offered - r.sold >= parameters(model).unsold_share * r.offered - 1e-9   # 15 Oct: a sell-out leaves nothing on the shelf, whatever the threshold
 end
 
 """The firm's own good: what it makes and sells."""
@@ -221,6 +223,9 @@ function adapt_prices!(model)
     for a in alive_agents(model)
         for g in sells(a)
             r = a.market[g]
+            if a isa Enterprise && a.community && g == :ticket                # 15 Oct: a community theatre's seat costs a fixed share of a loaf
+                a.ask[g] = round(p.community_ticket_in_breads * expected_price(model, :bread), digits = 4); continue
+            end
             r.offered <= 1e-9 && continue
             if r.sold >= r.offered - 1e-9
                 r.idle_rounds = 0
@@ -327,9 +332,28 @@ function plan_targets!(model)
     allot!(units, group) = for (k, e) in enumerate(group)
         e.production_target = units ÷ length(group) + (k <= units % length(group) ? 1 : 0)
     end
-    isempty(bakeries) || allot!(grain_for_bread, bakeries)
+    # 15 Oct: in proportion to last month's sales of the firm's own good, at least one unit each
+    function by_sales!(units, group, good)
+        sold = [e.market[good].sold for e in group]
+        (p.firms_plan_on_sales && sum(sold) > 0) || return allot!(units, group)
+        raw = units .* sold ./ sum(sold); t = floor.(Int, raw)
+        for k in sortperm(raw .- t; rev = true)[1:(units - sum(t))]; t[k] += 1; end
+        if units >= length(group)
+            for k in eachindex(t)
+                t[k] == 0 || continue
+                j = argmax(t); t[j] > 1 && (t[j] -= 1; t[k] = 1)
+            end
+        end
+        for (e, x) in zip(group, t); e.production_target = x; end
+        return nothing
+    end
+    isempty(bakeries) || by_sales!(grain_for_bread, bakeries, :bread)
+    if p.plan_within_capacity && !isempty(bakeries)                                # each bakery within its ovens
+        cap_each = ceil(Int, bakery_capacity_loaves(model) / p.breads_per_grain)
+        for b in bakeries; b.production_target = min(b.production_target, cap_each); end
+    end
     grain_demand = sum(max(b.production_target - floor(Int, grain_units(b) + 1e-9), 0) for b in bakeries; init = 0)
-    isempty(farms) || allot!(grain_demand, farms)
+    isempty(farms) || by_sales!(grain_demand, farms, :grain)
     for e in vcat(bakeries, farms)
         e.production_target = max(e.production_target, 1)
     end
@@ -338,6 +362,7 @@ function plan_targets!(model)
         tp = expected_price(model, :ticket)
         expected = 0.0
         for w in ps
+            w.greed == :cash_hoarder && continue                          # 15 Oct: cash hoarders buy no tickets
             afford = floor(Int, max(cash(w) - buffer_target(model, w), 0.0) / tp)
             afford >= 1 || continue
             if w.greed == :greedy
@@ -346,7 +371,7 @@ function plan_targets!(model)
             expected += p.entertainment_propensity * (p.plan_for_tickets ? sum(min(afford, k) for k in 1:p.max_tickets_per_person) / p.max_tickets_per_person : 1.0)
         end
         units = max(ceil(Int, expected / p.customers_per_labour_unit), length(theatres))
-        allot!(units, theatres)
+        by_sales!(units, theatres, :ticket)                              # 15 Oct: the same logic as bakeries and farms
         if p.shows_per_round > 0                            # a theatre cannot use more labour than its seats take
             for t in theatres
                 t.production_target = min(t.production_target, Int(theatre_labour_cap(model, t)))

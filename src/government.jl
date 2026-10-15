@@ -286,8 +286,9 @@ function pay_basic_income!(model)
     p = parameters(model)
     (p.basic_income > 0 && p.monetary_system != :sumsy) || return nothing
     gov = government(model); paid = 0.0
+    amount = round(p.basic_income * income_cut_factor(model) * model.spending_scale, digits = 4)   # 15 Oct: cut under a debt ceiling, or reversed
     for w in persons(model)
-        promise!(model, gov, w, p.basic_income, :basic_income, 2, :none); paid += p.basic_income
+        promise!(model, gov, w, amount, :basic_income, 2, :none); paid += amount
     end
     model.government_outlay_this_round += paid; model.basic_income_this_round = paid
     return nothing
@@ -344,7 +345,7 @@ function volunteer!(model)
     p = parameters(model)
     for w in persons(model)
         w.nonworking == :none || continue                                # 5 Oct: no volunteer hours from those not working
-        unhired = max(w.labour_offered - w.labour_sold, 0.0)
+        unhired = max(w.labour_available, 0.0)                     # 15 Oct: what is left after paid work and volunteer staffing (no double count)
         w.volunteer_hours += p.volunteer_share * unhired
     end
     return nothing
@@ -356,13 +357,22 @@ end
 After the labour markets: a theatre short of the hands its seats need takes villagers' unhired labour, unpaid, up to the
 shortfall — the paid hiring first, volunteers for the rest.
 """
-function staff_theatres_with_volunteers!(model)
+staff_theatres_with_volunteers!(model) = staff_with_volunteers!(model, (:theatre,))
+
+"""
+    staff_with_volunteers!(model, kinds)
+
+After the labour market for `kinds` (15 October: any enterprise kind, a structural flag): an enterprise that volunteers may staff
+(`volunteer_staffed`) takes villagers' unhired labour, unpaid, up to its shortfall.
+"""
+function staff_with_volunteers!(model, kinds)
     p = parameters(model)
-    (p.volunteers_in_theatres && p.entertainment) || return nothing
     rng = stream(model, :labour)
-    pool = stable_shuffle(rng, [w for w in persons(model) if w.labour_available > 1e-9])
-    for t in enterprises(model, :theatre)
-        need = max(labour_need(t) - t.hired_labour, 0.0)           # the seats' need beyond the paid hiring
+    targets = [e for e in alive_agents(model) if e isa Enterprise && e.kind in kinds && volunteer_staffed(model, e)]
+    isempty(targets) && return nothing
+    pool = stable_shuffle(rng, [w for w in persons(model) if w.labour_available > 1e-9 && w.nonworking == :none])
+    for t in targets
+        need = max(labour_need(t) - t.hired_labour - t.volunteer_labour, 0.0)           # the need beyond the paid hiring
         for w in pool
             need <= 1e-9 && break
             units = min(w.labour_available, need)

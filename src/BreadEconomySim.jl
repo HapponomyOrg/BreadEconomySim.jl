@@ -35,6 +35,8 @@ include("data.jl")
 # Round structure (spec v2 §7)
 append!(ROUND_BEHAVIORS, Function[
     begin_round!,
+    choose_greedy!,                     # 15 Oct: at greed_month
+    choose_cash_hoarders!,              # 15 Oct: at cash_hoarder_month
     apply_debt_ceiling!,                # the ceiling on public borrowing sets this month's spending scale (26 Sept)
     pay_guaranteed_income!,
     manage_buffer_pool!,
@@ -42,9 +44,11 @@ append!(ROUND_BEHAVIORS, Function[
     land_market!,
     gold_market!,                       # 5 Oct: a pure store of value, traded like land
     m -> labour_market!(m, (:farm, :bank, :theatre)),
+    m -> staff_with_volunteers!(m, (:farm,)),   # 15 Oct: volunteers where allowed
     produce_grain!,
     grain_market!,
     m -> labour_market!(m, (:bakery,)),
+    m -> staff_with_volunteers!(m, (:bakery,)),
     bake!,
     charge_account_fees!,
     government_hiring!,

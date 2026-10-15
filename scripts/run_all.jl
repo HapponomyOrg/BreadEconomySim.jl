@@ -72,7 +72,7 @@ const LADDERS = [(parse(Int, split(x, ":")[1]), Symbol(split(x, ":")[2])) for x 
 const RUNGS   = filter(!isempty, split(get(ENV, "RUNGS", ""), ","))
 
 ladder_name(N, settlement) = settlement == :invoicing ? "ladder2_$(N)" : "ladder2_$(N)_$(settlement)"
-const MODEL_VERSION = "2026-10-15"   # part of the key: runs made with an earlier model are never taken for current ones
+const MODEL_VERSION = "2026-10-16"   # part of the key: runs made with an earlier model are never taken for current ones
 parts_dir(N, settlement) = joinpath(ROOT, "results", "parts", "$(ladder_name(N, settlement))_$(ROUNDS)months_$(MODEL_VERSION)")   # the run length is part of the key: a short test run is never taken for a real one
 safe(s) = replace(s, r"[^A-Za-z0-9]+" => "_")
 part_file(job) = joinpath(parts_dir(job.N, job.settlement), "$(safe(job.rung))__$(job.system)__$(job.seed).csv")
@@ -246,7 +246,8 @@ function summarise(rounds::DataFrame, N::Int)
     debt_course = combine(groupby(sort(rounds, :round), [:rung, :system, :seed])) do g
         peak, k = findmax(g.government_debt)
         after = findfirst(<=(1e-6), g.government_debt[k:end])
-        (; debt_peak = peak, debt_peak_month = g.round[k], debt_repaid_month = (peak <= 1e-6 || after === nothing) ? missing : g.round[k + after - 1])
+        (; debt_peak = peak, debt_peak_month = g.round[k], debt_repaid_month = (peak <= 1e-6 || after === nothing) ? missing : g.round[k + after - 1],
+           owes_nothing = g.government_debt[end] <= 1e-6)          # 15 Oct: a run that never borrowed owes nothing too
     end
     runs = leftjoin(runs, debt_course; on = [:rung, :system, :seed])
     runs.debt_pct_gdp = [(ismissing(g) || g <= 0) ? missing : 100 * d / (12 * g) for (d, g) in zip(runs.government_debt, runs.gdp)]   # a collapsed run has no last-year rows
@@ -260,7 +261,8 @@ function summarise(rounds::DataFrame, N::Int)
         :unemployed => m => :unemployed, :tickets => m => :tickets, :bread_price => m => :bread_price,
         :government_debt => m => :public_debt, :debt_pct_gdp => m => :public_debt_pct_gdp, :shortfall => m => :shortfall_per_month,
         :debt_peak => m => :public_debt_peak, :debt_peak_month => m => :public_debt_peak_month,
-        :debt_repaid_month => (x -> count(!ismissing, x)) => :runs_debt_repaid, :debt_repaid_month => (x -> all(ismissing, x) ? missing : mean(skipmissing(x))) => :public_debt_repaid_month,
+        :owes_nothing => count => :runs_debt_repaid,   # 15 Oct: runs that owe nothing at the end (a run that never borrowed counted as unpaid before)
+         :debt_repaid_month => (x -> all(ismissing, x) ? missing : mean(skipmissing(x))) => :public_debt_repaid_month,
         :gini_cash_persons => m => :gini_cash,
         :gini_net_wealth_persons => (x -> (v = collect(skipmissing(x)); (isempty(v) || any(g -> !(0 <= g <= 1), v)) ? missing : mean(v))) => :gini_wealth,   # not defined when net wealth goes negative (review 5)
         :wealth_gap_meals => m => :wealth_gap_meals, :wealth_bottom10_meals => m => :wealth_bottom10_meals,
