@@ -9,3 +9,6 @@ Designs and analyses that are written but not built. Each is self-contained; the
 Implemented designs are in `../designs_implemented/` (settlement and taxes, 21 September; market entry, 25 September).
 
 Not yet written down: a monetary policy for SuMSy (a rule adjusting the parking fee toward a target such as what the guaranteed income buys in bread — 25 September, Stef), and the tracing of the `clearing_all` SuMSy indebtedness at steps 4–7 (review 6 §2.4).
+
+
+*16 October 2026:* work as purpose — built (see its status note); modularity — addendum of 16 October; transition — waits for the talk; new: Gesell's own land scheme (public purchase with bonds, lease to the highest bidder, the rent paid out) as a possible village, not designed yet.

@@ -4,7 +4,8 @@
 #     julia --project=. scripts/run_all.jl
 #
 # What it does, in order:
-#   1. installs and precompiles the packages (Pkg.instantiate), and runs the test suite unless SKIP_TESTS=1;
+#   1. installs and precompiles the packages (Pkg.instantiate), and runs the test suite unless SKIP_TESTS=1 or it already
+#      passed for this MODEL_VERSION and this code (results/tests_passed_<version>.txt holds the code's fingerprint);
 #   2. runs the ladders — by default the 512-villager ladder under invoicing, the main ladder (26 September: the old-settlement
 #      and 128-villager comparisons are optional, see LADDERS) — every rung, both
 #      villages, SEEDS runs each, ROUNDS months each, in parallel over JOBS worker processes;
@@ -49,7 +50,22 @@ get(ENV, "UPDATE_ECONOSIM", "0") == "1" && (println("Updating EconoSim.jl to the
 println("Installing and precompiling packages (first time only takes a while)…"); flush(stdout)
 Pkg.instantiate(); Pkg.precompile()
 
-if get(ENV, "SKIP_TESTS", "0") != "1"
+const MODEL_VERSION = "2026-10-16.1"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
+
+# 16 Oct (Stef): a version's test suite is run once. When it passes, a marker is written for this version together with a
+# fingerprint of the code it tested (src/, test/, scripts/ladder_definition.jl); a resumed or repeated run of the same version
+# and the same code skips the suite. Any change to that code — even without a version bump — runs it again. The marker is
+# per machine (.gitignore keeps it out of the repository): a clone must run its own suite.
+const TEST_FILES = sort(vcat([joinpath(ROOT, "src", f) for f in readdir(joinpath(ROOT, "src")) if endswith(f, ".jl")],
+                             [joinpath(ROOT, "test", f) for f in readdir(joinpath(ROOT, "test")) if endswith(f, ".jl")],
+                             [joinpath(ROOT, "scripts", "ladder_definition.jl")]))
+const CODE_FINGERPRINT = string(foldl((h, f) -> hash(read(f), hash(basename(f), h)), TEST_FILES; init = hash(string(VERSION))); base = 16)   # the Julia version too
+const TEST_MARKER = joinpath(ROOT, "results", "tests_passed_$(MODEL_VERSION).txt")
+tests_already_passed() = isfile(TEST_MARKER) && strip(read(TEST_MARKER, String)) == CODE_FINGERPRINT
+
+if get(ENV, "SKIP_TESTS", "0") != "1" && tests_already_passed()
+    println("The test suite already passed for version $(MODEL_VERSION) and this code — not run again."); flush(stdout)
+elseif get(ENV, "SKIP_TESTS", "0") != "1"
     println("Running the test suite…"); flush(stdout)
     # the test output is shown in full, so that a failure says which test and why
     proc = run(ignorestatus(`$(Base.julia_cmd()) --project=$ROOT $(joinpath(ROOT, "test", "runtests.jl"))`))
@@ -62,6 +78,7 @@ if get(ENV, "SKIP_TESTS", "0") != "1"
         error("test suite failed (details above)")      # an error, not exit(): exit would also close a REPL the script runs in
     end
     println("Tests passed.")
+    mkpath(dirname(TEST_MARKER)); write(TEST_MARKER, CODE_FINGERPRINT)
 end
 
 # ---- settings -----------------------------------------------------------------------------------------------------------
@@ -72,7 +89,6 @@ const LADDERS = [(parse(Int, split(x, ":")[1]), Symbol(split(x, ":")[2])) for x 
 const RUNGS   = filter(!isempty, split(get(ENV, "RUNGS", ""), ","))
 
 ladder_name(N, settlement) = settlement == :invoicing ? "ladder2_$(N)" : "ladder2_$(N)_$(settlement)"
-const MODEL_VERSION = "2026-10-16.1"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
 parts_dir(N, settlement) = joinpath(ROOT, "results", "parts", "$(ladder_name(N, settlement))_$(ROUNDS)months_$(MODEL_VERSION)")   # the run length is part of the key: a short test run is never taken for a real one
 safe(s) = replace(s, r"[^A-Za-z0-9]+" => "_")
 part_file(job) = joinpath(parts_dir(job.N, job.settlement), "$(safe(job.rung))__$(job.system)__$(job.seed).csv")
@@ -263,8 +279,9 @@ for (N, settlement) in LADDERS
     # 14 Oct: only the files of steps on the current ladder — a renamed or removed step leaves orphans in the folder (Y8-loyal,
     # a duplicated S3-W block), which must not reach the summary
     current = Set(safe(r[1]) for r in ladder(N, ROUNDS, settlement).rungs)
-    files = filter(f -> endswith(f, ".csv") && first(split(basename(f), "__")) in current, readdir(dir; join = true))
-    orphans = count(f -> endswith(f, ".csv") && !(first(split(basename(f), "__")) in current), readdir(dir; join = true))
+    stepof(f) = first(rsplit(basename(f), "__"; limit = 3))        # 16 Oct: from the right — a name ending in ')' or '%' leaves '___' in the file name
+    files = filter(f -> endswith(f, ".csv") && stepof(f) in current, readdir(dir; join = true))
+    orphans = count(f -> endswith(f, ".csv") && !(stepof(f) in current), readdir(dir; join = true))
     orphans > 0 && println("$(orphans) part files of steps no longer on the ladder are left out of the summary.")
     isempty(files) && continue
     rounds = reduce((a, b) -> vcat(a, b; cols = :union), [CSV.read(f, DataFrame) for f in files])

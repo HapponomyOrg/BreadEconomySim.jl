@@ -38,3 +38,7 @@ With the land levy paid out to everyone — the Gesell rule — the dividend is 
 
 ## 5. Recommendation
 Do A first: it is cheap, it changes the labour-supply rule in the direction of realism, and its sweep tells us how much of today's unemployment is satiation. Do B as candidate 1 (the measure) in the same step, so that the idle split into volunteers and idle. Leave candidates 2 and 3 until the split is known; they are variants of existing steps, not new ones. Run both on step 8 and V8 in both villages, with the labour-market sweep, for 11 October if built in time; otherwise for the run after.
+
+
+## Status (16 October 2026)
+Built: option A (`minimum_labour_offer`, on the ladder) and option B's measure (`volunteer_share`, volunteer hours; counted once since 15 October). Volunteer work is a structural flag on any enterprise kind (`volunteer_kinds`; theatres since 4 October, C8), and the community theatre (candidate 2) is an option (`community_theatres`, CT8). Volunteers on the public project (candidate 3) were dropped (Stef, 15 October). Since 12 October the labour supply also has the village's share (`labour_for_bread`), which does most of what option A was meant to do.

@@ -337,6 +337,7 @@ function plan_targets!(model)
         p.firms_plan_on_sales || return allot!(units, group)
         n = length(group)
         for e in group; e.plan_share >= 0 || (e.plan_share = 1 / n); end         # new or restarted firms start at an equal share
+        sum(e.plan_share for e in group) > 1e-12 || for e in group; e.plan_share = 1 / n; end   # 16 Oct: the firms that held the shares are gone
         sold = [e.market[good].sold for e in group]
         offered = sum(e.market[good].offered for e in group; init = 0.0)
         # sales below half of what was offered are no signal (month 1: everyone's cupboard holds a meal): the shares stay as they are
