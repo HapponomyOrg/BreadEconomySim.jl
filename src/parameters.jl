@@ -518,6 +518,11 @@ Base.@kwdef struct SimulationParameters
     # demand for a good is divided among its firms in proportion to what each sold last month (each keeping at least one unit),
     # not equally — a firm with stock left or empty seats stops buying and hiring for it. false = the equal split of before.
     firms_plan_on_sales::Bool = false                 # on the ladder (RULES); off by default so the reference runs stay as they were
+    # 16 Oct (Stef): a large change in a firm's sales share is followed mildly at first and fully only when it holds — a third of the
+    # way in its first month, two thirds in its second, all of it from the third (`plan_adjustment_months`); changes within
+    # `plan_small_change` of the current share are followed at once.
+    plan_adjustment_months::Int = 3
+    plan_small_change::Float64 = 0.05
     # Not working, for reasons of their own (5 October, Stef — care, illness, art, or choice; the model knows only that they do
     # not offer paid work): `nonworking_share` of villagers offer labour only to cover a meal — no cushion, no tickets, no minimum
     # offer — and give no volunteer hours; `nonworking_hungry_share` of them would rather go hungry than take paid work: they

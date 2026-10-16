@@ -72,7 +72,7 @@ const LADDERS = [(parse(Int, split(x, ":")[1]), Symbol(split(x, ":")[2])) for x 
 const RUNGS   = filter(!isempty, split(get(ENV, "RUNGS", ""), ","))
 
 ladder_name(N, settlement) = settlement == :invoicing ? "ladder2_$(N)" : "ladder2_$(N)_$(settlement)"
-const MODEL_VERSION = "2026-10-16"   # part of the key: runs made with an earlier model are never taken for current ones
+const MODEL_VERSION = "2026-10-16.1"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
 parts_dir(N, settlement) = joinpath(ROOT, "results", "parts", "$(ladder_name(N, settlement))_$(ROUNDS)months_$(MODEL_VERSION)")   # the run length is part of the key: a short test run is never taken for a real one
 safe(s) = replace(s, r"[^A-Za-z0-9]+" => "_")
 part_file(job) = joinpath(parts_dir(job.N, job.settlement), "$(safe(job.rung))__$(job.system)__$(job.seed).csv")
@@ -115,31 +115,13 @@ include(joinpath(ROOT, "scripts", "ladder_definition.jl"))
 jobs = NamedTuple[]
 for (N, settlement) in LADDERS
     def = ladder_definition(N, ROUNDS, settlement)
-    for (name, _, _) in def.rungs
+    for (name, kd, ks) in def.rungs
         (isempty(RUNGS) || any(p -> startswith(name, p), RUNGS)) || continue
         for system in ("debt", "sumsy"), seed in 1:SEEDS
-            (startswith(name, "X1") && system == "debt") && continue       # the 2×2 rungs run one side only
-            (startswith(name, "X2") && system == "sumsy") && continue
-            (startswith(name, "E") && system == "debt") && continue        # full-money-stock twins: SuMSy only
-            (startswith(name, "L") && system == "debt") && continue        # land-levy variants: SuMSy only
-            (startswith(name, "GP") && system == "debt") && continue       # parking-tax policy sweep: SuMSy only
-            (startswith(name, "NLD") && system == "debt") && continue      # levy with entry: SuMSy only
-            (startswith(name, "F") && system == "debt") && continue        # parking-fee policy: SuMSy only
-            (startswith(name, "D") && system == "sumsy") && continue       # public debt ceiling: debt side only
-            (startswith(name, "I") && system == "sumsy") && continue       # benefit fixed in money: debt side only
-            (startswith(name, "W") && system == "sumsy") && continue       # willingness to overpay: debt side only
-            (startswith(name, "A") && system == "sumsy") && continue       # austerity: debt side only
-            (startswith(name, "Z") && system == "debt") && continue        # SuMSy without the levy: SuMSy only
-            (startswith(name, "RZ") && system == "debt") && continue       # gold without the levy: SuMSy only
-            (startswith(name, "GP") && system == "debt") && continue       # parking-tax policy sweep: SuMSy only
-            (startswith(name, "NLD") && system == "debt") && continue      # levy with entry: SuMSy only
-            (startswith(name, "F") && system == "debt") && continue        # parking-fee policy: SuMSy only
-            (startswith(name, "D") && system == "sumsy") && continue       # public debt ceiling: debt side only
-            (startswith(name, "I") && system == "sumsy") && continue       # benefit fixed in money: debt side only
-            (startswith(name, "W") && system == "sumsy") && continue       # willingness to overpay: debt side only
-            (startswith(name, "A") && system == "sumsy") && continue       # austerity: debt side only
-            (startswith(name, "Z") && system == "debt") && continue        # SuMSy without the levy: SuMSy only
-            (startswith(name, "RZ") && system == "debt") && continue       # gold without the levy: SuMSy only
+            # 16 Oct: one rule for one-sided cells — a side with no settings of its own is not run (the main steps excepted, whose
+            # bare village is a setting); the name-prefix rules it replaces skipped EU8's debt side because EU8 begins with "E"
+            kw = system == "debt" ? kd : ks
+            (isempty(kw) && !occursin(r"^[0-9]", name)) && continue
             job = (; N, settlement, rounds = ROUNDS, rung = name, system, seed)
             push!(jobs, (; job..., file = part_file(job), index = length(jobs) + 1, total = 0))
         end

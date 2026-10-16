@@ -1656,9 +1656,12 @@ end
     m4 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., entertainment = true, number_of_theatres = 2, firms_plan_on_sales = true, maximum_rounds = 3))
     run_simulation!(m4)
     t1, t2 = B.enterprises(m4, :theatre)[1:2]
-    t1.market[:ticket].sold = 30.0; t2.market[:ticket].sold = 0.0
-    B.plan_targets!(m4)
-    @test t2.production_target == 1 && t1.production_target >= 1                                   # the empty theatre stops hiring for empty seats
+    targets = Int[]
+    for _ in 1:3
+        t1.market[:ticket].offered = 30.0; t1.market[:ticket].sold = 30.0; t2.market[:ticket].offered = 0.0; t2.market[:ticket].sold = 0.0
+        B.plan_targets!(m4); push!(targets, t2.production_target)
+    end
+    @test targets[end] == 1 && issorted(targets; rev = true) && t1.production_target >= 1         # the empty theatre stops hiring for empty seats, over three months
 end
 
 
@@ -1685,6 +1688,21 @@ end
     s = create_bread_economy(SimulationParameters(; seed = 1, BEH..., land_pricing = :market, land_levy = true, levy_pass_through = true, monetary_system = :sumsy, guaranteed_income = 5.0, demurrage_rate = 0.02, demurrage_free_buffer = 30.0, maximum_rounds = 2))
     owner = first(w for w in B.persons(s) if w.land > 0)
     @test B.seller_reservation(s, owner, :rent) >= B.land_levy_rate(s) * B.land_valuation_price(s) - 1e-9
+end
+
+
+@testset "a sales shift followed gradually (16 October 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., firms_plan_on_sales = true, maximum_rounds = 3))
+    run_simulation!(m)
+    bs = B.enterprises(m, :bakery); n = length(bs)
+    for b in bs; b.plan_share = 1 / n; b.share_trend = 0; end
+    shift!() = for (k, b) in enumerate(bs); b.market[:bread].offered = k == 1 ? 100.0 : 0.0; b.market[:bread].sold = k == 1 ? 100.0 : 0.0; end   # everything sold by bakery 1
+    shift!(); B.plan_targets!(m); s1 = bs[1].plan_share
+    @test s1 ≈ 1 / n + (1 - 1 / n) / 3 atol = 1e-9                                         # a third of the way
+    shift!(); B.plan_targets!(m); s2 = bs[1].plan_share / sum(b.plan_share for b in bs)
+    @test s2 > s1 && s2 < 1                                                                 # further, not yet all the way
+    shift!(); B.plan_targets!(m); s3 = bs[1].plan_share / sum(b.plan_share for b in bs)
+    @test s3 ≈ 1 atol = 1e-9                                                                # the trend held: all the way
 end
 
 @testset "cooperative forms (14 September 2026)" begin

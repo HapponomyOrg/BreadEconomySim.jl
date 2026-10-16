@@ -50,3 +50,6 @@ Variants (Oct 2): P2/P8/P10 fixed prices · U8/UP8 full employment by public job
 
 ## 7. Working with Stef
 Peer-reviewer stance: examine every claim, disagree when the ground is shaky, no flattery; avoid "it's not X but Y" and "that's no coincidence". Design decisions are his — propose with a default, don't implement design changes unasked. Tell him plainly when something was wrong, including your own earlier statements.
+
+
+**Version numbers** (16 October 2026): `MODEL_VERSION` in `scripts/run_all.jl` is the date the version was made followed by `.0`, `.1`, … for each version made that day. Bump it whenever the model or the ladder changes, so a run never mixes versions.

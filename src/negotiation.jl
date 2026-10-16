@@ -334,9 +334,28 @@ function plan_targets!(model)
     end
     # 15 Oct: in proportion to last month's sales of the firm's own good, at least one unit each
     function by_sales!(units, group, good)
+        p.firms_plan_on_sales || return allot!(units, group)
+        n = length(group)
+        for e in group; e.plan_share >= 0 || (e.plan_share = 1 / n); end         # new or restarted firms start at an equal share
         sold = [e.market[good].sold for e in group]
-        (p.firms_plan_on_sales && sum(sold) > 0) || return allot!(units, group)
-        raw = units .* sold ./ sum(sold); t = floor.(Int, raw)
+        offered = sum(e.market[good].offered for e in group; init = 0.0)
+        # sales below half of what was offered are no signal (month 1: everyone's cupboard holds a meal): the shares stay as they are
+        if sum(sold) > 0 && sum(sold) >= 0.5 * offered
+            current = [e.plan_share for e in group] ./ sum(e.plan_share for e in group)
+            target = sold ./ sum(sold)
+            for (k, e) in enumerate(group)
+                gap = target[k] - current[k]
+                if abs(gap) <= p.plan_small_change * max(current[k], 1 / n)    # a small change is followed at once
+                    e.share_trend = 0; e.plan_share = target[k]
+                else                                                          # a large one a third, two thirds, then all the way
+                    dir = gap > 0 ? 1 : -1
+                    e.share_trend = sign(e.share_trend) == dir ? e.share_trend + dir : dir
+                    e.plan_share = current[k] + min(abs(e.share_trend), p.plan_adjustment_months) / p.plan_adjustment_months * gap
+                end
+            end
+        end
+        shares = [e.plan_share for e in group] ./ sum(e.plan_share for e in group)
+        raw = units .* shares; t = floor.(Int, raw)
         for k in sortperm(raw .- t; rev = true)[1:(units - sum(t))]; t[k] += 1; end
         if units >= length(group)
             for k in eachindex(t)
@@ -348,7 +367,7 @@ function plan_targets!(model)
         return nothing
     end
     isempty(bakeries) || by_sales!(grain_for_bread, bakeries, :bread)
-    if p.plan_within_capacity && !isempty(bakeries)                                # each bakery within its ovens
+    if p.plan_within_capacity && !isempty(bakeries)                                # each bakery within its ovens (16 Oct: what is clipped is lost — no planner hands it on)
         cap_each = ceil(Int, bakery_capacity_loaves(model) / p.breads_per_grain)
         for b in bakeries; b.production_target = min(b.production_target, cap_each); end
     end
