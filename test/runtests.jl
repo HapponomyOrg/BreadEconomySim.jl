@@ -1687,7 +1687,8 @@ end
     @test count(w -> w.greed == :greedy, B.persons(g)) == 4
     s = create_bread_economy(SimulationParameters(; seed = 1, BEH..., land_pricing = :market, land_levy = true, levy_pass_through = true, monetary_system = :sumsy, guaranteed_income = 5.0, demurrage_rate = 0.02, demurrage_free_buffer = 30.0, maximum_rounds = 2))
     owner = first(w for w in B.persons(s) if w.land > 0)
-    @test B.seller_reservation(s, owner, :rent) >= B.land_levy_rate(s) * B.land_valuation_price(s) - 1e-9
+    B.econo_step!(s, 1)
+    @test owner.ask[:rent] >= B.expected_price(s, :rent) + B.land_levy_rate(s) * B.land_valuation_price(s) - 1e-6   # the levy asked on top
 end
 
 
@@ -1703,6 +1704,36 @@ end
     @test s2 > s1 && s2 < 1                                                                 # further, not yet all the way
     shift!(); B.plan_targets!(m); s3 = bs[1].plan_share / sum(b.plan_share for b in bs)
     @test s3 ≈ 1 atol = 1e-9                                                                # the trend held: all the way
+end
+
+
+@testset "one labour market for bakeries and theatres (16–17 October 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., entertainment = true, number_of_theatres = 2, joint_labour_market = true, maximum_rounds = 3))
+    run_simulation!(m); d = round_data(m)
+    @test all(d.bread_baked[2:end] .> 0)                                                        # the bakeries are staffed and bake
+    @test sum(t.hired_labour for t in B.enterprises(m, :theatre)) > 0                               # and the theatres hire in the same market
+    @test abs(money_identity_gap(m)) < 1e-6
+end
+
+
+@testset "contracts and experience (17 October 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., employer_loyalty = true, contracts = true, contract_share = 1.0, contract_tenure_months = 2, maximum_rounds = 6))
+    run_simulation!(m); d = round_data(m)
+    @test d.contracted[end] > 0                                                                 # temps with the tenure got contracts
+    w = first(x for x in B.persons(m) if x.contract > 0); e = m[w.contract]
+    @test get(w.units_for, e.id, 0.0) >= w.contract_units - 1e-9 || !e.alive                       # and are hired for the contracted units
+    @test abs(money_identity_gap(m)) < 1e-6
+    m2 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., experience = true, experience_months = (2, 4), maximum_rounds = 3))
+    B.econo_step!(m2, 1)
+    x = first(B.persons(m2)); b = first(B.enterprises(m2, :bakery))
+    for _ in 1:3                                                                                # three months running at the bakery
+        empty!(x.worked_for); push!(x.worked_for, b.id); x.units_for[b.id] = 2.0
+        B.begin_round!(m2)
+    end
+    @test x.exp_kind == :bakery && x.exp_months == 3 && B.experience_level(m2, x) == 2
+    @test B.experience_factor(m2, x, :bakery) ≈ 1.1 && B.experience_factor(m2, x, :farm) == 1.0  # worth more in its own kind only
+    for _ in 1:3; empty!(x.worked_for); B.begin_round!(m2); end                                 # three months away: a level lost
+    @test B.experience_level(m2, x) == 1
 end
 
 @testset "cooperative forms (14 September 2026)" begin

@@ -50,7 +50,7 @@ get(ENV, "UPDATE_ECONOSIM", "0") == "1" && (println("Updating EconoSim.jl to the
 println("Installing and precompiling packages (first time only takes a while)…"); flush(stdout)
 Pkg.instantiate(); Pkg.precompile()
 
-const MODEL_VERSION = "2026-10-16.1"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
+const MODEL_VERSION = "2026-10-17.0"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
 
 # 16 Oct (Stef): a version's test suite is run once. When it passes, a marker is written for this version together with a
 # fingerprint of the code it tested (src/, test/, scripts/ladder_definition.jl); a resumed or repeated run of the same version
@@ -155,7 +155,7 @@ let seen = Dict{String, Any}(), copied = 0
         if haskey(seen, key)
             src = seen[key]
             if !isfile(j.file) && isfile(src)
-                cp(src, j.file); copied += 1
+                df = CSV.read(src, DataFrame); df.rung .= j.rung; CSV.write(j.file, df); copied += 1   # 16 Oct: relabelled as the copy
             end
         else
             seen[key] = j.file
@@ -278,13 +278,22 @@ for (N, settlement) in LADDERS
     isdir(dir) || continue
     # 14 Oct: only the files of steps on the current ladder — a renamed or removed step leaves orphans in the folder (Y8-loyal,
     # a duplicated S3-W block), which must not reach the summary
-    current = Set(safe(r[1]) for r in ladder(N, ROUNDS, settlement).rungs)
+    name_of = Dict(safe(r[1]) => r[1] for r in ladder(N, ROUNDS, settlement).rungs)
+    current = Set(keys(name_of))
     stepof(f) = first(rsplit(basename(f), "__"; limit = 3))        # 16 Oct: from the right — a name ending in ')' or '%' leaves '___' in the file name
     files = filter(f -> endswith(f, ".csv") && stepof(f) in current, readdir(dir; join = true))
     orphans = count(f -> endswith(f, ".csv") && !(stepof(f) in current), readdir(dir; join = true))
     orphans > 0 && println("$(orphans) part files of steps no longer on the ladder are left out of the summary.")
     isempty(files) && continue
-    rounds = reduce((a, b) -> vcat(a, b; cols = :union), [CSV.read(f, DataFrame) for f in files])
+    # 16 Oct: the step, side and seed come from the file name — a mirror copy carries its source's labels inside (GP10-40's SuMSy
+    # side was summarised as UP8, and T10's copies of T8 counted twice under T8)
+    function labelled(f)
+        df = CSV.read(f, DataFrame)
+        step, system, seed = rsplit(replace(basename(f), ".csv" => ""), "__"; limit = 3)
+        df.rung .= name_of[step]; df.system .= String(system); df.seed .= parse(Int, seed)
+        return df
+    end
+    rounds = reduce((a, b) -> vcat(a, b; cols = :union), [labelled(f) for f in files])
     name = ladder_name(N, settlement)
     write_split(joinpath(ROOT, "results", "$(name)_rounds.csv"), rounds)   # under GitHub's 100 MB limit (25 Sept)
     CSV.write(joinpath(ROOT, "results", "$(name)_summary.csv"), Base.invokelatest(summarise, rounds, N))   # invokelatest: the function is defined in this script (Julia 1.12 world age)

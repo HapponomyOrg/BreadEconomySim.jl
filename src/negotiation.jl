@@ -24,9 +24,7 @@ function seller_reservation(model, seller::Agent, good::Symbol; age::Int = 0)
         return base * max(1 - p.bread_price_ageing_discount * age, 0.0)
     elseif good == :rent      # landowner: a meal from full letting; bank: the going rent
         seller isa Person || return expected_price(model, :rent) * 0.5
-        r = min(meal_price(model) / max(seller.land, 1), expected_price(model, :rent))
-        parameters(model).levy_pass_through && (r = max(r, land_levy_rate(model) * land_valuation_price(model)))   # 15 Oct: the levy passed on
-        return r
+        return min(meal_price(model) / max(seller.land, 1), expected_price(model, :rent))
     end
 end
 
@@ -223,6 +221,9 @@ function adapt_prices!(model)
     for a in alive_agents(model)
         for g in sells(a)
             r = a.market[g]
+            if p.levy_pass_through && a isa Person && g == :rent && a.land > 0  # 16 Oct: Gesell's objection — the owner asks the levy on top of the rent; the market decides whether it sticks
+                a.ask[g] = max(a.ask[g], expected_price(model, :rent) + land_levy_rate(model) * land_valuation_price(model))
+            end
             if a isa Enterprise && a.community && g == :ticket                # 15 Oct: a community theatre's seat costs a fixed share of a loaf
                 a.ask[g] = round(p.community_ticket_in_breads * expected_price(model, :bread), digits = 4); continue
             end

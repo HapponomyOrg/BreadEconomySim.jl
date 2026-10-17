@@ -426,6 +426,23 @@ function record_transaction!(model, good::Symbol, price::Float64, units::Float64
     return nothing
 end
 
+"""A worker's experience level in a kind of enterprise (17 October): 1, 2 or 3."""
+function experience_level(model, w::Person, kind::Symbol = w.exp_kind)
+    p = parameters(model)
+    (p.experience && kind == w.exp_kind) || return 1
+    return w.exp_months >= p.experience_months[2] ? 3 : w.exp_months >= p.experience_months[1] ? 2 : 1
+end
+"""What a unit of this worker's labour is worth to an employer of this kind (17 October): 1 plus the experience bonus."""
+function experience_factor(model, w::Person, kind::Symbol)
+    lvl = experience_level(model, w, kind)
+    return lvl == 1 ? 1.0 : 1.0 + parameters(model).experience_bonus[lvl - 1]
+end
+"""An employer's effective labour this month (17 October): the units hired, each worth its worker's experience factor."""
+function effective_labour(model, e::Enterprise)
+    parameters(model).experience || return e.hired_labour
+    return sum(c.units * experience_factor(model, model[c.worker_id], e.kind) for c in model.wage_contracts if c.employer_id == e.id; init = 0.0)
+end
+
 """At `greed_month` (15 October): the greedy are chosen once a trend shows — by net wealth (`greed_selection = :rich`) or at random."""
 function choose_greedy!(model)
     p = parameters(model)
@@ -494,6 +511,21 @@ function begin_round!(model)
             w.tenure[eid] = get(w.tenure, eid, 0) + 1
         end
         w.units_last = copy(w.units_for); empty!(w.units_for)
+        if parameters(model).experience                                  # 17 Oct: experience by kind of enterprise
+            kinds = [model[eid].kind for eid in w.worked_for if model[eid] isa Enterprise]
+            if isempty(kinds)
+                w.exp_idle += 1
+                if w.exp_idle >= parameters(model).experience_decay_months && w.exp_months > 0
+                    w.exp_idle = 0
+                    lvl = experience_level(model, w)
+                    w.exp_months = lvl >= 3 ? parameters(model).experience_months[1] : 0   # a level lost every decay period
+                end
+            else
+                k = kinds[argmax([get(w.units_last, eid, 0.0) for eid in w.worked_for if model[eid] isa Enterprise])]
+                w.exp_idle = 0
+                k == w.exp_kind ? (w.exp_months += 1) : (w.exp_kind = k; w.exp_months = 1)
+            end
+        end
     end
     for e in model.enterprise_list; e.volunteer_labour = 0.0; end
     for w in model.person_list; w.gross_wage_this_round = 0.0; w.dividend_income = 0.0; empty!(w.worked_for); end

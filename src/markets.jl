@@ -243,13 +243,17 @@ volunteer_staffed(model, e::Enterprise) = (p = parameters(model); e.community ||
 work the bread needs, spread across everyone before any shortage."""
 function shared_labour(model)
     d = model.data
-    isempty(d) && return 0.0
+    planned = sum(labour_need(e) for e in alive_agents(model) if e isa Enterprise; init = 0.0)
+    isempty(d) && return (1 + parameters(model).labour_for_bread_margin) * planned / max(length(persons(model)), 1)   # 17 Oct: month 1 too — the farms must be staffed before anyone has a record of it
     row = d[end]
     # 15 Oct: the most employers wanted in the last `labour_for_bread_memory` months — firms wound up at a month's end take their
     # share of the plan with them, and the firms restarted in their place want it back the next month; a village that sized its
     # offers on that one low month left the restarted bakeries short (DGI8: ~217 hungry in month 6 in every seed)
     n = max(parameters(model).labour_for_bread_memory, 1)
     wanted = maximum(d[i].labour_wanted for i in max(1, length(d) - n + 1):length(d))
+    # 16 Oct: and at least what the employers plan to want this month — in the productive village the theatres' plans grew month
+    # by month, they hired first, and the bakeries were 168 hands short (283 hungry in month 28, every seed)
+    wanted = max(wanted, planned)
     return (1 + parameters(model).labour_for_bread_margin) * wanted / max(row.persons_alive, 1)
 end
 
@@ -347,6 +351,10 @@ Wages are promised at hiring (priority 2, taxed at source) and settled at cleari
 before the harvest; bakeries hire after the grain market, up to the grain they hold (spec v2 addendum).
 """
 function labour_market!(model, kinds)
+    if parameters(model).joint_labour_market                              # 17 Oct: farms and banks before the harvest; then bakeries and theatres in one market, in turns
+        kinds == (:farm, :bank, :theatre) && (kinds = (:farm, :bank))
+        kinds == (:bakery,) && (kinds = (:bakery, :theatre))
+    end
     rng = stream(model, :labour)
     if :farm in kinds
         for w in persons(model)
@@ -375,8 +383,39 @@ function labour_market!(model, kinds)
     parameters(model).random_hiring_ties && stable_shuffle!(rng, pool)
     sort!(pool; by = w -> w.ask[:wage])
     p = parameters(model)
-    # 3 Oct: notice — a worker with the tenure is kept for the notice period at last month's units, wanted or not
-    if p.notice_months > 0
+    # 17 Oct: contracts — a contracted worker is off the market: the employer hires them first, at the contract wage, for the
+    # contracted units; one who wants fewer gives notice (below) and keeps paying; a worker leaving works out their own notice
+    if p.contracts
+        for e in employers
+            for w in pool
+                w.contract == e.id || continue
+                if !e.alive
+                    w.contract = 0; continue
+                end
+                if w.leaving == 0 && w.contract_wage > 0 && going_wage(model) >= w.contract_wage * (1 + p.worker_leave_margin)
+                    w.leaving = p.worker_notice_months                          # could earn more elsewhere: gives notice
+                    log_event!(model, :worker_notice; employer = e.id, worker = w.id)
+                end
+                want_left = e.market[:wage].wanted - e.hired_labour
+                units = min(w.contract_units, w.labour_available)
+                units > 1e-9 || continue
+                if want_left + 1e-9 >= w.contract_units || get(w.notice, e.id, p.notice_months) > 0
+                    want_left + 1e-9 >= w.contract_units ? (haskey(w.notice, e.id) && delete!(w.notice, e.id)) : (w.notice[e.id] = get(w.notice, e.id, p.notice_months) - 1; log_event!(model, :notice; employer = e.id, worker = w.id, units = units, months_left = w.notice[e.id]))
+                    hire!(model, e, w, units, w.contract_wage)
+                    w.labour_available = 0.0                                  # off the market for the rest
+                    if w.leaving > 0
+                        w.leaving -= 1
+                        w.leaving == 0 && (w.contract = 0; log_event!(model, :contract_ended; employer = e.id, worker = w.id, by = :worker))
+                    end
+                else
+                    w.contract = 0; delete!(w.notice, e.id)                      # the notice is served: the contract ends
+                    log_event!(model, :contract_ended; employer = e.id, worker = w.id, by = :employer)
+                end
+            end
+        end
+    end
+    # 3 Oct: notice — a worker with the tenure is kept for the notice period at last month's units, wanted or not (without contracts)
+    if p.notice_months > 0 && !p.contracts
         for e in employers
             for w in pool
                 t = get(w.tenure, e.id, 0); units_last = get(w.units_last, e.id, 0.0)
@@ -398,6 +437,12 @@ function labour_market!(model, kinds)
             end
         end
     end
+    orders = Dict{Int, Vector{Person}}()                                   # 17 Oct: each employer's order, once per market
+    for e in active
+        o = p.employer_loyalty ? vcat([w for w in pool if haskey(w.tenure, e.id)], [w for w in pool if !haskey(w.tenure, e.id)]) : copy(pool)   # 3 Oct: last month's workers first
+        p.experience && sort!(o; by = w -> w.ask[:wage] / experience_factor(model, w, e.kind), alg = Base.Sort.MergeSort)   # 17 Oct: experience is worth its cost; stable, so loyalty keeps its place among equals
+        orders[e.id] = o
+    end
     while !isempty(active)
         for e in copy(active)
             remaining = e.market[:wage].wanted - e.hired_labour
@@ -406,7 +451,7 @@ function labour_market!(model, kinds)
             end
             unit = min(1.0, remaining)
             filled = 0.0
-            order = p.employer_loyalty ? vcat([w for w in pool if haskey(w.tenure, e.id)], [w for w in pool if !haskey(w.tenure, e.id)]) : pool   # 3 Oct: last month's workers first
+            order = orders[e.id]
             for w in order
                 w.labour_available > 1e-9 || continue
                 filled >= unit - 1e-9 && break
@@ -417,6 +462,21 @@ function labour_market!(model, kinds)
                 filled += units
             end
             filled <= 1e-9 && filter!(x -> x !== e, active)
+        end
+    end
+    if p.contracts                                                         # 17 Oct: contracts for temps who have earned them
+        for e in employers
+            room = p.contract_share * e.market[:wage].wanted - sum(w.contract_units for w in persons(model) if w.contract == e.id; init = 0.0)
+            room > 1e-9 || continue
+            for w in persons(model)
+                (w.contract == 0 && get(w.tenure, e.id, 0) >= p.contract_tenure_months && get(w.units_for, e.id, 0.0) > 1e-9) || continue
+                units = min(get(w.units_for, e.id, 0.0), room)
+                units > 1e-9 || continue
+                w.contract = e.id; w.contract_units = units; w.contract_wage = w.last_wage_rate > 0 ? w.last_wage_rate : going_wage(model); w.leaving = 0
+                room -= units
+                log_event!(model, :contract; employer = e.id, worker = w.id, units = units, wage = w.contract_wage)
+                room > 1e-9 || break
+            end
         end
     end
     # 25 Sept: the labour employers wanted and could not get is recorded, market-wide, on every worker who sold out — so the
@@ -435,7 +495,7 @@ end
 
 function produce_grain!(model)
     for f in enterprises(model, :farm)
-        labour = floor(f.hired_labour + f.volunteer_labour + 1e-9)       # 15 Oct: volunteers where allowed
+        labour = floor(effective_labour(model, f) + f.volunteer_labour + 1e-9)   # 15 Oct: volunteers where allowed; 17 Oct: experience
         grain = min(labour, f.land + f.rented_land, f.production_target)
         ps = parameters(model)
         if ps.harvest_shock_start > 0 && ps.harvest_shock_start <= current_round(model) < ps.harvest_shock_start + ps.harvest_shock_length
@@ -460,7 +520,7 @@ end
 
 function bake!(model)
     for b in enterprises(model, :bakery)
-        labour = floor(b.hired_labour + b.volunteer_labour + 1e-9)       # 15 Oct: volunteers where allowed
+        labour = floor(effective_labour(model, b) + b.volunteer_labour + 1e-9)   # 15 Oct: volunteers where allowed; 17 Oct: experience
         grain = min(labour, floor(grain_units(b) + 1e-9))
         bread = parameters(model).breads_per_grain * grain
         if bread > 0
@@ -679,7 +739,7 @@ function ticket_market!(model)
     theatres = enterprises(model, :theatre)
     isempty(theatres) && return nothing
     for t in theatres
-        t.market[:ticket].offered = min((t.hired_labour + t.volunteer_labour) * p.customers_per_labour_unit, ticket_capacity(model, t))   # 4 Oct: volunteers staff what the paid hiring could not
+        t.market[:ticket].offered = min((effective_labour(model, t) + t.volunteer_labour) * p.customers_per_labour_unit, ticket_capacity(model, t))   # 4 Oct: volunteers staff what the paid hiring could not
     end
     for w in stable_shuffle(rng, persons(model))
         tp = expected_price(model, :ticket)

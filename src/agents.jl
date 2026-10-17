@@ -111,6 +111,13 @@ end
     gold::Float64 = 0.0                 # grams held (5 Oct)
     greed::Symbol = :none               # :none | :greedy (each act of greed: capital with greed_hoarding, consumption otherwise)
     volunteer_hours::Float64 = 0.0      # unpaid labour given to the commons this month (4 Oct)
+    contract::Int = 0                   # 17 Oct: the employer this worker is contracted to (0 = a temp)
+    contract_units::Float64 = 0.0       # the units the contract covers each month
+    contract_wage::Float64 = 0.0        # the contract wage
+    leaving::Int = 0                    # months of the worker's own notice still to work (0 = not leaving)
+    exp_kind::Symbol = :none            # 17 Oct: the kind of enterprise the worker's experience is in
+    exp_months::Int = 0                 # months worked running for that kind
+    exp_idle::Int = 0                   # months since last worked for it
     tenure::OrderedDict{Int, Int} = OrderedDict{Int, Int}()        # employer → consecutive months worked for it (3 Oct)
     units_for::OrderedDict{Int, Float64} = OrderedDict{Int, Float64}()   # employer → units worked this month
     units_last::OrderedDict{Int, Float64} = OrderedDict{Int, Float64}()  # employer → units worked last month

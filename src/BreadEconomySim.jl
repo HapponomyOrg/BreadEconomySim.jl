@@ -43,7 +43,7 @@ append!(ROUND_BEHAVIORS, Function[
     set_interest_rates!,
     land_market!,
     gold_market!,                       # 5 Oct: a pure store of value, traded like land
-    m -> labour_market!(m, (:farm, :bank, :theatre)),
+    m -> labour_market!(m, (:farm, :bank, :theatre)),   # the theatres here unless the joint market is on (then with the bakeries, after the grain) month: 283 hungry)
     m -> staff_with_volunteers!(m, (:farm,)),   # 15 Oct: volunteers where allowed
     produce_grain!,
     grain_market!,

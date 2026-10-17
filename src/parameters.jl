@@ -160,8 +160,8 @@ Base.@kwdef struct SimulationParameters
     income_cut_start::Int = 0
     income_cut_share::Float64 = 0.5
     land_levy_dividend::Bool = false
-    # Gesell's objection to George (15 October): when true, a landowner will not let a plot for less than the levy it costs him
-    # (the levy rate × the plot's value) — the levy passed on to the tenant, as Gesell feared.
+    # Gesell's objection to George (15 October; 16 Oct: on the asked rent, not as a refusal — a hard floor let no land and starved
+    # the village in month 2): when true, a landowner asks the levy on top of the going rent; tenants' bids decide whether it sticks.
     levy_pass_through::Bool = false
     # Government reserve (20 September 2026). 0 = the rule until now: whatever tax exceeds spending sits on the government's
     # balance (under SuMSy it pays demurrage there, and in the no-greed village it reached a fifth of the money stock).
@@ -474,6 +474,28 @@ Base.@kwdef struct SimulationParameters
     # `notice_months` > 0: a worker who has worked `notice_tenure_months` or more consecutive months for the same employer cannot
     # simply be dropped — the employer keeps hiring them, at their units of last month, for `notice_months` more months (Belgian
     # law: three months' notice after six months' service).
+    # One labour market for bakeries and theatres (16–17 October, Stef): after the grain market, bakeries and theatres hire in
+    # turns from one pool, a unit each per pass, so that neither can take the hands the other needs (the theatres had left the
+    # bakeries 168 short in the productive village). Farms and banks still hire before the harvest, which must precede the grain
+    # market. false = farms, banks and theatres first, bakeries after the grain market.
+    joint_labour_market::Bool = false
+    # Labour contracts (17 October, Stef): a worker who has worked `contract_tenure_months` running for an employer gets a contract
+    # if the employer still has room under `contract_share` (the share of its hands it may hold on contract; the rest are temps,
+    # always on the market). A contracted worker is off the market: the employer hires them first, at the contract wage, for the
+    # contracted units; an employer that wants fewer gives `notice_months` notice and keeps paying; a worker who could earn more
+    # elsewhere (the going wage above the contract wage by `worker_leave_margin`) gives `worker_notice_months` notice and leaves.
+    contracts::Bool = false
+    contract_share::Float64 = 1.0
+    contract_tenure_months::Int = 3
+    worker_notice_months::Int = 1
+    worker_leave_margin::Float64 = 0.1
+    # Experience (17 October, Stef): months worked running for the same kind of enterprise build experience — level 2 after
+    # `experience_months[1]`, level 3 after `experience_months[2]` — and every `experience_decay_months` not worked in that kind
+    # cost a level. An experienced worker produces `experience_bonus` more per unit and is hired first at equal cost.
+    experience::Bool = false
+    experience_months::Tuple{Int, Int} = (3, 9)
+    experience_bonus::Tuple{Float64, Float64} = (0.1, 0.2)
+    experience_decay_months::Int = 3
     employer_loyalty::Bool = false
     notice_tenure_months::Int = 6
     notice_months::Int = 0
