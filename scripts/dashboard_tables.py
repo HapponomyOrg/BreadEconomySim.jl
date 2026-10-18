@@ -38,5 +38,6 @@ for g, _ in groups + ([("Other", None)] if other else []):
     rows = out.get(g, other if g == "Other" else [])
     print(f"\n### {g} — {len(rows)} parameters\n\n| parameter | type | default | sweep | meaning |\n|---|---|---|---|---|")
     for n, t, d, c in rows:
-        print(f"| `{n}` | {t} | `{esc(d)}` | {sweep(t)} | {esc(c)[:170]} |")
+        d_shown = "NaN (unset: see meaning)" if d == "NaN" else d
+        print(f"| `{n}` | {t} | `{esc(d_shown)}` | {sweep(t)} | {esc(c)} |")
 if other: print("UNPLACED:", [r[0] for r in other], file=sys.stderr)
