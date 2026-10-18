@@ -219,6 +219,11 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol)
         # per unit; a level lost for every 3 months not worked in that kind. Both moneys.
         ("XP8 step 8, experience", (; V8_DEBT..., experience = true), (; V8_SUMSY..., experience = true)),
         ("XPJ8 step 8, experience and contracts for all hands", (; V8_DEBT..., experience = true, contracts = true), (; V8_SUMSY..., experience = true, contracts = true)),
+        # Public land (18 October, Stef — close to Gesell's Freiland): the government owns the land; farms pay a loaf a plot a month,
+        # bakeries and theatres two loaves a month, every villager a quarter loaf a month for the ground they live on; the rents
+        # follow the tax levers. No land market, no levy. Both moneys (the SuMSy side without its levy and dividend of step 8).
+        ("PL8 step 8, public land: ground rents of 1 loaf a plot, 2 a firm, 1/4 a villager", (; V8_DEBT..., land_pricing = :multiple, public_land = true, public_land_farm_rent_in_breads = 1.0, public_land_firm_rent_in_breads = 2.0, public_land_dwelling_rent_in_breads = 0.25), (; V8_SUMSY..., land_pricing = :multiple, land_levy = false, public_land = true, public_land_farm_rent_in_breads = 1.0, public_land_firm_rent_in_breads = 2.0, public_land_dwelling_rent_in_breads = 0.25)),
+        ("PL8-0 step 8, public land, no ground rent", (; V8_DEBT..., land_pricing = :multiple, public_land = true), (; V8_SUMSY..., land_pricing = :multiple, land_levy = false, public_land = true)),
         # The benefit fixed in money (26 September): the debt village's transfer as a fixed sum, like SuMSy's guaranteed income —
         # separates the money system from the indexation of the transfer. Debt side only.
         ("I2 step 2, benefit fixed in money", (; planning_margin = 0.1, GOV_DEBT..., benefit_indexed = false), (;)),

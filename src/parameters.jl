@@ -160,6 +160,14 @@ Base.@kwdef struct SimulationParameters
     income_cut_start::Int = 0
     income_cut_share::Float64 = 0.5
     land_levy_dividend::Bool = false
+    # Public land (18 October, Stef — close to Gesell's Freiland): all land is the government's; farms rent the plots they work,
+    # bakeries and theatres pay for the ground they stand on, every villager for the ground they live on — ground rents set in
+    # loaves, scaled with the tax levers (`tax_scale`), paid to the government as tax. Nobody owns land, so no land market, no land
+    # in wealth, no levy: mutually exclusive with `land_pricing = :market` and `land_levy`. The rents default to zero.
+    public_land::Bool = false
+    public_land_farm_rent_in_breads::Float64 = 0.0     # per plot a farm works, a month
+    public_land_firm_rent_in_breads::Float64 = 0.0     # per bakery or theatre, a month
+    public_land_dwelling_rent_in_breads::Float64 = 0.0 # per villager, a month
     # Gesell's objection to George (15 October; 16 Oct: on the asked rent, not as a refusal — a hard floor let no land and starved
     # the village in month 2): when true, a landowner asks the levy on top of the going rent; tenants' bids decide whether it sticks.
     levy_pass_through::Bool = false
@@ -489,6 +497,10 @@ Base.@kwdef struct SimulationParameters
     contract_tenure_months::Int = 3
     worker_notice_months::Int = 1
     worker_leave_margin::Float64 = 0.1
+    # 17 Oct (Stef): the contract is a floor — the employer takes at least the contracted units, the worker's remaining hours go
+    # to the market as a temp's; the contract wage follows the price of bread by `contract_indexation` (1 = fully, 0 = not at all);
+    # when bread or hands fell short (the emergency), contracts do not hold anyone back.
+    contract_indexation::Float64 = 1.0
     # Experience (17 October, Stef): months worked running for the same kind of enterprise build experience — level 2 after
     # `experience_months[1]`, level 3 after `experience_months[2]` — and every `experience_decay_months` not worked in that kind
     # cost a level. An experienced worker produces `experience_bonus` more per unit and is hired first at equal cost.

@@ -124,7 +124,7 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
     props[:entry_margin_history] = OrderedDict{Symbol, Vector{Float64}}()
     props[:entry_last] = OrderedDict{Symbol, Int}()
     props[:refound_last] = OrderedDict{Symbol, Int}()
-    props[:labour_shortfall_this_round] = 0.0; props[:basic_income_this_round] = 0.0; props[:levy_dividend_this_round] = 0.0
+    props[:labour_shortfall_this_round] = 0.0; props[:public_land_total] = parameters.public_land ? land_units_per_landowner(parameters) * parameters.number_of_landowners : 0; props[:ground_rent_this_round] = 0.0; props[:basic_income_this_round] = 0.0; props[:levy_dividend_this_round] = 0.0
     props[:premium_loaves_this_round] = 0.0; props[:premium_revenue_this_round] = 0.0; props[:premium_labour_this_round] = 0.0
     props[:gold_price] = parameters.gold_initial_price_in_breads * parameters.initial_prices[:bread] * parameters.initial_price_multiplier
     props[:gold_valuation] = props[:gold_price]; props[:gold_sales_log] = Tuple{Int, Float64}[]; props[:gold_sold_this_round] = 0.0
@@ -199,8 +199,9 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
     add_agent!(Enterprise, model; kind = :government, balance = Balance(), ask = OrderedDict{Symbol, Float64}(prices), bid = OrderedDict{Symbol, Float64}(prices))
 
     land = land_units_per_landowner(parameters)
+    parameters.public_land && (parameters.land_levy || parameters.land_pricing == :market) && throw(ArgumentError("public_land excludes land_levy and land_pricing = :market: nobody owns land"))
     for k in 1:parameters.number_of_persons
-        landowner = k <= parameters.number_of_landowners
+        landowner = k <= parameters.number_of_landowners && !parameters.public_land     # 18 Oct: public land — nobody owns any
         add_agent!(Person, model; balance = Balance(), capacity = parameters.maximum_capacity,
                    land = landowner ? land : 0, initial_landowner = landowner,
                    bread = parameters.initial_breads_per_person > 0 ? [StockItem(parameters.initial_breads_per_person, 0)] : StockItem[],
@@ -440,7 +441,7 @@ end
 """An employer's effective labour this month (17 October): the units hired, each worth its worker's experience factor."""
 function effective_labour(model, e::Enterprise)
     parameters(model).experience || return e.hired_labour
-    return sum(c.units * experience_factor(model, model[c.worker_id], e.kind) for c in model.wage_contracts if c.employer_id == e.id; init = 0.0)
+    return sum(get(w.units_for, e.id, 0.0) * experience_factor(model, w, e.kind) for w in persons(model); init = 0.0)   # 17 Oct: from the hires (wage_contracts hold only the government's)
 end
 
 """At `greed_month` (15 October): the greedy are chosen once a trend shows — by net wealth (`greed_selection = :rich`) or at random."""
@@ -537,7 +538,7 @@ function begin_round!(model)
     model.consumption_tax_this_round = 0.0; model.wealth_tax_this_round = 0.0
     model.invoices_issued_this_round = 0.0; model.invoices_paid_this_round = 0.0
     model.profit_tax_this_round = 0.0; model.income_tax_charged_this_round = 0.0; model.after_clearing = false; model.land_levy_this_round = 0.0
-    model.premium_loaves_this_round = 0.0; model.premium_revenue_this_round = 0.0; model.premium_labour_this_round = 0.0; model.labour_shortfall_this_round = 0.0; model.basic_income_this_round = 0.0; model.levy_dividend_this_round = 0.0
+    model.premium_loaves_this_round = 0.0; model.premium_revenue_this_round = 0.0; model.premium_labour_this_round = 0.0; model.labour_shortfall_this_round = 0.0; model.basic_income_this_round = 0.0; model.levy_dividend_this_round = 0.0; model.ground_rent_this_round = 0.0
     for e in model.enterprise_list; empty!(e.patronage_this_round); end
     model.gi_this_round = 0.0; model.demurrage_this_round = 0.0; model.demurrage_tax_this_round = 0.0
     model.account_fees_this_round = 0.0; model.peer_lent_this_round = 0.0

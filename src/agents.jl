@@ -113,7 +113,8 @@ end
     volunteer_hours::Float64 = 0.0      # unpaid labour given to the commons this month (4 Oct)
     contract::Int = 0                   # 17 Oct: the employer this worker is contracted to (0 = a temp)
     contract_units::Float64 = 0.0       # the units the contract covers each month
-    contract_wage::Float64 = 0.0        # the contract wage
+    contract_wage::Float64 = 0.0        # the contract wage, as agreed
+    contract_bread::Float64 = 0.0       # the price of bread when it was agreed (17 Oct: indexation)
     leaving::Int = 0                    # months of the worker's own notice still to work (0 = not leaving)
     exp_kind::Symbol = :none            # 17 Oct: the kind of enterprise the worker's experience is in
     exp_months::Int = 0                 # months worked running for that kind

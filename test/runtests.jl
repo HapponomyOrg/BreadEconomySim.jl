@@ -1736,6 +1736,17 @@ end
     @test B.experience_level(m2, x) == 1
 end
 
+
+@testset "public land (18 October 2026)" begin
+    @test_throws ArgumentError create_bread_economy(SimulationParameters(; seed = 1, BEH..., public_land = true, land_pricing = :market))
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., public_land = true, public_land_farm_rent_in_breads = 1.0, public_land_firm_rent_in_breads = 2.0, public_land_dwelling_rent_in_breads = 0.25, maximum_rounds = 4))
+    @test all(w.land == 0 for w in B.persons(m)) && m.public_land_total > 0                  # nobody owns land; the stock is the government's
+    run_simulation!(m); d = round_data(m)
+    @test all(d.ground_rent[2:end] .> 0) && d.tax[end] >= d.ground_rent[end] - 1e-6               # the rents are paid, as tax
+    @test all(f.rented_land > 0 for f in B.enterprises(m, :farm)) && d.grain_harvested[end] > 0   # the farms work public plots
+    @test abs(money_identity_gap(m)) < 1e-6
+end
+
 @testset "cooperative forms (14 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     params(m) = B.parameters(m)

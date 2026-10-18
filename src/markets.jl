@@ -60,6 +60,35 @@ function land_buyer_reservation(model, b::Agent, via::Symbol)
 end
 
 """
+    public_land!(model)
+
+Public land (18 October): the farms are allotted the government's plots, round robin up to the stock, and the ground rents
+are promised to the government as tax — per plot worked, per bakery or theatre, per villager — in loaves, scaled by the tax levers.
+"""
+function public_land!(model)
+    p = parameters(model); p.public_land || return nothing
+    gov = government(model); bp = expected_price(model, :bread); scale = model.tax_scale
+    farms = [f for f in enterprises(model, :farm)]
+    left = model.public_land_total
+    for f in farms; f.rented_land = 0; end
+    active = [f for f in farms if f.production_target - f.land - f.rented_land > 0]
+    while left > 0 && !isempty(active)
+        for f in copy(active)
+            left > 0 || break
+            f.rented_land += 1; left -= 1
+            f.production_target - f.land - f.rented_land > 0 || filter!(x -> x !== f, active)
+        end
+    end
+    charge(a, n, rate, purpose) = (amount = round(n * rate * bp * scale, digits = 4); amount > 1e-9 && (promise!(model, a, gov, amount, purpose, 1, :tax); model.ground_rent_this_round += amount))
+    for f in farms; charge(f, f.rented_land, p.public_land_farm_rent_in_breads, :ground_rent); end
+    for e in alive_agents(model)
+        e isa Enterprise && e.kind in (:bakery, :theatre) && charge(e, 1, p.public_land_firm_rent_in_breads, :ground_rent)
+    end
+    for w in persons(model); charge(w, 1, p.public_land_dwelling_rent_in_breads, :ground_rent); end
+    return nothing
+end
+
+"""
     land_market!(model)
 
 Farms take turns. Purchases first (debt-free, from reserves above target, banks' seized land first, then
@@ -67,6 +96,7 @@ landowners); enterprises have first refusal, then persons with surplus savings m
 at a time from the owner with the lowest rent ask, paid up front; rent income is taxed as capital income.
 """
 function land_market!(model)
+    parameters(model).public_land && return public_land!(model)                 # 18 Oct: no land market — the land is public
     rng = stream(model, :land)
     farms = stable_shuffle(rng, enterprises(model, :farm))
     price = land_price(model)
@@ -392,17 +422,17 @@ function labour_market!(model, kinds)
                 if !e.alive
                     w.contract = 0; continue
                 end
-                if w.leaving == 0 && w.contract_wage > 0 && going_wage(model) >= w.contract_wage * (1 + p.worker_leave_margin)
+                if w.leaving == 0 && w.contract_wage > 0 && !hands_short(model) && going_wage(model) >= w.contract_wage * (w.contract_bread > 0 ? expected_price(model, :bread) / w.contract_bread : 1.0) * (1 + p.worker_leave_margin)
                     w.leaving = p.worker_notice_months                          # could earn more elsewhere: gives notice
                     log_event!(model, :worker_notice; employer = e.id, worker = w.id)
                 end
                 want_left = e.market[:wage].wanted - e.hired_labour
                 units = min(w.contract_units, w.labour_available)
                 units > 1e-9 || continue
+                wage = w.contract_bread > 0 ? w.contract_wage * (1 + p.contract_indexation * (expected_price(model, :bread) / w.contract_bread - 1)) : w.contract_wage   # 17 Oct: indexed to bread
                 if want_left + 1e-9 >= w.contract_units || get(w.notice, e.id, p.notice_months) > 0
                     want_left + 1e-9 >= w.contract_units ? (haskey(w.notice, e.id) && delete!(w.notice, e.id)) : (w.notice[e.id] = get(w.notice, e.id, p.notice_months) - 1; log_event!(model, :notice; employer = e.id, worker = w.id, units = units, months_left = w.notice[e.id]))
-                    hire!(model, e, w, units, w.contract_wage)
-                    w.labour_available = 0.0                                  # off the market for the rest
+                    hire!(model, e, w, units, round(wage, digits = 4))         # the floor: at least the contracted units; the rest of the worker's hours stay on the market
                     if w.leaving > 0
                         w.leaving -= 1
                         w.leaving == 0 && (w.contract = 0; log_event!(model, :contract_ended; employer = e.id, worker = w.id, by = :worker))
@@ -472,7 +502,7 @@ function labour_market!(model, kinds)
                 (w.contract == 0 && get(w.tenure, e.id, 0) >= p.contract_tenure_months && get(w.units_for, e.id, 0.0) > 1e-9) || continue
                 units = min(get(w.units_for, e.id, 0.0), room)
                 units > 1e-9 || continue
-                w.contract = e.id; w.contract_units = units; w.contract_wage = w.last_wage_rate > 0 ? w.last_wage_rate : going_wage(model); w.leaving = 0
+                w.contract = e.id; w.contract_units = units; w.contract_wage = w.last_wage_rate > 0 ? w.last_wage_rate : going_wage(model); w.contract_bread = expected_price(model, :bread); w.leaving = 0
                 room -= units
                 log_event!(model, :contract; employer = e.id, worker = w.id, units = units, wage = w.contract_wage)
                 room > 1e-9 || break
