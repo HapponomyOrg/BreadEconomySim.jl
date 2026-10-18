@@ -4,6 +4,7 @@
 #     julia --project=. scripts/run_all.jl
 #
 # What it does, in order:
+#   CONTRACT_SHARE=0.8 runs the whole ladder again with the contracts dial at 0.8, into its own folder and summary (18 Oct).
 #   1. installs and precompiles the packages (Pkg.instantiate), and runs the test suite unless SKIP_TESTS=1 or it already
 #      passed for this MODEL_VERSION and this code (results/tests_passed_<version>.txt holds the code's fingerprint);
 #   2. runs the ladders — by default the 512-villager ladder under invoicing, the main ladder (26 September: the old-settlement
@@ -50,7 +51,7 @@ get(ENV, "UPDATE_ECONOSIM", "0") == "1" && (println("Updating EconoSim.jl to the
 println("Installing and precompiling packages (first time only takes a while)…"); flush(stdout)
 Pkg.instantiate(); Pkg.precompile()
 
-const MODEL_VERSION = "2026-10-17.0"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
+const MODEL_VERSION = "2026-10-18.0"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
 
 # 16 Oct (Stef): a version's test suite is run once. When it passes, a marker is written for this version together with a
 # fingerprint of the code it tested (src/, test/, scripts/ladder_definition.jl); a resumed or repeated run of the same version
@@ -88,7 +89,13 @@ const ROUNDS  = parse(Int, get(ENV, "ROUNDS", "120"))
 const LADDERS = [(parse(Int, split(x, ":")[1]), Symbol(split(x, ":")[2])) for x in split(get(ENV, "LADDERS", "512:invoicing"), ",")]
 const RUNGS   = filter(!isempty, split(get(ENV, "RUNGS", ""), ","))
 
-ladder_name(N, settlement) = settlement == :invoicing ? "ladder2_$(N)" : "ladder2_$(N)_$(settlement)"
+# 18 Oct (Stef): a second ladder with the contracts dial at another setting — CONTRACT_SHARE=0.8 runs every rung of the ladder
+# again with `contract_share = 0.8` (a fifth of the hands temps, as today's economy tends), into its own folder and summary
+# (…_contracts80). Unset = the ladder as defined (contract_share 1.0 on the base).
+const CONTRACT_SHARE = get(ENV, "CONTRACT_SHARE", "")
+const VARIANT = isempty(CONTRACT_SHARE) ? "" : "_contracts$(round(Int, 100 * parse(Float64, CONTRACT_SHARE)))"
+variant(kw) = isempty(CONTRACT_SHARE) || isempty(kw) ? kw : (; kw..., contract_share = parse(Float64, CONTRACT_SHARE))
+ladder_name(N, settlement) = (settlement == :invoicing ? "ladder2_$(N)" : "ladder2_$(N)_$(settlement)") * VARIANT
 parts_dir(N, settlement) = joinpath(ROOT, "results", "parts", "$(ladder_name(N, settlement))_$(ROUNDS)months_$(MODEL_VERSION)")   # the run length is part of the key: a short test run is never taken for a real one
 safe(s) = replace(s, r"[^A-Za-z0-9]+" => "_")
 part_file(job) = joinpath(parts_dir(job.N, job.settlement), "$(safe(job.rung))__$(job.system)__$(job.seed).csv")
@@ -112,7 +119,7 @@ JOBS > 1 && nprocs() < JOBS + 1 && addprocs(JOBS - nprocs() + 1; exeflags = ["--
         isfile(job.file) && (say("skipped (already done): $(job.rung) | $(job.system) seed $(job.seed)"); return "skipped")
         def = ladder(job.N, job.rounds, job.settlement)
         i = only(k for (k, r) in enumerate(def.rungs) if r[1] == job.rung); (_, kd, ks) = def.rungs[i]
-        base, kw = job.system == "debt" ? (def.BARE_DEBT, kd) : (def.BARE_SUMSY, ks)
+        base, kw = job.system == "debt" ? (def.BARE_DEBT, variant(kd)) : (def.BARE_SUMSY, variant(ks))   # 18 Oct: the contracts variant, if set
         # 12 Oct: a rung whose settings are unchanged for this village from the rung below is the same village run again, so that
         # the two stay side by side — say so (the ladder names each rung once for both: "interest on deposits | sumsy" has none)
         same_as = i > 1 && kw == (job.system == "debt" ? def.rungs[i - 1][2] : def.rungs[i - 1][3]) ? " (as " * first(split(def.rungs[i - 1][1])) * ")" : ""
@@ -150,7 +157,7 @@ let seen = Dict{String, Any}(), copied = 0
     for j in jobs
         def = ladder(j.N, j.rounds, j.settlement)
         (_, kd, ks) = only(r for r in def.rungs if r[1] == j.rung)
-        kw = j.system == "debt" ? kd : ks
+        kw = variant(j.system == "debt" ? kd : ks)
         key = string(j.N, "|", j.settlement, "|", j.rounds, "|", j.system, "|", j.seed, "|", repr(kw))
         if haskey(seen, key)
             src = seen[key]

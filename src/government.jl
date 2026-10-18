@@ -263,6 +263,7 @@ function pay_unemployment_fees!(model)
             end
             p.austerity_start > 0 && (w.fee = min(w.fee, benefit_in_breads(model) * bread))          # austerity reaches current recipients too
             fee = (p.partial_unemployment_fee ? w.fee * unsold_share(w) : w.fee) * model.spending_scale   # scaled under a debt ceiling
+            p.public_land && p.public_land_dwelling_in_benefit && (fee += p.public_land_dwelling_rent_in_breads * bread * model.tax_scale)   # 18 Oct: the dwelling rent added to the benefit
             model.government_outlay_this_round += fee
             promise!(model, gov, w, fee, :unemployment_fee, 2, :fee)
         else

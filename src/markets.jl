@@ -84,7 +84,10 @@ function public_land!(model)
     for e in alive_agents(model)
         e isa Enterprise && e.kind in (:bakery, :theatre) && charge(e, 1, p.public_land_firm_rent_in_breads, :ground_rent)
     end
-    for w in persons(model); charge(w, 1, p.public_land_dwelling_rent_in_breads, :ground_rent); end
+    for w in persons(model)
+        p.public_land_dwelling_exempt_benefit && unemployed(w) && continue          # 18 Oct: those on the benefit pay no dwelling rent
+        charge(w, 1, p.public_land_dwelling_rent_in_breads, :ground_rent)
+    end
     return nothing
 end
 

@@ -168,6 +168,10 @@ Base.@kwdef struct SimulationParameters
     public_land_farm_rent_in_breads::Float64 = 0.0     # per plot a farm works, a month
     public_land_firm_rent_in_breads::Float64 = 0.0     # per bakery or theatre, a month
     public_land_dwelling_rent_in_breads::Float64 = 0.0 # per villager, a month
+    # 18 Oct (Stef): the dwelling rent and those on the benefit — exempt them, or add the rent to the benefit (the two policies a
+    # debt-money village has; under SuMSy the dividend covers it without a policy).
+    public_land_dwelling_exempt_benefit::Bool = false
+    public_land_dwelling_in_benefit::Bool = false
     # Gesell's objection to George (15 October; 16 Oct: on the asked rent, not as a refusal — a hard floor let no land and starved
     # the village in month 2): when true, a landowner asks the levy on top of the going rent; tenants' bids decide whether it sticks.
     levy_pass_through::Bool = false

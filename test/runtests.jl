@@ -1747,6 +1747,16 @@ end
     @test abs(money_identity_gap(m)) < 1e-6
 end
 
+
+@testset "the dwelling rent and the benefit (18 October 2026)" begin
+    base = (; seed = 1, BEH..., public_land = true, public_land_dwelling_rent_in_breads = 0.25, maximum_rounds = 4)
+    a = round_data(run_simulation(SimulationParameters(; base...)))
+    x = round_data(run_simulation(SimulationParameters(; base..., public_land_dwelling_exempt_benefit = true)))
+    b = round_data(run_simulation(SimulationParameters(; base..., public_land_dwelling_in_benefit = true)))
+    @test x.ground_rent[end] <= a.ground_rent[end] + 1e-9                                        # the exempt pay less
+    @test b.fees[end] >= a.fees[end] - 1e-9 || b.government_outlay[end] >= a.government_outlay[end] - 1e-9   # the benefit carries the rent
+end
+
 @testset "cooperative forms (14 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     params(m) = B.parameters(m)
