@@ -94,7 +94,8 @@ const RUNGS   = filter(!isempty, split(get(ENV, "RUNGS", ""), ","))
 # (…_contracts80). Unset = the ladder as defined (contract_share 1.0 on the base).
 const CONTRACT_SHARE = get(ENV, "CONTRACT_SHARE", "")
 const VARIANT = isempty(CONTRACT_SHARE) ? "" : "_contracts$(round(Int, 100 * parse(Float64, CONTRACT_SHARE)))"
-variant(kw) = isempty(CONTRACT_SHARE) || isempty(kw) ? kw : (; kw..., contract_share = parse(Float64, CONTRACT_SHARE))
+const VARIANT_EXTRA = isempty(CONTRACT_SHARE) ? (;) : (; contract_share = parse(Float64, CONTRACT_SHARE))
+with_variant(kw, extra = VARIANT_EXTRA) = isempty(kw) ? kw : (; kw..., extra...)   # on the main process; the workers get `extra` inside each job
 ladder_name(N, settlement) = (settlement == :invoicing ? "ladder2_$(N)" : "ladder2_$(N)_$(settlement)") * VARIANT
 parts_dir(N, settlement) = joinpath(ROOT, "results", "parts", "$(ladder_name(N, settlement))_$(ROUNDS)months_$(MODEL_VERSION)")   # the run length is part of the key: a short test run is never taken for a real one
 safe(s) = replace(s, r"[^A-Za-z0-9]+" => "_")
@@ -119,7 +120,8 @@ JOBS > 1 && nprocs() < JOBS + 1 && addprocs(JOBS - nprocs() + 1; exeflags = ["--
         isfile(job.file) && (say("skipped (already done): $(job.rung) | $(job.system) seed $(job.seed)"); return "skipped")
         def = ladder(job.N, job.rounds, job.settlement)
         i = only(k for (k, r) in enumerate(def.rungs) if r[1] == job.rung); (_, kd, ks) = def.rungs[i]
-        base, kw = job.system == "debt" ? (def.BARE_DEBT, variant(kd)) : (def.BARE_SUMSY, variant(ks))   # 18 Oct: the contracts variant, if set
+        kd = isempty(kd) ? kd : (; kd..., job.extra...); ks = isempty(ks) ? ks : (; ks..., job.extra...)   # 18 Oct: the contracts variant travels inside the job (workers do not see the main process's globals)
+        base, kw = job.system == "debt" ? (def.BARE_DEBT, kd) : (def.BARE_SUMSY, ks)
         # 12 Oct: a rung whose settings are unchanged for this village from the rung below is the same village run again, so that
         # the two stay side by side — say so (the ladder names each rung once for both: "interest on deposits | sumsy" has none)
         same_as = i > 1 && kw == (job.system == "debt" ? def.rungs[i - 1][2] : def.rungs[i - 1][3]) ? " (as " * first(split(def.rungs[i - 1][1])) * ")" : ""
@@ -145,7 +147,7 @@ for (N, settlement) in LADDERS
             # bare village is a setting); the name-prefix rules it replaces skipped EU8's debt side because EU8 begins with "E"
             kw = system == "debt" ? kd : ks
             (isempty(kw) && !occursin(r"^[0-9]", name)) && continue
-            job = (; N, settlement, rounds = ROUNDS, rung = name, system, seed)
+            job = (; N, settlement, rounds = ROUNDS, rung = name, system, seed, extra = VARIANT_EXTRA)
             push!(jobs, (; job..., file = part_file(job), index = length(jobs) + 1, total = 0))
         end
     end
@@ -157,7 +159,7 @@ let seen = Dict{String, Any}(), copied = 0
     for j in jobs
         def = ladder(j.N, j.rounds, j.settlement)
         (_, kd, ks) = only(r for r in def.rungs if r[1] == j.rung)
-        kw = variant(j.system == "debt" ? kd : ks)
+        kw = with_variant(j.system == "debt" ? kd : ks)
         key = string(j.N, "|", j.settlement, "|", j.rounds, "|", j.system, "|", j.seed, "|", repr(kw))
         if haskey(seen, key)
             src = seen[key]
