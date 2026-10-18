@@ -82,7 +82,6 @@ Each tab's switches, with the parameters they enable. A switch that is off remov
 | Labour | `wage_threshold`, `wage_cut_maximum` < 1 | the wage rules; `wage_floor_months`, `food_emergency_share` |
 | Labour | `employer_loyalty`, `notice_months` > 0 | continuity of employment; `notice_tenure_months` |
 | Labour | `minimum_labour_offer` > 0, `volunteer_share` > 0 | work as purpose; the commons measure |
-| Labour | `nonworking_share` > 0 | those not working for reasons of their own; `nonworking_hungry_share` |
 | Labour | `standard_of_living_tickets` > 0 | the standard of living |
 | Firms | `ownership` (≠ :none) | owners, shares, `founders`, `founding_equity`, `share_market`, the cooperative block |
 | Firms | `market_entry` | `entry_*` |
@@ -340,7 +339,7 @@ Columns: *type* as in `SimulationParameters`; *default* as in the code (the ladd
 | `wage_ceiling_in_breads` | Float64 | `0.0` | yes | incomes policy: no employer pays more than this many loaves per full-time round of work (0 = off); binds bids and the surplus-to-wages rule |
 | `fixed_prices` | Bool | `false` | yes | Fixed prices (26 September, Stef's question): every transaction at the starting price vector — no bargaining, no adaptation; only quantities move. Does a village eat when |
 
-### Labour — 41 parameters
+### Labour — 39 parameters
 
 | parameter | type | default | sweep | meaning |
 |---|---|---|---|---|
@@ -383,8 +382,6 @@ Columns: *type* as in `SimulationParameters`; *default* as in the code (the ladd
 | `volunteer_share` | Float64 | `0.0` | yes |  |
 | `volunteers_in_theatres` | Bool | `false` | yes | Volunteers in the theatres (4 October, Stef): a theatre hires what its tickets can pay and villagers with unhired labour staff the rest, unpaid — after the paid hiring, n |
 | `volunteer_kinds` | Tuple{Vararg{Symbol}} | `()` | no | Volunteer work as a structural flag (15 October, Stef): the enterprise kinds whose shortfall of hands volunteers may fill, after the paid hiring (e.g. (:theatre,), (:bake |
-| `nonworking_share` | Float64 | `0.0` | yes |  |
-| `nonworking_hungry_share` | Float64 | `1 / 3` | yes |  |
 
 ### Firms, planning, ownership and entry — 69 parameters
 
@@ -442,7 +439,7 @@ Columns: *type* as in `SimulationParameters`; *default* as in the code (the ladd
 | `firms_plan_on_sales` | Bool | `false` | yes | on the ladder (RULES); off by default so the reference runs stay as they were |
 | `plan_adjustment_months` | Int | `3` | yes | 16 Oct (Stef): a large change in a firm's sales share is followed mildly at first and fully only when it holds — a third of the way in its first month, two thirds in its  |
 | `plan_small_change` | Float64 | `0.05` | yes |  |
-| `premium_markup` | Float64 | `1.0` | yes | Not working, for reasons of their own (5 October, Stef — care, illness, art, or choice; the model knows only that they do not offer paid work): `nonworking_share` of vill |
+| `premium_markup` | Float64 | `1.0` | yes | A premium loaf (11 October, Stef): value that grows without volume growing. A villager with money to spare beyond the cushion and `premium_buyer_margin_in_meals` meals bu |
 | `premium_labour_per_loaf` | Float64 | `0.5` | yes |  |
 | `premium_buyer_margin_in_meals` | Float64 | `2.0` | yes |  |
 | `refound_minimum` | Int | `1` | yes | When fewer than this many farms (or bakeries) are open, villagers try to start one (24 September; 0 = never). |
@@ -484,7 +481,7 @@ Columns: *type* as in `SimulationParameters`; *default* as in the code (the ladd
 | `gold_sale_rate` | Float64 | `0.01` | yes |  |
 | `gold_price_step` | Float64 | `0.06` | yes |  |
 
-### Behaviour variants — 10 parameters
+### Behaviour variants — 12 parameters
 
 | parameter | type | default | sweep | meaning |
 |---|---|---|---|---|
@@ -498,6 +495,8 @@ Columns: *type* as in `SimulationParameters`; *default* as in the code (the ladd
 | `greedy_max_breads_per_round` | Int | `10` | yes | replaces the 3-loaf ceiling for greedy consumers (eaten, not stocked) |
 | `spoilage_acceptance` | Float64 | `NaN` | yes | Spoilage acceptance (13 October, Stef): nobody buys bread they know will rot. A greedy villager holds at most what they can eat before it spoils (breads_per_meal × spoila |
 | `greedy_max_tickets_per_round` | Int | `10` | yes | replaces the 3-ticket ceiling |
+| `nonworking_share` | Float64 | `0.0` | yes | Not working, for reasons of their own (5 October, Stef — care, illness, art, or choice; the model knows only that they do not offer paid work): `nonworking_share` of vill |
+| `nonworking_hungry_share` | Float64 | `1 / 3` | yes |  |
 
 ### Run control — 7 parameters
 
@@ -584,3 +583,4 @@ The Basic view answers one question first: **who is alive after ten years, and h
 - 18 October 2026 — version 5: the purpose widened (researcher, policy maker, player); configurations (a parameter set per side over a shared base), series (named batches, the ladder as the shipped one), three views (Basic, Policy, Expert), the result as a picture and a four-tick score, the tutorial, tooltips in two registers with their sources.
 - 18 October 2026 — version 5.1: storage in DuckDB (Julia client), the tables, sharing by object and separately for parameters (or a subset) and results, the public gallery.
 - 18 October 2026 — version 5.2: the village's size and the run's length settable in every view (years, villagers, land, the minimum and maximum of each kind of firm), with a calibrated runtime estimate and a warning on long runs.
+- 18 October 2026 — version 5.3: those not working (`nonworking_share`, `nonworking_hungry_share`) listed under the behaviour variants, where they belong, with their meaning.

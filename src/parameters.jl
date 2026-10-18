@@ -561,10 +561,6 @@ Base.@kwdef struct SimulationParameters
     # `plan_small_change` of the current share are followed at once.
     plan_adjustment_months::Int = 3
     plan_small_change::Float64 = 0.05
-    # Not working, for reasons of their own (5 October, Stef — care, illness, art, or choice; the model knows only that they do
-    # not offer paid work): `nonworking_share` of villagers offer labour only to cover a meal — no cushion, no tickets, no minimum
-    # offer — and give no volunteer hours; `nonworking_hungry_share` of them would rather go hungry than take paid work: they
-    # offer labour only once hungry.
     # A premium loaf (11 October, Stef): value that grows without volume growing. A villager with money to spare beyond the cushion
     # and `premium_buyer_margin_in_meals` meals buys the month's bread premium instead of plain — the same loaves at `premium_markup`
     # times the price, no more time to eat them; the bakery hires `premium_labour_per_loaf` extra units at the going wage for each.
@@ -572,6 +568,10 @@ Base.@kwdef struct SimulationParameters
     premium_markup::Float64 = 1.0
     premium_labour_per_loaf::Float64 = 0.5
     premium_buyer_margin_in_meals::Float64 = 2.0
+    # Not working, for reasons of their own (5 October, Stef — care, illness, art, or choice; the model knows only that they do
+    # not offer paid work): `nonworking_share` of villagers offer labour only to cover a meal — no cushion, no tickets, no minimum
+    # offer — and give no volunteer hours; `nonworking_hungry_share` of them would rather go hungry than take paid work: they
+    # offer labour only once hungry.
     nonworking_share::Float64 = 0.0
     nonworking_hungry_share::Float64 = 1 / 3
     # Gold (5 October, Stef): a fixed stock of `gold_grams_per_villager` × villagers, held at the founding by the richest
