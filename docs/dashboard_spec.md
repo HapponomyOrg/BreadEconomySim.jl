@@ -1,21 +1,57 @@
 # BreadEconomySim — dashboard design document
 
-*Version 3, 16 October 2026 (model version 2026-10-16.1). Supersedes version 2 of 5 October. The parameter tables of §5 are generated from `src/parameters.jl` (328 parameters) by `scripts/dashboard_tables.py` and must be regenerated whenever that file changes; everything else is design.*
+*Version 5, 18 October 2026 (model version 2026-10-18.0). Supersedes version 4 of the same day: the purpose widened from running the ladder to a policy tool and a game, with configurations, series, a tutorial and tooltips in two registers. The parameter tables of §5 are generated from `src/parameters.jl` (345 parameters) by `scripts/dashboard_tables.py` and must be regenerated whenever that file changes; everything else is design.*
 
-## 1. Purpose
+## 1. Purpose and audiences
 
-A web dashboard from which a researcher can configure a village, switch any part of it on or off, run it under one or both kinds of money, define a sweep over any set of parameters, and read the results. Every switch and parameter of `SimulationParameters` is exposed, grouped into tabs that follow how the model is thought about rather than the order in which it was written. The ladder's steps are presets; a sweep is a set of presets with one or more parameters varied.
+The dashboard is a tool for testing configurations of the village, under either kind of money or both. Three kinds of people use it, and it must serve each without getting in the others' way:
 
-## 2. Architecture
+- **The researcher**, who wants every switch and parameter, sweeps, the ladder as presets, and the raw data.
+- **The policy maker**, who wants to ask what a measure does — a basic income, a debt ceiling, a land levy, public land, a tax on bread — in a village like the one in the report, and read the answer as lives, work, prices, debt and the gap between rich and poor.
+- **The player**, who takes the village as a game: pick a money, set the rules, run ten years, see who lives, try again.
 
-- **Backend**: a Julia HTTP service wrapping `run_simulation(SimulationParameters(; kwargs...))`, the same code path as `scripts/run_all.jl`. One endpoint validates a job (one village, N seeds, M rounds) and runs it on a worker pool; results are the per-round data (`round_data`), the summary columns of `run_all.jl` and the event log. A sweep is a batch of jobs; the backend reuses finished runs by their parameter hash and model version, as `run_all.jl` does with its part files.
-- **Frontend**: a single-page app. State = one `SimulationParameters` per side (debt / SuMSy) plus the run controls and the sweep definition. Widgets bind to parameter names 1:1, so a saved configuration is a parameter set and nothing else.
+What they share is the object they work on: a **configuration**, and a way of saving, comparing and grouping configurations into series. What differs is how much of the model they see at once (§3) and how it is explained to them (§12).
+
+## 2. The objects
+
+- **A parameter set** is one complete `SimulationParameters`: every switch and number, including the money system and its own parameters (the fee, the tax, the income under SuMSy; the interest rates and bonds under debt money). A parameter set is saved by name, with the model version it was made under.
+- **A configuration** is what the dashboard runs: a parameter set for the debt side and one for the SuMSy side, with everything the two share held in common and only the money-specific parameters differing — exactly how a rung of the ladder is defined (`V8_DEBT…`, `V8_SUMSY…` over a shared base). A configuration can also be one side alone. Running a configuration means N seeds of each side, the same seeds for both, so that the two villages are compared seed by seed.
+- **A series** (Stef, 18 October; the ladder is the series that ships with the model) is an ordered list of configurations with a name and a note, run as one batch like `scripts/run_all.jl` runs the ladder: resumable, deduplicated by parameter hash and model version, summarised into one table. A user builds a series by adding configurations to it, from scratch, from a preset, or by varying one configuration over a list of values (a sweep is a series generated that way). Series can be shared and run by someone else, which is how a policy question becomes a reproducible experiment.
+- **A run** is a configuration or series executed under a model version, with its seeds, its per-round data, its summary rows and its event log. Runs are never silently reused across model versions.
+
+## 3. Architecture and layout
+
+- **Backend**: a Julia HTTP service wrapping `run_simulation(SimulationParameters(; kwargs...))`, the same code path as `scripts/run_all.jl`. One endpoint validates and runs a configuration (N seeds × 1 or 2 sides × M rounds) on a worker pool; a series is a batch of those. Results are the per-round data (`round_data`), the summary columns of `run_all.jl` and the event log. Finished runs are reused by parameter hash and model version.
+- **Frontend**: a single-page app. State = the configuration being edited (two parameter sets over a shared base), the run controls, the current series and the results view. Widgets bind to parameter names 1:1, so a saved configuration is parameter sets and nothing else.
+- **Three views of the same configuration**, chosen at the top and switchable at any time:
+  - **Basic** (the game and the first policy questions): the money chooser and about twenty-five levers in plain words — the income, the benefit, the taxes, the land levy or public land, the debt ceiling, austerity, public jobs, the transport line, contracts and temps, greed, hoarding — each with its default and its ladder range. Everything else at the model's defaults.
+  - **Policy**: the Basic levers plus the government, land, money and labour tabs in full, about sixty parameters, with the switches that turn whole parts of the model on and off.
+  - **Expert**: every parameter of `SimulationParameters`, in the tabs of §5, with the ladder as presets and the sweep builder.
+  A configuration made in one view opens in any other; Basic shows a note when something outside its levers is set away from the default.
 - **Validation** in the frontend from the rules of §6 and again in the backend.
-- **Persistence**: every run is saved with its parameter set, seed list, model version (`MODEL_VERSION`) and git commit; a preset is a named parameter set; a sweep is a preset plus a variation list. Runs made under an older model version are shown greyed with their version, never silently reused.
+- **Persistence**: in a database (below); every run is saved with its configuration, seed list, model version (`MODEL_VERSION`) and git commit; presets, configurations and series are named and versioned; runs made under an older model version are shown greyed with their version.
 
-## 3. Layout
+### Storage and sharing (design only — not implemented)
 
-A tab bar across the top, one tab per group of §5 plus **Run**, **Sweeps** and **Results**. Each parameter tab has, at its head, the tab's **switches** (the Booleans that turn whole parts of the model on or off), and below them the parameters, each greyed out until the switch that governs it is on. A **compare** toggle (debt / SuMSy / both) applies to every tab; parameters that exist in only one money are shown only when that side is selected. A search box finds any parameter by name or meaning across tabs.
+**The database is DuckDB** (Stef, 18 October), through its Julia client (https://duckdb.org/docs/lts/clients/julia): embedded, one file, SQL, columnar, and it reads and writes Parquet and CSV directly, so the part files `run_all.jl` already writes can be loaded as they are and the results tables of §9 are queries. The backend owns the file; the frontend never touches it.
+
+**Tables** (the names are the objects of §2):
+- `users` — id, name, created.
+- `parameter_sets` — id, owner, name, note, model version, created, the parameter hash, and the parameters themselves in one JSON column (the full `SimulationParameters` as keyword pairs; a struct column would break at every added parameter, JSON does not). The hash is over the parameters and the model version; two sets with the same hash are the same village.
+- `configurations` — id, owner, name, note, the shared base (a parameter set), the debt side and the SuMSy side (each a parameter set, or null for a one-sided configuration), created.
+- `series` — id, owner, name, note, created; `series_items` — series, position, configuration. The ladder is loaded as a series owned by the system from `scripts/ladder_definition.jl`, one configuration per rung.
+- `runs` — id, configuration, side, seed, model version, git commit, rounds, started, finished, status (done / failed / running), and the per-round data as a Parquet file referenced by path (the part file), with its summary row (the columns of `run_all.jl`'s summary) in `run_summaries`. A run is reused by (parameter hash, side, seed, rounds, model version), as `run_all.jl` reuses part files.
+- `shares` — what is shared with whom, below.
+
+**Sharing** is decided by the owner, object by object, and separately for parameters and results:
+- A parameter set, configuration or series is **private** by default. Its owner can share it with named users, with a group, or with everyone; a shared series brings its configurations and parameter sets along as read-only copies, so a change by the owner never changes what someone else is looking at (a share is a snapshot with a pointer to the original).
+- **A subset of parameters** can be shared instead of the whole set: the owner marks which parameters are visible (by tab, or one by one); the rest are shown to others as "set, not shared" so that a recipient knows the village has settings they cannot see. A run cannot be reproduced from a partial share, and the dashboard says so.
+- **Results** are shared separately from parameters: a run's per-round data, its summary row and its event log can each be shared or kept, so that someone may publish what their village did without publishing how it was built, or the reverse.
+- Everything shared with everyone is listed in a public gallery with its model version; the report's own cells are there as the system's series, so that a policy maker's configuration can be compared with the report's village by one click.
+
+**Two things to know about DuckDB before building on it.** It is an embedded database with one writer at a time: a web service with several worker processes writes through one connection (the backend's) and the workers return their results to it, which is how `run_all.jl` already works. And it is a file: sharing between users means one backend serving one file, or a hosted DuckDB; nothing in the schema above depends on which. Parquet export of any table or query is one statement, which is the route to the report's figures and to anyone who wants the data in Python or R.
+
+- **Layout** (Policy and Expert views): a tab bar across the top, one tab per group of §5 plus **Run**, **Series** and **Results**. Each parameter tab has, at its head, the tab's switches, and below them the parameters, each greyed out until the switch that governs it is on. A **compare** toggle (debt / SuMSy / both) applies to every tab; parameters that exist in only one money are shown only when that side is selected. A search box finds any parameter by name or meaning across tabs. The Basic view is one page: the money, the levers, Run, and the result as a picture (§11).
 
 ## 4. Switches and what they govern
 
@@ -71,13 +107,17 @@ Each tab's switches, with the parameters they enable. A switch that is off remov
 | Behaviour | `nonworking_share` > 0 | villagers who take paid work only to eat (`nonworking_hungry_share`) |
 | Behaviour | `spoilage_acceptance` | the most bread a greedy villager will hold |
 | Land and gold | `gold_grams_per_villager` > 0 | gold; reported beside wealth, never in it |
+| Labour | `joint_labour_market` (on by the ladder) | bakeries and theatres hire in one market, in turns; farms and banks before the harvest |
+| Labour | `contracts` (on the base), `contract_share` the dial | a worker with three months' tenure gets a contract while there is room; the employer takes the contracted units first, the worker's other hours stay on the market; indexed to bread (`contract_indexation`); notice both ways (`notice_months`, `worker_notice_months`) |
+| Labour | `experience` | months running in one kind of enterprise: levels, output bonus, hired first at equal cost (`experience_months`, `experience_bonus`, `experience_decay_months`) |
+| Land and gold | `public_land` | the government owns the land; ground rents in loaves under the tax levers; excludes the land market and the levy; `public_land_dwelling_exempt_benefit`, `public_land_dwelling_in_benefit` for those on the benefit |
 
 
 ## 5. Parameter tabs
 
 Columns: *type* as in `SimulationParameters`; *default* as in the code (the ladder's `RULES` override many — the Run tab shows the ladder's values beside the code's); *sweep*: **yes** = a numeric or Boolean parameter that can be given a list or a range in a sweep; **list** = a Symbol that can be given a list of options; **no** = structured (a dictionary, a vector, a named tuple) — editable in a form, not swept. The *meaning* column is the comment from the code, shortened.
 
-<!-- generated by scripts/dashboard_tables.py from src/parameters.jl: 328 parameters -->
+<!-- generated by scripts/dashboard_tables.py from src/parameters.jl: 345 parameters -->
 
 ### Village — 41 parameters
 
@@ -189,7 +229,7 @@ Columns: *type* as in `SimulationParameters`; *default* as in the code (the ladd
 | `bank_bailout` | Bool | `true` | yes | a bank whose net worth goes below zero is recapitalised by the government (failure: a future option) |
 | `peer_loan_insurance` | Bool | `false` | yes | SuMSy: every peer loan is insured (premium on repayments to the bank's pool; the pool covers a struck loan, the rest is the lenders' loss) |
 
-### Government — 57 parameters
+### Government — 63 parameters
 
 | parameter | type | default | sweep | meaning |
 |---|---|---|---|---|
@@ -219,6 +259,12 @@ Columns: *type* as in `SimulationParameters`; *default* as in the code (the ladd
 | `basic_income` | Float64 | `0.0` | yes | 14 Oct (a reader's question: does any village with a basic income and a land dividend keep its people alive?): under debt money `demurrage_tax_rate` > 0 runs too — a tax  |
 | `income_cut_start` | Int | `0` | yes | The income reversed (15 October): from `income_cut_start` the income — SuMSy's guaranteed income or the debt village's basic income — is cut to `income_cut_share` of its  |
 | `income_cut_share` | Float64 | `0.5` | yes |  |
+| `public_land` | Bool | `false` | yes | Public land (18 October, Stef — close to Gesell's Freiland): all land is the government's; farms rent the plots they work, bakeries and theatres pay for the ground they s |
+| `public_land_farm_rent_in_breads` | Float64 | `0.0` | yes | per plot a farm works, a month |
+| `public_land_firm_rent_in_breads` | Float64 | `0.0` | yes | per bakery or theatre, a month |
+| `public_land_dwelling_rent_in_breads` | Float64 | `0.0` | yes | per villager, a month |
+| `public_land_dwelling_exempt_benefit` | Bool | `false` | yes | 18 Oct (Stef): the dwelling rent and those on the benefit — exempt them, or add the rent to the benefit (the two policies a debt-money village has; under SuMSy the divide |
+| `public_land_dwelling_in_benefit` | Bool | `false` | yes |  |
 | `government_reserve_in_rounds` | Int | `0` | yes | Government reserve (20 September 2026). 0 = the rule until now: whatever tax exceeds spending sits on the government's balance (under SuMSy it pays demurrage there, and i |
 | `government_expense_window` | Int | `12` | yes |  |
 | `surplus_redistribution_share` | Float64 | `0.0` | yes |  |
@@ -292,7 +338,7 @@ Columns: *type* as in `SimulationParameters`; *default* as in the code (the ladd
 | `wage_ceiling_in_breads` | Float64 | `0.0` | yes | incomes policy: no employer pays more than this many loaves per full-time round of work (0 = off); binds bids and the surplus-to-wages rule |
 | `fixed_prices` | Bool | `false` | yes | Fixed prices (26 September, Stef's question): every transaction at the starting price vector — no bargaining, no adaptation; only quantities move. Does a village eat when |
 
-### Labour — 30 parameters
+### Labour — 41 parameters
 
 | parameter | type | default | sweep | meaning |
 |---|---|---|---|---|
@@ -311,7 +357,18 @@ Columns: *type* as in `SimulationParameters`; *default* as in the code (the ladd
 | `wage_threshold` | Bool | `false` | yes | Wages rise only when at least `unmet_demand_share` of the labour employers wanted went unfilled (25 September; false = the old rule, any shortfall raises every sold-out w |
 | `wage_cut_maximum` | Float64 | `1.0` | yes | Downward wage rigidity (27 September, Stef): a worker lowers the asking wage by at most this share a month, whatever the rules for other goods say (nominal wages hardly f |
 | `wage_floor_months` | Int | `1` | yes | How long the floor outlasts a job (28 September): a worker keeps refusing a cut for this many months after last being paid (1 = only while continuously employed). |
-| `employer_loyalty` | Bool | `false` | yes | Loyalty and notice (3 October, Stef). `employer_loyalty`: an employer takes on last month's workers before strangers. `notice_months` > 0: a worker who has worked `notice |
+| `joint_labour_market` | Bool | `false` | yes | Loyalty and notice (3 October, Stef). `employer_loyalty`: an employer takes on last month's workers before strangers. `notice_months` > 0: a worker who has worked `notice |
+| `contracts` | Bool | `false` | yes | Labour contracts (17 October, Stef): a worker who has worked `contract_tenure_months` running for an employer gets a contract if the employer still has room under `contra |
+| `contract_share` | Float64 | `1.0` | yes |  |
+| `contract_tenure_months` | Int | `3` | yes |  |
+| `worker_notice_months` | Int | `1` | yes |  |
+| `worker_leave_margin` | Float64 | `0.1` | yes |  |
+| `contract_indexation` | Float64 | `1.0` | yes | 17 Oct (Stef): the contract is a floor — the employer takes at least the contracted units, the worker's remaining hours go to the market as a temp's; the contract wage fo |
+| `experience` | Bool | `false` | yes | Experience (17 October, Stef): months worked running for the same kind of enterprise build experience — level 2 after `experience_months[1]`, level 3 after `experience_mo |
+| `experience_months` | Tuple{Int, Int} | `(3, 9)` | no |  |
+| `experience_bonus` | Tuple{Float64, Float64} | `(0.1, 0.2)` | no |  |
+| `experience_decay_months` | Int | `3` | yes |  |
+| `employer_loyalty` | Bool | `false` | yes |  |
 | `notice_tenure_months` | Int | `6` | yes |  |
 | `notice_months` | Int | `0` | yes |  |
 | `food_emergency_share` | Float64 | `0.0` | yes | The food emergency (30 September, Stef): a village does not starve because bakers and workers cannot agree a wage. When last month's bread fell short of what the village  |
@@ -408,7 +465,7 @@ Columns: *type* as in `SimulationParameters`; *default* as in the code (the ladd
 | `land_price_rent_multiple` | Float64 | `15.0` | yes |  |
 | `land_units_per_landowner_override` | Int | `0` | yes | 0 = spec formula floor((n − p)/(p − 1)) |
 | `land_levy_dividend` | Bool | `false` | yes |  |
-| `levy_pass_through` | Bool | `false` | yes | Gesell's objection to George (15 October): when true, a landowner will not let a plot for less than the levy it costs him (the levy rate × the plot's value) — the levy pa |
+| `levy_pass_through` | Bool | `false` | yes | Gesell's objection to George (15 October; 16 Oct: on the asked rent, not as a refusal — a hard floor let no land and starved the village in month 2): when true, a landown |
 | `land_loans` | Bool | `false` | yes | land may be bought on credit (collateral: the land itself, seized after 2 rounds of arrears) |
 | `land_sales` | Symbol | `:forced` | list | :forced (spec: any buyer with surplus takes a unit) \| :distress_only \| :reservation (seller sells only above the value of the rent stream) |
 | `land_reservation_multiple` | Float64 | `100.0` | yes | :reservation, debt money: rounds of rent a landowner wants for a unit; SuMSy uses rent / demurrage_rate |
@@ -452,7 +509,6 @@ Columns: *type* as in `SimulationParameters`; *default* as in the code (the ladd
 | `stationary_tolerance` | Float64 | `0.01` | yes |  |
 | `seed` | Int | `1` | yes |  |
 
-
 ## 6. Validation and consistency rules
 
 - A parameter is editable only when its governing switch (§4) is on; a sweep over a disabled parameter is refused.
@@ -466,16 +522,17 @@ Columns: *type* as in `SimulationParameters`; *default* as in the code (the ladd
 - `notice_months` > 0 without `employer_loyalty` is allowed but warned: without continuity of employment the notice rule never fires.
 - Seeds: 1 to 50; rounds: 12 to 600.
 - 16 Oct: `basic_income` > 0 with `monetary_system = :sumsy` is refused (the SuMSy income is `guaranteed_income`). `land_levy_dividend` requires `land_levy`. `levy_pass_through` requires `land_levy`. `community_theatres` ≤ `number_of_theatres`. `income_cut_share` ∈ [0, 1]; `income_cut_start` ≤ `maximum_rounds`. `cash_hoarder_share` + `greed_share` + `nonworking_share` ≤ 1. `greed_month`, `cash_hoarder_month` < `maximum_rounds`. `plan_adjustment_months` ≥ 1.
+- 18 Oct: `public_land` with `land_levy` or `land_pricing = :market` is refused (an ArgumentError in the model). `contract_share`, `contract_indexation` ∈ [0, 1]; `contract_tenure_months`, `worker_notice_months` ≥ 1; `experience_months` increasing; `experience_bonus` ≥ 0. `public_land_dwelling_exempt_benefit` and `public_land_dwelling_in_benefit` are alternatives.
 - Warnings: `firms_plan_on_sales` without `plan_within_capacity` lets one bakery be planned beyond its ovens; `public_debt_limit` with `basic_income` cuts the income when it binds (EU8); `fixed_prices` with `distress_pricing` makes the latter inert.
 
 
 ## 7. Run tab
 
-Village size and seeds, months, the compare toggle, and the **ladder preset picker**: every step of `scripts/ladder_definition.jl` (113 steps and 183 village configurations as of 16 October) is a preset, shown with its one-line description and the parameters it sets above the base. Choosing a step fills both sides (a side the step leaves empty is not run). A **diff** view shows what the current configuration differs in from the chosen step. Run, cancel, progress, estimated time. The model version (`MODEL_VERSION`: the date the version was made, then .0, .1, …) is shown with every run; results from another version are never mixed in. The test suite runs once per version and code (a fingerprinted marker), and the Run tab shows whether it has.
+Village size and seeds, months, the compare toggle, and the **ladder preset picker**: every step of `scripts/ladder_definition.jl` (121 steps and 197 village configurations as of 18 October) is a preset, shown with its one-line description and the parameters it sets above the base. Choosing a step fills both sides (a side the step leaves empty is not run). A **diff** view shows what the current configuration differs in from the chosen step. Run, cancel, progress, estimated time. The model version (`MODEL_VERSION`: the date the version was made, then .0, .1, …) is shown with every run; results from another version are never mixed in. The test suite runs once per version and code (a fingerprinted marker), and the Run tab shows whether it has. A **variant ladder** runs every step again with one parameter changed (today `CONTRACT_SHARE=0.8`, the contracts dial) into its own folder and summary; the dashboard offers the variant as a toggle and shows the two ladders side by side.
 
-## 8. Sweeps tab
+## 8. Series tab (sweeps, ladders and batches)
 
-A sweep is a preset (or the current configuration) plus up to three **dimensions**, each a parameter with a list of values (numeric: a list or a range with a step; Boolean: both; Symbol: a list of options). The sweep runs the Cartesian product, each cell with the chosen seeds, on both sides if compare is on. Dimensions must pass §6 for every value. The sweeps the ladder already carries are offered as templates: the overpay dial (1.1, 1.2, 1.3, 2.0), the wage floor (1, 3 months), the employer margin (0.05, 0.2, 0.25), the parking fee with matching starting prices (2, 3, 4 %), public employment (10–50 %), the debt ceiling (0.5, 1.0 × output), the levy margin, the benefit (0, 1, 2 loaves), the gold stock. A sweep's results open in the Results tab as a grid with one chosen measure per cell, and any cell opens as a full run. Templates added since 5 October: the sharing margin (M0: 0, 5, 10, 20 %), the labour rules (Y8: floor three months, no loyalty, no notice), the spoilage acceptance and the overpay ceiling on the greedy village (S3-SP, S3-W), the debt-money twins (DGI8, DD8, DDL8, DDGL8 at 1.5 and 3.5 %), the debt ceiling with a basic income (EU8, D8-60), the income reversed (RV8), cash hoarders at 1 and 10 % (HC8), the levy passed on (LPT8, DDL8-PT), fixed against free prices (V8/V8-P, U8/U8-P, UP8/UP8-P).
+A sweep is a preset (or the current configuration) plus up to three **dimensions**, each a parameter with a list of values (numeric: a list or a range with a step; Boolean: both; Symbol: a list of options). The sweep runs the Cartesian product, each cell with the chosen seeds, on both sides if compare is on. Dimensions must pass §6 for every value. The sweeps the ladder already carries are offered as templates: the overpay dial (1.1, 1.2, 1.3, 2.0), the wage floor (1, 3 months), the employer margin (0.05, 0.2, 0.25), the parking fee with matching starting prices (2, 3, 4 %), public employment (10–50 %), the debt ceiling (0.5, 1.0 × output), the levy margin, the benefit (0, 1, 2 loaves), the gold stock. A sweep's results open in the Results tab as a grid with one chosen measure per cell, and any cell opens as a full run. Templates added since 5 October: the sharing margin (M0: 0, 5, 10, 20 %), the labour rules (Y8: floor three months, no loyalty, no notice), the spoilage acceptance and the overpay ceiling on the greedy village (S3-SP, S3-W), the debt-money twins (DGI8, DD8, DDL8, DDGL8 at 1.5 and 3.5 %), the debt ceiling with a basic income (EU8, D8-60), the income reversed (RV8), cash hoarders at 1 and 10 % (HC8), the levy passed on (LPT8, DDL8-PT), fixed against free prices (V8/V8-P, U8/U8-P, UP8/UP8-P), the contracts dial (NJ8, J8-50, the 0.8 ladder), experience (XP8, XPN8), public land and its dwelling rent (PL8, PL8-0, PL8-X, PL8-B).
 
 
 ## 9. Results tab
@@ -494,14 +551,33 @@ Grouped like the parameter tabs, so that each part of the model has its own pane
 
 Every panel's data is downloadable as CSV with the run's parameter set attached.
 - **Behaviour**: the greedy (when chosen, how many), cash hoarders and the money they hold, those not working, greedy loaves.
+- **Labour contracts and experience**: contracted workers, contracts given and ended (by whom), notices both ways, experienced workers by level.
+- **Public land**: ground rents by payer, the plots allotted.
 
 
 ## 10. Presets
 
-The ladder's steps (§7) and the named villages of the report: the best debt village, the productive village (V8), the levy-and-dividend village (SuMSy from step 8), the fixed-price twins (P), the stress tests (S), the full-money-stock starts (E). Presets are versioned with the model; a preset saved under an older version is flagged. Added: the debt village with SuMSy's arrangement (DDGL8), the euro-rule village (EU8).
+The ladder's steps (§7) and the named villages of the report: the best debt village, the productive village (V8), the levy-and-dividend village (SuMSy from step 8), the fixed-price twins (P), the stress tests (S), the full-money-stock starts (E). Presets are versioned with the model; a preset saved under an older version is flagged. Added: the debt village with SuMSy's arrangement (DDGL8), the euro-rule village (EU8), public land (PL8), the village without contracts (NJ8).
 
-## 11. Change log
+## 11. The result as a picture (Basic view, the game)
+
+The Basic view answers one question first: **who is alive after ten years, and how do they live** — the two villages side by side as 512 dots that die out as the months run, with the four numbers the report leads with underneath (alive, out of work, the price of bread, the government's debt) and the rich–poor gap in meals with the poorest tenth's holding. Then the same for the ten seeds (the band). A player can stop the clock at any month and look at that month's village (the "what is there" panels of the report). A **score** for the game, if one is wanted, is the report's own measure in a different dress: everyone fed, nobody idle, nothing owed, the poorest tenth holding a month of meals — four ticks, shown as such, never summed into one number.
+
+## 12. Tutorial and tooltips
+
+**The tutorial** opens the first time and can be skipped at once and reopened from the help menu. Six steps, each a sentence and a click: (1) the village and its people; (2) the two moneys, in one paragraph each; (3) run the village as it is and watch who lives; (4) change one lever (the tutorial suggests the benefit) and run again; (5) read the result: alive, work, bread, debt, the gap; (6) save the configuration and add it to a series. Each step highlights the control it talks about. The tutorial runs on the Basic view; Policy and Expert get a shorter one about tabs, switches, presets and sweeps.
+
+**Tooltips in two registers.** Every parameter has a tooltip; the register follows the view, and either can be switched to from the tooltip itself.
+- **Plain** (Basic and Policy): what the lever is in the village, in the words of the report, one or two sentences; what turning it up or down tends to do, with the ladder's own numbers where there are any; the default and the ladder's range. No model names. Example, `unemployment_fee_in_breads`: *"What the village pays someone without work each month, counted in loaves. The debt village pays two, the SuMSy village one on top of its income. Two loaves keeps the unemployed alive and is borrowed every month; less than two and people starve (the austerity village lost forty-three more)."*
+- **Expert**: the parameter's name, type, default and range; the mechanism it enters (which rule, which step of the month); its interactions (which switch governs it, what it excludes); the cells of the ladder that vary it. Example, the same parameter: *"`unemployment_fee_in_breads` (Float64, 2.0 debt / 1.0 SuMSy). Promised by the government to each unemployed villager at step C (priority 2) as fee × expected bread price × spending_scale; scaled by a debt ceiling (`public_debt_limit`) and by `austerity_*`; under SuMSy paid on top of the guaranteed income; see A8, D8, I8 (the benefit fixed in money)."*
+- **Where the text comes from.** The expert text is generated from `src/parameters.jl` (the comments beside each parameter, kept in that register) by `scripts/dashboard_tables.py`, which already produces §5. The plain text is written by hand, lever by lever, starting with the Basic view's twenty-five and the Policy view's sixty; the rest show the expert text in both registers until written. The report's glossary is the source for the plain register's vocabulary.
+- **Two rules for the plain register.** A tooltip states what the model does, never what the reader should want; and where the ladder has a number, the tooltip gives it, so that a player's expectations are set by the village's own history rather than by intuition.
+
+## 13. Change log
 
 - 18 September 2026 — first version (cooperative forms, membership contribution, random streams).
 - 5 October 2026 — version 2: regrouped into tabs with switches and sweeps; all parameters added since 18 September: settlement by invoicing and the cash-flow liquidation test; founding equity and distinct founders; the protected minimum; the land market (price discovery, best-bid sales, valuation from comparable sales, the levy and dividend); the wage rules (threshold, floor, memory, emergency, loss tolerance, employer margin, loyalty, notice); fixed prices; the standard of living; the minimum offer and volunteer hours; those not working for reasons of their own; gold; the benefit's indexation and austerity; the debt ceiling; the owners' guarantee; interest from equity and the capital requirement; the bank rate following inflation; restarts; entry; the tax-scale floor; the public investment; the bond coupon; stopping rules.
 - 16 October 2026 — version 3: 328 parameters (29 added since 5 October); the tables generated by `scripts/dashboard_tables.py`; switches, validation rules, sweep templates and results added for the labour-for-bread rule, the debt-money twins (demurrage tax on debt money, basic income, levy dividend, income cut), the euro debt rule, pricing under greed and distress, cost cutting, gradual planning on sales, the premium loaf, cash hoarders, greed chosen later, volunteers on any enterprise, community theatres, Gesell's pass-through; the version scheme and the once-per-version test suite.
+- 18 October 2026 — version 4: 345 parameters (17 added since 16 October): the joint labour market, contracts (on the base, with the dial and the 0.8 variant ladder), experience, public land and the dwelling-rent policies; the variant ladder in the Run tab.
+- 18 October 2026 — version 5: the purpose widened (researcher, policy maker, player); configurations (a parameter set per side over a shared base), series (named batches, the ladder as the shipped one), three views (Basic, Policy, Expert), the result as a picture and a four-tick score, the tutorial, tooltips in two registers with their sources.
+- 18 October 2026 — version 5.1: storage in DuckDB (Julia client), the tables, sharing by object and separately for parameters (or a subset) and results, the public gallery.
