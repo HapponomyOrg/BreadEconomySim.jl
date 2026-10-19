@@ -103,9 +103,15 @@ part_file(job) = joinpath(parts_dir(job.N, job.settlement), "$(safe(job.rung))__
 
 # ---- 2. the jobs ------------------------------------------------------------------------------------------------------
 using Distributed
-JOBS > 1 && nprocs() < JOBS + 1 && addprocs(JOBS - nprocs() + 1; exeflags = ["--project=$ROOT", "-O1"])
+# 18 Oct: a worker retains about 0.6 GB per 120-month run after a full GC (a leak not yet traced — not in any module-level
+# container of BreadEconomySim, EconoSim or Agents). Two mitigations: workers start with a heap-size hint, so Julia collects
+# earlier; and the batch runs in chunks, with the workers replaced between chunks (`WORKER_RECYCLE` jobs per worker per chunk).
+const HEAP_HINT = get(ENV, "HEAP_HINT", "4G")
+const WORKER_RECYCLE = parse(Int, get(ENV, "WORKER_RECYCLE", "20"))
+start_workers!() = (JOBS > 1 && nprocs() < JOBS + 1 && addprocs(JOBS - nprocs() + 1; exeflags = ["--project=$ROOT", "-O1", "--heap-size-hint=$HEAP_HINT"]); nothing)
+start_workers!()
 
-@everywhere begin
+const WORKER_SETUP = quote
     using BreadEconomySim, DataFrames, CSV
     include(joinpath($ROOT, "scripts", "ladder_definition.jl"))
     const LADDER_CACHE = Dict{Tuple{Int, Int, Symbol}, Any}()
@@ -135,6 +141,9 @@ JOBS > 1 && nprocs() < JOBS + 1 && addprocs(JOBS - nprocs() + 1; exeflags = ["--
         return line
     end
 end
+# `using` cannot sit inside a function, so the worker set-up is a quoted block evaluated on the targets (all processes at first, the fresh workers on each recycle)
+setup_workers!(targets = procs()) = (Distributed.remotecall_eval(Main, targets, WORKER_SETUP); nothing)
+setup_workers!()
 
 include(joinpath(ROOT, "scripts", "ladder_definition.jl"))
 jobs = NamedTuple[]
@@ -175,8 +184,20 @@ end
 todo = filter(j -> !isfile(j.file), jobs)
 println("\n$(length(jobs)) runs in total, $(length(jobs) - length(todo)) already done, $(length(todo)) to go, on $(max(nworkers(), 1)) worker(s).\n"); flush(stdout)
 
-results = pmap(todo; on_error = e -> "FAILED: " * sprint(showerror, e)) do job
-    run_job(job)
+results = String[]
+chunk = max(WORKER_RECYCLE * max(nworkers(), 1), 1)
+for (c, lo) in enumerate(1:chunk:length(todo))
+    part = todo[lo:min(lo + chunk - 1, end)]
+    pool = WorkerPool(workers())                                           # a pool of the workers as they are now: the default pool keeps the replaced ones and hangs
+    append!(results, pmap(pool, part; on_error = e -> "FAILED: " * sprint(showerror, e)) do job
+        run_job(job)
+    end)
+    if lo + chunk <= length(todo) && nworkers() > 1                       # 18 Oct: fresh workers for the next chunk (the leak)
+        println("… $(length(results)) of $(length(todo)) done; replacing the workers (memory)."); flush(stdout)
+        rmprocs(workers()); println("   old workers removed; nprocs = $(nprocs())"); flush(stdout)
+        start_workers!(); println("   new workers started: $(workers())"); flush(stdout)
+        setup_workers!(workers()); println("   new workers set up"); flush(stdout)
+    end
 end
 failed = count(startswith("FAILED"), results)
 for (job, line) in zip(todo, results)
@@ -260,7 +281,15 @@ function summarise(rounds::DataFrame, N::Int)
     runs.debt_pct_gdp = [(ismissing(g) || g <= 0) ? missing : 100 * d / (12 * g) for (d, g) in zip(runs.government_debt, runs.gdp)]   # a collapsed run has no last-year rows
     runs.shortfall = runs.outlay .- runs.revenue
     m(x) = (v = collect(skipmissing(x)); isempty(v) ? missing : mean(v))          # means over the runs that have the figure
+    # 18 Oct (roadmap step 3): distributions beside the means — median, quartiles and the 5th–95th band — for the measures the
+    # report quotes, and the public debt per head on two bases (per survivor and per starting villager)
+    q(p) = x -> (v = collect(skipmissing(x)); isempty(v) ? missing : quantile(v, p))
+    dist(col) = [col => q(0.5) => Symbol(col, :_median), col => q(0.25) => Symbol(col, :_q25), col => q(0.75) => Symbol(col, :_q75), col => q(0.05) => Symbol(col, :_p5), col => q(0.95) => Symbol(col, :_p95)]
+    runs.public_debt_per_survivor = runs.government_debt ./ max.(runs.persons_alive, 1)
+    runs.public_debt_per_villager = runs.government_debt ./ N
     combine(groupby(runs, [:rung, :system]),
+        dist(:persons_alive)..., dist(:unemployed)..., dist(:bread_price)..., dist(:government_debt)..., dist(:wealth_gap_meals)..., dist(:wealth_bottom10_meals)..., dist(:bread_price_change_per_year)...,
+        :public_debt_per_survivor => m => :public_debt_per_survivor, :public_debt_per_villager => m => :public_debt_per_villager,
         nrow => :runs, :collapsed => sum => :runs_collapsed,
         :persons_alive => m => :alive_at_end, :persons_alive => minimum => :alive_worst,
         [:persons_alive, :collapsed] => ((a, c) -> count(i -> !c[i] && a[i] >= N * 15 / 16, eachindex(a))) => :runs_whole,   # a collapsed village is never whole (review 5)
