@@ -4,6 +4,7 @@
 #     julia --project=. scripts/run_all.jl
 #
 # What it does, in order:
+#   SHARD=1/2 and SHARD=2/2 split the runs between two machines (19 Oct); merge the part folders, then run once more for the summary.
 #   CONTRACT_SHARE=0.8 runs the whole ladder again with the contracts dial at 0.8, into its own folder and summary (18 Oct).
 #   1. installs and precompiles the packages (Pkg.instantiate), and runs the test suite unless SKIP_TESTS=1 or it already
 #      passed for this MODEL_VERSION and this code (results/tests_passed_<version>.txt holds the code's fingerprint);
@@ -51,7 +52,7 @@ get(ENV, "UPDATE_ECONOSIM", "0") == "1" && (println("Updating EconoSim.jl to the
 println("Installing and precompiling packages (first time only takes a while)…"); flush(stdout)
 Pkg.instantiate(); Pkg.precompile()
 
-const MODEL_VERSION = "2026-10-19.2"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
+const MODEL_VERSION = "2026-10-19.3"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
 
 # 16 Oct (Stef): a version's test suite is run once. When it passes, a marker is written for this version together with a
 # fingerprint of the code it tested (src/, test/, scripts/ladder_definition.jl); a resumed or repeated run of the same version
@@ -182,6 +183,16 @@ let seen = Dict{String, Any}(), copied = 0
     copied > 0 && println("$(copied) mirror cells copied from identical configurations.")
 end
 todo = filter(j -> !isfile(j.file), jobs)
+# 19 Oct: several machines on one ladder — SHARD="1/2" on the first machine, SHARD="2/2" on the second: each takes every second job
+# (by the job's place in the full list, so the shares stay the same however many are already done). Push both machines' part
+# files to the same folder; running run_all.jl once more on the merged folder finds every run done and writes the summary.
+const SHARD = get(ENV, "SHARD", "")
+if !isempty(SHARD)
+    k, n = parse.(Int, split(SHARD, "/"))
+    (1 <= k <= n) || error("SHARD must be k/n with 1 ≤ k ≤ n, got $SHARD")
+    todo = filter(j -> (j.index - 1) % n == k - 1, todo)
+    println("Shard $k of $n: this machine takes $(length(todo)) of the runs still to do."); flush(stdout)
+end
 println("\n$(length(jobs)) runs in total, $(length(jobs) - length(todo)) already done, $(length(todo)) to go, on $(max(nworkers(), 1)) worker(s).\n"); flush(stdout)
 
 results = String[]

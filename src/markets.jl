@@ -567,7 +567,7 @@ end
 # ---- grain market (spec v1 §4.6) ---------------------------------------------------
 
 function grain_market!(model)
-    rng = stream(model, :grain)
+    rng = stream(model, :grain); p = parameters(model)
     bakeries = stable_shuffle(rng, enterprises(model, :bakery))
     for b in bakeries
         b.market[:grain].wanted = max(b.production_target - grain_units(b), 0.0)
@@ -575,7 +575,9 @@ function grain_market!(model)
     for f in enterprises(model, :farm)
         f.market[:grain].offered = grain_units(f)
     end
-    active = [b for b in bakeries if b.market[:grain].wanted > 1e-9]
+    for round_ in 1:max(p.market_rounds, 1)                                # 19 Oct: rounds within the month
+    active = [b for b in bakeries if b.market[:grain].got < b.market[:grain].wanted - 1e-9]
+    isempty(active) && break
     while !isempty(active)
         for b in copy(active)
             if b.market[:grain].got >= b.market[:grain].wanted - 1e-9
@@ -602,6 +604,9 @@ function grain_market!(model)
             bought || filter!(x -> x !== b, active)
         end
     end
+    round_ < p.market_rounds || break
+    next_market_round!(model, enterprises(model, :farm), :grain) || break
+    end
     return nothing
 end
 
@@ -609,6 +614,26 @@ end
 
 sellable_bread(b::Enterprise) = bread_units(b)
 oldest_bread_age(b::Enterprise) = isempty(b.bread) ? 0 : maximum(i.age for i in b.bread)
+
+"""
+    next_market_round!(model, sellers, good)
+
+Between the month's market rounds (19 October): each seller with stock of `good` left lowers his ask by the price rule's step,
+not below his floor, and his negotiations for `good` this month are struck afresh. Returns whether any seller has stock left.
+"""
+function next_market_round!(model, sellers, good::Symbol)
+    p = parameters(model); left = false
+    for s in sellers
+        r = s.market[good]
+        r.offered - r.sold >= 1 - 1e-9 || continue
+        left = true
+        floor_ = seller_reservation(model, s, good)
+        s.ask[good] = max(round(s.ask[good] * (1 - p.ask_decrease_after_partial_sale), digits = 4), floor_)
+        for k in collect(keys(s.negotiated)); k[1] == good && delete!(s.negotiated, k); end
+    end
+    left && log_event!(model, :market_round; good = good)
+    return left
+end
 
 """Buy one bread from cash — savings may be used, no credit; returns true on success."""
 function buy_extra_bread!(model, buyer::Person, purpose::Symbol; tier::Bool = false)
@@ -715,9 +740,12 @@ function bread_market!(model)
         alive_n = max(length(persons(model)), 1)
         model.ration_this_round = max(p.breads_per_meal, min(p.ration_breads_per_person, floor(Int, sum(b.market[:bread].offered for b in enterprises(model, :bakery); init = 0.0) / alive_n)))
     end
-    for buyer in stable_shuffle(rng, persons(model))
+    for round_ in 1:max(p.market_rounds, 1)                                # 19 Oct: rounds within the month
+    buyers = round_ == 1 ? stable_shuffle(rng, persons(model)) : stable_shuffle(rng, [w for w in persons(model) if bread_units(w) < meal - 1e-9 && cash(w) > 1e-6])
+    round_ > 1 && isempty(buyers) && break
+    for buyer in buyers
         if bread_units(buyer) >= meal - 1e-9
-            gluttony_and_stocking!(model, buyer); continue
+            round_ == 1 && gluttony_and_stocking!(model, buyer); continue
         end
         buyer.market[:bread].wanted = meal - bread_units(buyer)
         sellers = sort([b for b in enterprises(model, :bakery) if sellable_bread(b) >= 1 - 1e-9]; by = b -> member_ask(model, b, buyer, :bread))
@@ -750,7 +778,10 @@ function bread_market!(model)
             end
             done && break
         end
-        gluttony_and_stocking!(model, buyer)
+        round_ == 1 && gluttony_and_stocking!(model, buyer)
+    end
+    round_ < p.market_rounds || break
+    next_market_round!(model, enterprises(model, :bakery), :bread) || break
     end
     return nothing
 end
@@ -774,16 +805,9 @@ function ticket_market!(model)
     for t in theatres
         t.market[:ticket].offered = min((effective_labour(model, t) + t.volunteer_labour) * p.customers_per_labour_unit, ticket_capacity(model, t))   # 4 Oct: volunteers staff what the paid hiring could not
     end
-    for w in stable_shuffle(rng, persons(model))
-        tp = expected_price(model, :ticket)
-        afford = floor(Int, max(cash(w) - buffer_target(model, w), 0.0) / tp)
-        afford >= 1 || continue
-        rand(rng) < p.entertainment_propensity || continue
-        w.greed != :none && continue
-        wanted = p.standard_of_living_tickets > 0 ? min(afford, p.standard_of_living_tickets) : min(afford, stable_range(rng, 1:p.max_tickets_per_person))   # 27 Sept
-        w.market[:ticket].wanted = wanted
-        bought = 0
-        for _ in 1:wanted
+    function buy_tickets!(w, n)
+        bought = 0; wanted = n
+        for _ in 1:n
             open = [t for t in theatres if t.market[:ticket].offered - t.market[:ticket].sold >= 1 - 1e-9 && !(p.no_self_service && t.id in w.worked_for)]
             if isempty(open)
                 foreach(t -> (t.market[:ticket].unmet_demand = true; t.market[:ticket].unmet_units += wanted - bought), theatres); break
@@ -803,6 +827,23 @@ function ticket_market!(model)
             end
             done || break
         end
+        return bought
+    end
+    for w in stable_shuffle(rng, persons(model))
+        tp = expected_price(model, :ticket)
+        afford = floor(Int, max(cash(w) - buffer_target(model, w), 0.0) / tp)
+        afford >= 1 || continue
+        rand(rng) < p.entertainment_propensity || continue
+        w.greed != :none && continue
+        wanted = p.standard_of_living_tickets > 0 ? min(afford, p.standard_of_living_tickets) : min(afford, stable_range(rng, 1:p.max_tickets_per_person))   # 27 Sept
+        w.market[:ticket].wanted = wanted
+        buy_tickets!(w, wanted)
+    end
+    for round_ in 2:max(p.market_rounds, 1)                                 # 19 Oct: rounds within the month — those who wanted seats and did not get them
+        next_market_round!(model, theatres, :ticket) || break
+        short = [w for w in stable_shuffle(rng, persons(model)) if w.market[:ticket].got < w.market[:ticket].wanted]
+        isempty(short) && break
+        for w in short; buy_tickets!(w, Int(w.market[:ticket].wanted - w.market[:ticket].got)); end
     end
     return nothing
 end

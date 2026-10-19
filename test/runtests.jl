@@ -1781,6 +1781,23 @@ end
     @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 24, BEH..., own_market_planning = true))) < 1e-6
 end
 
+
+@testset "market rounds within the month (19 October 2026)" begin
+    mk(r) = create_bread_economy(SimulationParameters(; seed = 1, BEH..., market_rounds = r, maximum_rounds = 4))
+    for r in (1, 4)
+        m = mk(r); for _ in 1:2; B.econo_step!(m, 1); end
+        for b in B.enterprises(m, :bakery); b.ask[:bread] = 1000.0; end                      # every baker asks far above any bid
+        B.econo_step!(m, 1); d = round_data(m)
+        if r == 1
+            @test d.bread_sold[end] <= 1e-9 || d.hungry[end] > 0                               # one round: the shelf stays full
+        else
+            @test d.bread_sold[end] > 0                                                         # four rounds: the asks come down and bread is sold
+            @test all(b.ask[:bread] < 1000.0 for b in B.enterprises(m, :bakery))
+        end
+    end
+    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., market_rounds = 4))) < 1e-6
+end
+
 @testset "cooperative forms (14 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     params(m) = B.parameters(m)
