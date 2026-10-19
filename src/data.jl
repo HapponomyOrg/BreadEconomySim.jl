@@ -101,6 +101,7 @@ function record!(model)
         land_households_share = (let tot = sum(a.land for a in agents_by_id(model) if a.alive; init = 0); tot > 0 ? sum(w.land for w in ps; init = 0) / tot : NaN end),
         gini_wealth_attributed = (let pool = sum(book_value(model, e) for e in model.enterprise_list if e.alive && is_producer(e) && isempty(e.shares) && isempty(e.members); init = 0.0)
             isempty(ps) ? NaN : gini([net_wealth(model, w) + pool / length(ps) for w in ps]) end),
+        intervention = model.intervention, intervention_months = model.intervention_months,
         basic_income = model.basic_income_this_round, levy_dividend = model.levy_dividend_this_round, ground_rent = model.ground_rent_this_round,
         premium_loaves = model.premium_loaves_this_round, premium_revenue = model.premium_revenue_this_round, premium_labour = model.premium_labour_this_round,
         gold_price = model.gold_price, gold_valuation = model.gold_valuation, gold_sold = model.gold_sold_this_round,
@@ -286,6 +287,7 @@ function record_and_adapt!(model)
         e.revenue_this_round = 0.0
     end
     roll_patronage_window!(model)
+    update_intervention!(model)                                         # 19 Oct: the emergency rule's state, from this month's row
     adapt_prices!(model)
     adapt_targets!(model)
     distress_cost_cutting!(model)                                      # 14 Oct: a firm near failure cuts to what it sold

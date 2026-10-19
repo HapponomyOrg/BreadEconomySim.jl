@@ -124,7 +124,7 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
     props[:entry_margin_history] = OrderedDict{Symbol, Vector{Float64}}()
     props[:entry_last] = OrderedDict{Symbol, Int}()
     props[:refound_last] = OrderedDict{Symbol, Int}()
-    props[:labour_shortfall_this_round] = 0.0; props[:public_land_total] = parameters.public_land ? land_units_per_landowner(parameters) * parameters.number_of_landowners : 0; props[:ground_rent_this_round] = 0.0; props[:basic_income_this_round] = 0.0; props[:levy_dividend_this_round] = 0.0
+    props[:intervention] = false; props[:intervention_months] = 0; props[:fed_months] = 0; props[:labour_shortfall_this_round] = 0.0; props[:public_land_total] = parameters.public_land ? land_units_per_landowner(parameters) * parameters.number_of_landowners : 0; props[:ground_rent_this_round] = 0.0; props[:basic_income_this_round] = 0.0; props[:levy_dividend_this_round] = 0.0
     props[:premium_loaves_this_round] = 0.0; props[:premium_revenue_this_round] = 0.0; props[:premium_labour_this_round] = 0.0
     props[:gold_price] = parameters.gold_initial_price_in_breads * parameters.initial_prices[:bread] * parameters.initial_price_multiplier
     props[:gold_valuation] = props[:gold_price]; props[:gold_sales_log] = Tuple{Int, Float64}[]; props[:gold_sold_this_round] = 0.0

@@ -51,7 +51,7 @@ get(ENV, "UPDATE_ECONOSIM", "0") == "1" && (println("Updating EconoSim.jl to the
 println("Installing and precompiling packages (first time only takes a while)…"); flush(stdout)
 Pkg.instantiate(); Pkg.precompile()
 
-const MODEL_VERSION = "2026-10-18.0"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
+const MODEL_VERSION = "2026-10-19.2"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
 
 # 16 Oct (Stef): a version's test suite is run once. When it passes, a marker is written for this version together with a
 # fingerprint of the code it tested (src/, test/, scripts/ladder_definition.jl); a resumed or repeated run of the same version

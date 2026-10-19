@@ -561,6 +561,21 @@ Base.@kwdef struct SimulationParameters
     # `plan_small_change` of the current share are followed at once.
     plan_adjustment_months::Int = 3
     plan_small_change::Float64 = 0.05
+    # 19 Oct: no firm's planned share falls below this fraction of an equal share (0.25: a quarter of 1/n) — with contracts on the
+    # base, a firm whose share shrank kept paying its contracted hands through the notice, borrowed, was closed for uncovered debt,
+    # and its workers went to the winner: every kind collapsed to one firm (step 8, both moneys), and the greedy SuMSy villages
+    # starved on one farm. 0 = no floor.
+    plan_share_floor::Float64 = 0.0
+    # Own-market planning (19 October, Stef): each firm plans on its own market — next month's target follows what it sold, at
+    # the gradual pace above (a third, two thirds, all); a firm that sold out plans `plan_step` more; nothing is handed down from a
+    # village plan. The village plan survives only as the **emergency rule**: when bread was short for want of production (the
+    # bakeries baked less than the village's meals and people went hungry — hunger for want of money is an outcome, not an
+    # emergency), the village's need is planned and split equally among the bakeries, as a government steps in; it stays in force
+    # until the village has baked enough for `intervention_exit_months` months running. The first two months plan on the village's
+    # need (no sales yet).
+    own_market_planning::Bool = false
+    plan_step::Float64 = 0.1
+    intervention_exit_months::Int = 2
     # A premium loaf (11 October, Stef): value that grows without volume growing. A villager with money to spare beyond the cushion
     # and `premium_buyer_margin_in_meals` meals buys the month's bread premium instead of plain — the same loaves at `premium_markup`
     # times the price, no more time to eat them; the bakery hires `premium_labour_per_loaf` extra units at the going wage for each.

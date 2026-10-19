@@ -292,6 +292,52 @@ function bakery_capacity_loaves(model)
 end
 
 """
+    update_intervention!(model)
+
+The emergency rule (19 October, Stef): an intervention begins when bread was short for want of production — the bakeries baked
+less than the village's meals and people went hungry; hunger with bread left on the shelves is want of money, an outcome, not an
+emergency. It ends after `intervention_exit_months` months running in which the village baked enough.
+"""
+function update_intervention!(model)
+    p = parameters(model); p.own_market_planning || return nothing
+    isempty(model.data) && return nothing
+    x = model.data[end]
+    need = p.breads_per_meal * x.persons_alive
+    short = x.bread_baked < need - 1e-9 && x.hungry > 0
+    if model.intervention
+        model.intervention_months += 1
+        model.fed_months = x.bread_baked >= need - 1e-9 ? model.fed_months + 1 : 0
+        if model.fed_months >= p.intervention_exit_months
+            model.intervention = false; model.fed_months = 0
+            log_event!(model, :intervention_ended; months = model.intervention_months)
+        end
+    elseif short
+        model.intervention = true; model.fed_months = 0
+        log_event!(model, :intervention_started; baked = x.bread_baked, need = need, hungry = x.hungry)
+    end
+    return nothing
+end
+
+"""A firm's own plan (19 October): its target follows what it sold, at the gradual pace; sold out, it plans `plan_step` more."""
+function own_plan!(model, e::Enterprise, good::Symbol, per_unit::Float64, cap::Int)
+    p = parameters(model); r = e.market[good]
+    r.offered > 1e-9 || return nothing                                      # nothing offered last month: keep the plan
+    sold_units = r.sold / per_unit
+    desired = sold_units * (1 + p.planning_margin)
+    r.sold >= r.offered * (1 - p.unsold_share) - 1e-9 && (desired = max(desired, e.production_target * (1 + p.plan_step)))   # sold out: more
+    current = Float64(e.production_target); gap = desired - current
+    if abs(gap) <= max(p.plan_small_change * current, 1.0)                 # a small change is followed at once
+        e.share_trend = 0; target = desired
+    else                                                                  # a large one a third, two thirds, then all the way
+        dir = gap > 0 ? 1 : -1
+        e.share_trend = sign(e.share_trend) == dir ? e.share_trend + dir : dir
+        target = current + min(abs(e.share_trend), p.plan_adjustment_months) / p.plan_adjustment_months * gap
+    end
+    e.production_target = clamp(ceil(Int, target - 1e-9), 1, cap)
+    return nothing
+end
+
+"""
     plan_targets!(model)
 
 Demand-based production planning: bakeries plan the grain (→ bread) needed to feed the living population next
@@ -302,6 +348,7 @@ with hunger: the population, not last round's sales, sets the plan.
 function plan_targets!(model)
     p = parameters(model)
     ps = persons(model)
+    own = p.own_market_planning && !model.intervention && current_round(model) > 2   # 19 Oct: the firms' own plans, unless the emergency rule is in force
     bakeries = sort(enterprises(model, :bakery); by = b -> b.id)
     farms = sort(enterprises(model, :farm); by = f -> f.id)
     demand_bread = sum(max(p.breads_per_meal - bread_units(w), 0.0) for w in ps; init = 0.0) * (1 + p.planning_margin)
@@ -356,6 +403,10 @@ function plan_targets!(model)
                 end
             end
         end
+        if p.plan_share_floor > 0                                              # 19 Oct: the floor under every firm's share
+            floor_share = p.plan_share_floor / n
+            for e in group; e.plan_share = max(e.plan_share, floor_share); end
+        end
         shares = [e.plan_share for e in group] ./ sum(e.plan_share for e in group)
         raw = units .* shares; t = floor.(Int, raw)
         for k in sortperm(raw .- t; rev = true)[1:(units - sum(t))]; t[k] += 1; end
@@ -368,13 +419,22 @@ function plan_targets!(model)
         for (e, x) in zip(group, t); e.production_target = x; end
         return nothing
     end
-    isempty(bakeries) || by_sales!(grain_for_bread, bakeries, :bread)
+    if own
+        cap_each = p.plan_within_capacity ? ceil(Int, bakery_capacity_loaves(model) / p.breads_per_grain) : typemax(Int) ÷ 2
+        for b in bakeries; own_plan!(model, b, :bread, Float64(p.breads_per_grain), cap_each); end
+    else
+        isempty(bakeries) || by_sales!(grain_for_bread, bakeries, :bread)
+    end
     if p.plan_within_capacity && !isempty(bakeries)                                # each bakery within its ovens (16 Oct: what is clipped is lost — no planner hands it on)
         cap_each = ceil(Int, bakery_capacity_loaves(model) / p.breads_per_grain)
         for b in bakeries; b.production_target = min(b.production_target, cap_each); end
     end
     grain_demand = sum(max(b.production_target - floor(Int, grain_units(b) + 1e-9), 0) for b in bakeries; init = 0)
-    isempty(farms) || by_sales!(grain_demand, farms, :grain)
+    if own
+        for f in farms; own_plan!(model, f, :grain, 1.0, typemax(Int) ÷ 2); end
+    else
+        isempty(farms) || by_sales!(grain_demand, farms, :grain)
+    end
     for e in vcat(bakeries, farms)
         e.production_target = max(e.production_target, 1)
     end
@@ -392,7 +452,11 @@ function plan_targets!(model)
             expected += p.entertainment_propensity * (p.plan_for_tickets ? sum(min(afford, k) for k in 1:p.max_tickets_per_person) / p.max_tickets_per_person : 1.0)
         end
         units = max(ceil(Int, expected / p.customers_per_labour_unit), length(theatres))
-        by_sales!(units, theatres, :ticket)                              # 15 Oct: the same logic as bakeries and farms
+        if own
+            for t in theatres; own_plan!(model, t, :ticket, p.customers_per_labour_unit, max(floor(Int, theatre_labour_cap(model, t)), 1)); end
+        else
+            by_sales!(units, theatres, :ticket)
+        end                                                              # 15 Oct: the same logic as bakeries and farms
         if p.shows_per_round > 0                            # a theatre cannot use more labour than its seats take
             for t in theatres
                 t.production_target = min(t.production_target, Int(theatre_labour_cap(model, t)))

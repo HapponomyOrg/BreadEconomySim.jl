@@ -1757,6 +1757,30 @@ end
     @test b.fees[end] >= a.fees[end] - 1e-9 || b.government_outlay[end] >= a.government_outlay[end] - 1e-9   # the benefit carries the rent
 end
 
+
+@testset "own-market planning and the emergency rule (19 October 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., own_market_planning = true, plan_within_capacity = true, maximum_rounds = 4))
+    for _ in 1:3; B.econo_step!(m, 1); end
+    b = first(B.enterprises(m, :bakery)); p = B.parameters(m)
+    b.production_target = 20; b.share_trend = 0
+    b.market[:bread].offered = 80.0; b.market[:bread].sold = 80.0                       # sold out: plans more
+    B.own_plan!(m, b, :bread, Float64(p.breads_per_grain), 1000)
+    @test 22 <= b.production_target <= ceil(Int, 80 / p.breads_per_grain * (1 + p.planning_margin))   # more than the step up, at most what it sold plus the margin
+    b.production_target = 20; b.share_trend = 0
+    b.market[:bread].offered = 80.0; b.market[:bread].sold = 8.0                        # nine tenths left: a third of the way down
+    B.own_plan!(m, b, :bread, Float64(p.breads_per_grain), 1000)
+    @test 13 <= b.production_target <= 15
+    @test !m.intervention
+    d = round_data(m); x = d[end, :]
+    m.data[end] = merge(m.data[end], (; bread_baked = 0.0, hungry = 5))                 # short for want of production
+    B.update_intervention!(m)
+    @test m.intervention
+    m.data[end] = merge(m.data[end], (; bread_baked = 1000.0, hungry = 5))             # enough baked, still hungry: want of money, not production
+    for _ in 1:p.intervention_exit_months; B.update_intervention!(m); end
+    @test !m.intervention
+    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 24, BEH..., own_market_planning = true))) < 1e-6
+end
+
 @testset "cooperative forms (14 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     params(m) = B.parameters(m)

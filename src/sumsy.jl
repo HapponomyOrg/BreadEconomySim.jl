@@ -273,7 +273,7 @@ function seize_enterprise_peer!(model, l::PeerLoan)
     l.outstanding <= 1e-6 && (l.settled = true; l.in_arrears = false)
     l.settled && return nothing
     if l.outstanding > parameters(model).closure_debt_threshold_in_breads * expected_price(model, :bread)
-        close_enterprise!(model, borrower, :uncovered_debt)
+        liquidate!(model, borrower, :uncovered_debt)                      # 19 Oct: offered for sale first
     else
         l.in_arrears = false; l.arrears_rounds = 0      # de minimis: carry the tail, keep the business
     end
