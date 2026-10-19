@@ -14,3 +14,5 @@ Not yet written down: a monetary policy for SuMSy (a rule adjusting the parking 
 *16 October 2026:* work as purpose — built (see its status note); modularity — addendum of 16 October; transition — waits for the talk; new: Gesell's own land scheme (public purchase with bonds, lease to the highest bidder, the rent paid out) as a possible village, not designed yet.
 
 *18 October 2026:* Gesell's own land scheme — built as public land (`public_land`, PL8 and its dwelling-rent policies); the lease to the highest bidder is not modelled, the rent is a lever. New since: labour contracts and experience (built; the design note in `docs/designs_implemented/`).
+
+*19 October 2026:* `roadmap_macrosim_2026-10-18.md` (Stef) — the plan from BreadEconomySim to MacroSim; its step 3 (distributions, paired tests) is partly done in `run_all.jl` and `scripts/paired_tests.py`; its step 12.5 (the claims ledger) is next after the talk.
