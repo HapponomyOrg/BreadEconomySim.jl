@@ -1798,6 +1798,21 @@ end
     @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., market_rounds = 4))) < 1e-6
 end
 
+
+@testset "the ladder's base holds every rule (20 October 2026)" begin
+    # four comments inserted mid-line on 18–19 October silently dropped eighteen rules from the ladder; this catches it
+    L = Module(); Base.include(L, joinpath(@__DIR__, "..", "scripts", "ladder_definition.jl"))
+    def = Base.invokelatest(L.ladder_definition, 512, 120, :invoicing)
+    for base in (def.BARE_DEBT, def.BARE_SUMSY)
+        for k in (:settlement, :food_emergency_share, :founding_equity, :founders, :owner_guarantee, :interest_from_equity, :bank_capital_ratio,
+                  :employer_loss_tolerance, :greedy_pricing, :distress_pricing, :distress_cost_cutting, :plan_greedy_on_purchases, :plan_within_capacity,
+                  :notice_months, :minimum_labour_offer, :volunteer_share, :spoilage_acceptance, :employer_loyalty, :joint_labour_market,
+                  :contracts, :contract_share, :refound_minimum, :own_market_planning, :market_rounds, :labour_for_bread)
+            @test haskey(base, k)
+        end
+    end
+end
+
 @testset "cooperative forms (14 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     params(m) = B.parameters(m)

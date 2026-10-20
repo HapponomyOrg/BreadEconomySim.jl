@@ -580,6 +580,7 @@ Base.@kwdef struct SimulationParameters
     # with stock left lowers his ask by `ask_decrease_after_partial_sale`, never below his floor, and the month's negotiations are
     # struck afresh; only buyers still short take part in later rounds. 1 = one round, as before.
     market_rounds::Int = 1
+    uncovered_debt_sale::Bool = true                  # 19–20 Oct: a firm closed for uncovered debt is offered for sale first (false = closed outright, as before 19 Oct)
     intervention_exit_months::Int = 2
     # A premium loaf (11 October, Stef): value that grows without volume growing. A villager with money to spare beyond the cushion
     # and `premium_buyer_margin_in_meals` meals buys the month's bread premium instead of plain — the same loaves at `premium_markup`

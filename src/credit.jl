@@ -768,7 +768,7 @@ function seize_enterprise!(model, loan::Loan)
     repay_extra!(model, loan, cash(debtor))
     total_due(loan) > 1e-9 && debtor.land > 0 && seize_land!(model, loan)
     if !loan.settled && total_due(loan) > parameters(model).closure_debt_threshold_in_breads * expected_price(model, :bread)
-        liquidate!(model, debtor, :uncovered_debt)                        # 19 Oct: offered for sale first, like any failing firm (it was closed outright — kinds shrank to the minimum)
+        parameters(model).uncovered_debt_sale ? liquidate!(model, debtor, :uncovered_debt) : close_enterprise!(model, debtor, :uncovered_debt)   # 19 Oct: offered for sale first (switch: 20 Oct, while tracing step 2)
     elseif !loan.settled
         loan.in_arrears = false; loan.arrears_rounds = 0      # de minimis: carry the tail, keep the business
     end
