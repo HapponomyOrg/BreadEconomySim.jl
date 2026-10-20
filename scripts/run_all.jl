@@ -1,75 +1,80 @@
 # ======================================================================================================================
-# run_all.jl — everything the Bread Economy report needs, in one command.
+# run_all.jl — everything the Bread Economy report needs, in one call.
+#
+# In the REPL (20 October, Stef: one function with named settings, so a session can run several batches without new REPLs or
+# environment variables):
+#
+#     include("scripts/run_all.jl")          # once per session: defines `run_all` and loads the packages
+#     run_all()                                # the standard run: the 512-villager ladder, ten seeds, 120 months
+#     run_all(seeds = 1, rounds = 6, ladders = [(128, :invoicing)], rungs = ["0", "2"], skip_tests = true)   # a quick check
+#     run_all(shard = "1/2")                   # this machine takes every second job (the other machine: shard = "2/2")
+#     run_all(summary_only = true)             # rebuild the summary from the part files already there; runs nothing
+#     run_all(contract_share = 1.0)            # the whole ladder again at another contracts setting, in its own folder
+#
+# From the command line the environment variables still work as before (JOBS, SEEDS, ROUNDS, LADDERS, RUNGS, SKIP_TESTS,
+# SUMMARY_ONLY, SHARD, CONTRACT_SHARE, WORKER_RECYCLE, HEAP_HINT, UPDATE_ECONOSIM):
 #
 #     julia --project=. scripts/run_all.jl
 #
-# What it does, in order:
-#   SHARD=1/2 and SHARD=2/2 split the runs between two machines (19 Oct); merge the part folders, then run once more for the summary.
-#   CONTRACT_SHARE=0.8 runs the whole ladder again with the contracts dial at 0.8, into its own folder and summary (18 Oct).
-#   1. installs and precompiles the packages (Pkg.instantiate), and runs the test suite unless SKIP_TESTS=1 or it already
-#      passed for this MODEL_VERSION and this code (results/tests_passed_<version>.txt holds the code's fingerprint);
-#   2. runs the ladders — by default the 512-villager ladder under invoicing, the main ladder (26 September: the old-settlement
-#      and 128-villager comparisons are optional, see LADDERS) — every rung, both
-#      villages, SEEDS runs each, ROUNDS months each, in parallel over JOBS worker processes;
-#   3. writes, per ladder, the round-by-round data, a summary table (one row per rung and village) and the "what is there"
-#      configuration table that the report's panels are built from.
+# The settings of `run_all` (all optional):
+#   jobs            worker processes (default: CPU threads − 1); 1 runs everything in this process
+#   seeds           runs per configuration (10)
+#   rounds          months per run (120 = ten years)
+#   ladders         [(512, :invoicing)] — add (512, :clearing_all) or (128, :invoicing) for the old comparisons
+#   rungs           only steps whose name starts with one of these prefixes (empty = all)
+#   skip_tests      skip the test suite (it also runs only once per version and code — a fingerprinted marker in results/)
+#   summary_only    write the summaries from the part files already there and run nothing
+#   shard           "k/n": take every n-th job starting at the k-th, to split a run over n machines
+#   contract_share  nothing (the ladder as defined) or a number: every step again at that contracts setting, own folder
+#   worker_recycle  jobs per worker before the workers are replaced (a model process retains memory across runs) (20)
+#   heap_hint       the workers' --heap-size-hint ("4G")
+#   update_econosim move EconoSim.jl to the latest commit on its main branch first (false)
 #
-# Each single run is saved as its own file under results/parts/ the moment it finishes, so the script can be stopped and
-# started again at any time: finished runs are skipped. Nothing is ever overwritten except the combined files of step 3.
-#
-# Settings, all optional, as environment variables:
-#   JOBS=6                  worker processes (default: number of CPU threads − 1)
-#   SEEDS=10                runs per configuration
-#   ROUNDS=120              months per run (120 = ten years)
-#   LADDERS=512:invoicing       (default: the main ladder only; add 512:clearing_all for the old-settlement comparison and
-#                               128:invoicing for the size comparison — both answered, worth one run on the frozen baseline)
-#   RUNGS=                  only rungs whose name starts with one of these comma-separated prefixes (for testing)
-#   SKIP_TESTS=1            skip the test suite
-#   UPDATE_ECONOSIM=1       move EconoSim.jl to the latest commit on its main branch first
-#
-# Example, a quick check that everything works (a few minutes):
-#     SEEDS=1 ROUNDS=6 LADDERS=128:invoicing RUNGS=0,2 SKIP_TESTS=1 julia --project=. scripts/run_all.jl
-#
-# Output (results/):
-#   ladder2_<N>_rounds.csv / ladder2_<N>_clearing_all_rounds.csv     every round of every run — split into …_part1.csv, …_part2.csv
-#                                                                    when over 90 MB (GitHub's limit is 100 MB); `read_split` reads either form
-#   ladder2_<N>_summary.csv / ladder2_<N>_clearing_all_summary.csv   one row per rung and village
-#   ladder2_<N>_rungs.csv                                            what each rung contains (for the report's panels)
+# Each run is saved as its own file under results/parts/ the moment it finishes, so a batch can be stopped and started again
+# at any time: finished runs are skipped. Output per ladder: …_rounds.csv (split under GitHub's 100 MB limit), …_summary.csv
+# (one row per step and village, with medians and bands), …_rungs.csv (what each step contains).
 # ======================================================================================================================
 
-using Dates
-const START_TIME = now()                                            # the whole batch is timed; printed at the end
+using Dates, Pkg, Distributed
 
 const ROOT = normpath(joinpath(@__DIR__, ".."))
-cd(ROOT)
-
-# ---- 1. packages and tests --------------------------------------------------------------------------------------------
-using Pkg
-Pkg.activate(ROOT; io = devnull)
-# EconoSim.jl comes from its GitHub repository (https://github.com/HapponomyOrg/EconoSim.jl, branch main). Set
-# UPDATE_ECONOSIM=1 to move to its latest commit before running; otherwise the commit recorded in the Manifest is used.
-get(ENV, "UPDATE_ECONOSIM", "0") == "1" && (println("Updating EconoSim.jl to the latest commit on main…"); Pkg.update("EconoSim"))
-println("Installing and precompiling packages (first time only takes a while)…"); flush(stdout)
-Pkg.instantiate(); Pkg.precompile()
 
 const MODEL_VERSION = "2026-10-19.3"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
 
-# 16 Oct (Stef): a version's test suite is run once. When it passes, a marker is written for this version together with a
-# fingerprint of the code it tested (src/, test/, scripts/ladder_definition.jl); a resumed or repeated run of the same version
-# and the same code skips the suite. Any change to that code — even without a version bump — runs it again. The marker is
-# per machine (.gitignore keeps it out of the repository): a clone must run its own suite.
-const TEST_FILES = sort(vcat([joinpath(ROOT, "src", f) for f in readdir(joinpath(ROOT, "src")) if endswith(f, ".jl")],
-                             [joinpath(ROOT, "test", f) for f in readdir(joinpath(ROOT, "test")) if endswith(f, ".jl")],
-                             [joinpath(ROOT, "scripts", "ladder_definition.jl")]))
-const CODE_FINGERPRINT = string(foldl((h, f) -> hash(read(f), hash(basename(f), h)), TEST_FILES; init = hash(string(VERSION))); base = 16)   # the Julia version too
-const TEST_MARKER = joinpath(ROOT, "results", "tests_passed_$(MODEL_VERSION).txt")
-tests_already_passed() = isfile(TEST_MARKER) && strip(read(TEST_MARKER, String)) == CODE_FINGERPRINT
+# ---- packages (once per session) ---------------------------------------------------------------------------------------
+const PACKAGES_READY = Ref(false)
+function prepare_packages!(; update_econosim::Bool = false)
+    PACKAGES_READY[] && !update_econosim && return nothing
+    Pkg.activate(ROOT; io = devnull)
+    # EconoSim.jl comes from its GitHub repository (branch main); the commit in the Manifest is used unless updated
+    update_econosim && (println("Updating EconoSim.jl to the latest commit on main…"); Pkg.update("EconoSim"))
+    println("Installing and precompiling packages (first time only takes a while)…"); flush(stdout)
+    Pkg.instantiate(); Pkg.precompile()
+    PACKAGES_READY[] = true
+    return nothing
+end
+prepare_packages!()
+using DataFrames, CSV, Statistics
 
-if get(ENV, "SKIP_TESTS", "0") != "1" && tests_already_passed()
-    println("The test suite already passed for version $(MODEL_VERSION) and this code — not run again."); flush(stdout)
-elseif get(ENV, "SKIP_TESTS", "0") != "1"
+# ---- the test suite (once per version and code) ------------------------------------------------------------------------
+# 16 Oct (Stef): when the suite passes, a marker is written for this version with a fingerprint of the code it tested (src/,
+# test/, scripts/ladder_definition.jl, the Julia version); a later run of the same version and code skips the suite. Any change
+# to that code runs it again. The marker is per machine (.gitignore).
+test_marker() = joinpath(ROOT, "results", "tests_passed_$(MODEL_VERSION).txt")
+function code_fingerprint()
+    files = sort(vcat([joinpath(ROOT, "src", f) for f in readdir(joinpath(ROOT, "src")) if endswith(f, ".jl")],
+                      [joinpath(ROOT, "test", f) for f in readdir(joinpath(ROOT, "test")) if endswith(f, ".jl")],
+                      [joinpath(ROOT, "scripts", "ladder_definition.jl")]))
+    return string(foldl((h, f) -> hash(read(f), hash(basename(f), h)), files; init = hash(string(VERSION))); base = 16)
+end
+function run_tests!(; skip::Bool = false)
+    skip && return nothing
+    fp = code_fingerprint()
+    if isfile(test_marker()) && strip(read(test_marker(), String)) == fp
+        println("The test suite already passed for version $(MODEL_VERSION) and this code — not run again."); flush(stdout)
+        return nothing
+    end
     println("Running the test suite…"); flush(stdout)
-    # the test output is shown in full, so that a failure says which test and why
     proc = run(ignorestatus(`$(Base.julia_cmd()) --project=$ROOT $(joinpath(ROOT, "test", "runtests.jl"))`))
     if proc.exitcode != 0
         println("""
@@ -77,45 +82,28 @@ elseif get(ENV, "SKIP_TESTS", "0") != "1"
         its tests. Since 23 September the model's randomness is version-stable (StableRNGs, fixed stream seeds, ordered
         dictionaries), so the golden values should match on any Julia version and processor; a failure there is a real
         difference worth reporting, as is any other failing test.""")
-        error("test suite failed (details above)")      # an error, not exit(): exit would also close a REPL the script runs in
+        error("test suite failed (details above)")      # an error, not exit(): exit would also close the REPL
     end
     println("Tests passed.")
-    mkpath(dirname(TEST_MARKER)); write(TEST_MARKER, CODE_FINGERPRINT)
+    mkpath(dirname(test_marker())); write(test_marker(), fp)
+    return nothing
 end
 
-# ---- settings -----------------------------------------------------------------------------------------------------------
-const JOBS    = parse(Int, get(ENV, "JOBS", string(max(Sys.CPU_THREADS - 1, 1))))
-const SEEDS   = parse(Int, get(ENV, "SEEDS", "10"))
-const ROUNDS  = parse(Int, get(ENV, "ROUNDS", "120"))
-const LADDERS = [(parse(Int, split(x, ":")[1]), Symbol(split(x, ":")[2])) for x in split(get(ENV, "LADDERS", "512:invoicing"), ",")]
-const RUNGS   = filter(!isempty, split(get(ENV, "RUNGS", ""), ","))
-
-# 18 Oct (Stef): a second ladder with the contracts dial at another setting — CONTRACT_SHARE=0.8 runs every rung of the ladder
-# again with `contract_share = 0.8` (a fifth of the hands temps, as today's economy tends), into its own folder and summary
-# (…_contracts80). Unset = the ladder as defined (contract_share 1.0 on the base).
-const CONTRACT_SHARE = get(ENV, "CONTRACT_SHARE", "")
-const VARIANT = isempty(CONTRACT_SHARE) ? "" : "_contracts$(round(Int, 100 * parse(Float64, CONTRACT_SHARE)))"
-const VARIANT_EXTRA = isempty(CONTRACT_SHARE) ? (;) : (; contract_share = parse(Float64, CONTRACT_SHARE))
-with_variant(kw, extra = VARIANT_EXTRA) = isempty(kw) ? kw : (; kw..., extra...)   # on the main process; the workers get `extra` inside each job
-ladder_name(N, settlement) = (settlement == :invoicing ? "ladder2_$(N)" : "ladder2_$(N)_$(settlement)") * VARIANT
-parts_dir(N, settlement) = joinpath(ROOT, "results", "parts", "$(ladder_name(N, settlement))_$(ROUNDS)months_$(MODEL_VERSION)")   # the run length is part of the key: a short test run is never taken for a real one
+# ---- names and places ---------------------------------------------------------------------------------------------------
+variant_name(contract_share) = contract_share === nothing ? "" : "_contracts$(round(Int, 100 * contract_share))"
+variant_extra(contract_share) = contract_share === nothing ? (;) : (; contract_share = Float64(contract_share))
+with_extra(kw, extra) = isempty(kw) ? kw : (; kw..., extra...)
+ladder_name(N, settlement, variant = "") = (settlement == :invoicing ? "ladder2_$(N)" : "ladder2_$(N)_$(settlement)") * variant
+parts_dir(N, settlement, rounds, variant = "") = joinpath(ROOT, "results", "parts", "$(ladder_name(N, settlement, variant))_$(rounds)months_$(MODEL_VERSION)")   # the run length and the model version are part of the key
 safe(s) = replace(s, r"[^A-Za-z0-9]+" => "_")
-part_file(job) = joinpath(parts_dir(job.N, job.settlement), "$(safe(job.rung))__$(job.system)__$(job.seed).csv")
 
-# ---- 2. the jobs ------------------------------------------------------------------------------------------------------
-using Distributed
-# 18 Oct: a worker retains about 0.6 GB per 120-month run after a full GC (a leak not yet traced — not in any module-level
-# container of BreadEconomySim, EconoSim or Agents). Two mitigations: workers start with a heap-size hint, so Julia collects
-# earlier; and the batch runs in chunks, with the workers replaced between chunks (`WORKER_RECYCLE` jobs per worker per chunk).
-const HEAP_HINT = get(ENV, "HEAP_HINT", "4G")
-const WORKER_RECYCLE = parse(Int, get(ENV, "WORKER_RECYCLE", "20"))
-start_workers!() = (JOBS > 1 && nprocs() < JOBS + 1 && addprocs(JOBS - nprocs() + 1; exeflags = ["--project=$ROOT", "-O1", "--heap-size-hint=$HEAP_HINT"]); nothing)
-start_workers!()
-
+# ---- workers --------------------------------------------------------------------------------------------------------------
+# A model process retains about 0.6 GB per 120-month run (a leak not yet traced), so workers start with a heap-size hint and
+# are replaced every `worker_recycle` jobs. Each call of run_all starts from fresh workers.
 const WORKER_SETUP = quote
     using BreadEconomySim, DataFrames, CSV
     include(joinpath($ROOT, "scripts", "ladder_definition.jl"))
-    const LADDER_CACHE = Dict{Tuple{Int, Int, Symbol}, Any}()
+    isdefined(Main, :LADDER_CACHE) || (const LADDER_CACHE = Dict{Tuple{Int, Int, Symbol}, Any}())   # set up once per process
     ladder(N, rounds, settlement) = get!(() -> ladder_definition(N, rounds, settlement), LADDER_CACHE, (N, rounds, settlement))
 
     """One run: build the rung's parameters, simulate, save the rounds to the job's own file (written under a temporary
@@ -142,83 +130,23 @@ const WORKER_SETUP = quote
         return line
     end
 end
-# `using` cannot sit inside a function, so the worker set-up is a quoted block evaluated on the targets (all processes at first, the fresh workers on each recycle)
-setup_workers!(targets = procs()) = (Distributed.remotecall_eval(Main, targets, WORKER_SETUP); nothing)
-setup_workers!()
+const SET_UP = Set{Int}()
+function setup!(targets)
+    todo = [p for p in targets if !(p in SET_UP)]                    # a process is set up once (fresh workers have new ids)
+    isempty(todo) && return nothing
+    Distributed.remotecall_eval(Main, todo, WORKER_SETUP)            # `using` cannot sit inside a function: a quoted block
+    union!(SET_UP, todo)
+    return nothing
+end
+function fresh_workers!(n::Int, heap_hint::String)
+    workers() == [1] || rmprocs(workers())
+    n > 1 && addprocs(n; exeflags = ["--project=$ROOT", "-O1", "--heap-size-hint=$heap_hint"])
+    setup!(n > 1 ? workers() : [1])
+    return nothing
+end
+setup!([1])                                                          # the main process: ladder_definition, run_job
 
-include(joinpath(ROOT, "scripts", "ladder_definition.jl"))
-jobs = NamedTuple[]
-for (N, settlement) in LADDERS
-    def = ladder_definition(N, ROUNDS, settlement)
-    for (name, kd, ks) in def.rungs
-        (isempty(RUNGS) || any(p -> startswith(name, p), RUNGS)) || continue
-        for system in ("debt", "sumsy"), seed in 1:SEEDS
-            # 16 Oct: one rule for one-sided cells — a side with no settings of its own is not run (the main steps excepted, whose
-            # bare village is a setting); the name-prefix rules it replaces skipped EU8's debt side because EU8 begins with "E"
-            kw = system == "debt" ? kd : ks
-            (isempty(kw) && !occursin(r"^[0-9]", name)) && continue
-            job = (; N, settlement, rounds = ROUNDS, rung = name, system, seed, extra = VARIANT_EXTRA)
-            push!(jobs, (; job..., file = part_file(job), index = length(jobs) + 1, total = 0))
-        end
-    end
-end
-jobs = [(; j..., total = length(jobs)) for j in jobs]                 # each run knows its number, for the progress lines
-# 13 Oct (review 7): a cell whose configuration is identical to an earlier cell's — the SuMSy village at a rung that only changes
-# the debt village, a variant that mirrors the ladder — is the same village, so its finished files are copied, not rerun
-let seen = Dict{String, Any}(), copied = 0
-    for j in jobs
-        def = ladder(j.N, j.rounds, j.settlement)
-        (_, kd, ks) = only(r for r in def.rungs if r[1] == j.rung)
-        kw = with_variant(j.system == "debt" ? kd : ks)
-        key = string(j.N, "|", j.settlement, "|", j.rounds, "|", j.system, "|", j.seed, "|", repr(kw))
-        if haskey(seen, key)
-            src = seen[key]
-            if !isfile(j.file) && isfile(src)
-                df = CSV.read(src, DataFrame); df.rung .= j.rung; CSV.write(j.file, df); copied += 1   # 16 Oct: relabelled as the copy
-            end
-        else
-            seen[key] = j.file
-        end
-    end
-    copied > 0 && println("$(copied) mirror cells copied from identical configurations.")
-end
-todo = filter(j -> !isfile(j.file), jobs)
-# 19 Oct: several machines on one ladder — SHARD="1/2" on the first machine, SHARD="2/2" on the second: each takes every second job
-# (by the job's place in the full list, so the shares stay the same however many are already done). Push both machines' part
-# files to the same folder; running run_all.jl once more on the merged folder finds every run done and writes the summary.
-const SHARD = get(ENV, "SHARD", "")
-if !isempty(SHARD)
-    k, n = parse.(Int, split(SHARD, "/"))
-    (1 <= k <= n) || error("SHARD must be k/n with 1 ≤ k ≤ n, got $SHARD")
-    todo = filter(j -> (j.index - 1) % n == k - 1, todo)
-    println("Shard $k of $n: this machine takes $(length(todo)) of the runs still to do."); flush(stdout)
-end
-println("\n$(length(jobs)) runs in total, $(length(jobs) - length(todo)) already done, $(length(todo)) to go, on $(max(nworkers(), 1)) worker(s).\n"); flush(stdout)
-
-results = String[]
-chunk = max(WORKER_RECYCLE * max(nworkers(), 1), 1)
-for (c, lo) in enumerate(1:chunk:length(todo))
-    part = todo[lo:min(lo + chunk - 1, end)]
-    pool = WorkerPool(workers())                                           # a pool of the workers as they are now: the default pool keeps the replaced ones and hangs
-    append!(results, pmap(pool, part; on_error = e -> "FAILED: " * sprint(showerror, e)) do job
-        run_job(job)
-    end)
-    if lo + chunk <= length(todo) && nworkers() > 1                       # 18 Oct: fresh workers for the next chunk (the leak)
-        println("… $(length(results)) of $(length(todo)) done; replacing the workers (memory)."); flush(stdout)
-        rmprocs(workers()); println("   old workers removed; nprocs = $(nprocs())"); flush(stdout)
-        start_workers!(); println("   new workers started: $(workers())"); flush(stdout)
-        setup_workers!(workers()); println("   new workers set up"); flush(stdout)
-    end
-end
-failed = count(startswith("FAILED"), results)
-for (job, line) in zip(todo, results)
-    startswith(line, "FAILED") && println("FAILED  $(job.N) $(job.settlement) | $(job.rung) | $(job.system) seed $(job.seed): ", first(line, 400))
-end
-failed > 0 && @warn "$failed runs failed; run the script again to retry them (finished runs are kept)"
-
-# ---- 3. combined files, summaries and configuration tables ----------------------------------------------------------
-using DataFrames, CSV, Statistics
-
+# ---- the combined files and the summary ------------------------------------------------------------------------------------
 """
     write_split(path, df; limit_mb = 90)
 
@@ -294,7 +222,7 @@ function summarise(rounds::DataFrame, N::Int)
     m(x) = (v = collect(skipmissing(x)); isempty(v) ? missing : mean(v))          # means over the runs that have the figure
     # 18 Oct (roadmap step 3): distributions beside the means — median, quartiles and the 5th–95th band — for the measures the
     # report quotes, and the public debt per head on two bases (per survivor and per starting villager)
-    q(p) = x -> (v = collect(skipmissing(x)); isempty(v) ? missing : quantile(v, p))
+    q(p) = x -> (v = filter(y -> !(y isa AbstractFloat && isnan(y)), collect(skipmissing(x))); isempty(v) ? missing : quantile(v, p))   # 19 Oct: a village that died out has NaN prices; quantiles over the runs that have the figure
     dist(col) = [col => q(0.5) => Symbol(col, :_median), col => q(0.25) => Symbol(col, :_q25), col => q(0.75) => Symbol(col, :_q75), col => q(0.05) => Symbol(col, :_p5), col => q(0.95) => Symbol(col, :_p95)]
     runs.public_debt_per_survivor = runs.government_debt ./ max.(runs.persons_alive, 1)
     runs.public_debt_per_villager = runs.government_debt ./ N
@@ -322,34 +250,144 @@ function summarise(rounds::DataFrame, N::Int)
         :identity => (x -> maximum(abs.(x))) => :worst_identity_gap)
 end
 
-for (N, settlement) in LADDERS
-    dir = parts_dir(N, settlement)
-    isdir(dir) || continue
-    # 14 Oct: only the files of steps on the current ladder — a renamed or removed step leaves orphans in the folder (Y8-loyal,
-    # a duplicated S3-W block), which must not reach the summary
-    name_of = Dict(safe(r[1]) => r[1] for r in ladder(N, ROUNDS, settlement).rungs)
-    current = Set(keys(name_of))
-    stepof(f) = first(rsplit(basename(f), "__"; limit = 3))        # 16 Oct: from the right — a name ending in ')' or '%' leaves '___' in the file name
-    files = filter(f -> endswith(f, ".csv") && stepof(f) in current, readdir(dir; join = true))
-    orphans = count(f -> endswith(f, ".csv") && !(stepof(f) in current), readdir(dir; join = true))
-    orphans > 0 && println("$(orphans) part files of steps no longer on the ladder are left out of the summary.")
-    isempty(files) && continue
-    # 16 Oct: the step, side and seed come from the file name — a mirror copy carries its source's labels inside (GP10-40's SuMSy
-    # side was summarised as UP8, and T10's copies of T8 counted twice under T8)
-    function labelled(f)
-        df = CSV.read(f, DataFrame)
-        step, system, seed = rsplit(replace(basename(f), ".csv" => ""), "__"; limit = 3)
-        df.rung .= name_of[step]; df.system .= String(system); df.seed .= parse(Int, seed)
-        return df
+
+# ---- run_all ----------------------------------------------------------------------------------------------------------------
+"""
+    run_all(; jobs, seeds = 10, rounds = 120, ladders = [(512, :invoicing)], rungs = String[], skip_tests = false,
+            summary_only = false, shard = "", contract_share = nothing, worker_recycle = 20, heap_hint = "4G",
+            update_econosim = false)
+
+Run the ladders and write their combined files and summaries. See the head of scripts/run_all.jl for every setting.
+Returns the number of runs done, skipped and failed.
+"""
+function run_all(; jobs::Int = max(Sys.CPU_THREADS - 1, 1), seeds::Int = 10, rounds::Int = 120,
+                   ladders = [(512, :invoicing)], rungs = String[], skip_tests::Bool = false, summary_only::Bool = false,
+                   shard::AbstractString = "", contract_share = nothing, worker_recycle::Int = 20, heap_hint::AbstractString = "4G",
+                   update_econosim::Bool = false)
+    start_time = now()
+    update_econosim && prepare_packages!(; update_econosim = true)
+    run_tests!(; skip = skip_tests || summary_only)
+    variant = variant_name(contract_share); extra = variant_extra(contract_share)
+    rungs = String.(rungs)
+
+    # the jobs
+    jobs_list = NamedTuple[]
+    for (N, settlement) in ladders
+        def = ladder(N, rounds, settlement)
+        for (name, kd, ks) in def.rungs
+            (isempty(rungs) || any(p -> startswith(name, p), rungs)) || continue
+            for system in ("debt", "sumsy"), seed in 1:seeds
+                kw = system == "debt" ? kd : ks
+                (isempty(kw) && !occursin(r"^[0-9]", name)) && continue   # a side with no settings of its own is not run (main steps excepted)
+                file = joinpath(parts_dir(N, settlement, rounds, variant), "$(safe(name))__$(system)__$(seed).csv")
+                push!(jobs_list, (; N, settlement, rounds, rung = name, system, seed, extra, file, index = length(jobs_list) + 1, total = 0))
+            end
+        end
     end
-    rounds = reduce((a, b) -> vcat(a, b; cols = :union), [labelled(f) for f in files])
-    name = ladder_name(N, settlement)
-    write_split(joinpath(ROOT, "results", "$(name)_rounds.csv"), rounds)   # under GitHub's 100 MB limit (25 Sept)
-    CSV.write(joinpath(ROOT, "results", "$(name)_summary.csv"), Base.invokelatest(summarise, rounds, N))   # invokelatest: the function is defined in this script (Julia 1.12 world age)
-    println("wrote results/$(name)_rounds*.csv and results/$(name)_summary.csv ($(length(files)) runs)")
-    if settlement == :invoicing
-        run(addenv(`$(Base.julia_cmd()) --project=$ROOT $(joinpath(ROOT, "scripts", "dump_rungs.jl")) $SEEDS $ROUNDS all $N`, "SETTLEMENT" => "invoicing"))
+    jobs_list = [(; j..., total = length(jobs_list)) for j in jobs_list]
+    # mirror cells: a configuration identical to an earlier cell's is the same village — its finished files are copied, relabelled
+    let seen = Dict{String, Any}(), copied = 0
+        for j in jobs_list
+            def = ladder(j.N, j.rounds, j.settlement)
+            (_, kd, ks) = only(r for r in def.rungs if r[1] == j.rung)
+            kw = with_extra(j.system == "debt" ? kd : ks, extra)
+            key = string(j.N, "|", j.settlement, "|", j.rounds, "|", j.system, "|", j.seed, "|", repr(kw))
+            if haskey(seen, key)
+                src = seen[key]
+                if !isfile(j.file) && isfile(src)
+                    df = CSV.read(src, DataFrame); df.rung .= j.rung; mkpath(dirname(j.file)); CSV.write(j.file, df); copied += 1
+                end
+            else
+                seen[key] = j.file
+            end
+        end
+        copied > 0 && println("$(copied) mirror cells copied from identical configurations.")
     end
+    todo = filter(j -> !isfile(j.file), jobs_list)
+    if !isempty(shard)
+        k, n = parse.(Int, split(shard, "/"))
+        (1 <= k <= n) || error("shard must be \"k/n\" with 1 ≤ k ≤ n, got $shard")
+        todo = filter(j -> (j.index - 1) % n == k - 1, todo)
+        println("Shard $k of $n: this machine takes $(length(todo)) of the runs still to do."); flush(stdout)
+    end
+    summary_only && (todo = empty(todo); println("summary_only: no runs; summarising what is there."))
+    println("\n$(length(jobs_list)) runs in total, $(length(jobs_list) - length(todo)) already done, $(length(todo)) to go, on $(min(jobs, max(length(todo), 1))) process(es).\n"); flush(stdout)
+
+    # the runs, in chunks with fresh workers
+    results = String[]
+    if !isempty(todo)
+        n = min(jobs, length(todo))
+        chunk = max(worker_recycle * n, 1)
+        for lo in 1:chunk:length(todo)
+            part = todo[lo:min(lo + chunk - 1, end)]
+            fresh_workers!(n, String(heap_hint))
+            if n > 1
+                append!(results, pmap(WorkerPool(workers()), part; on_error = e -> "FAILED: " * sprint(showerror, e)) do job
+                    run_job(job)
+                end)
+            else
+                append!(results, [try run_job(job) catch e; "FAILED: " * sprint(showerror, e) end for job in part])
+            end
+            lo + chunk <= length(todo) && (println("… $(length(results)) of $(length(todo)) done; replacing the workers (memory)."); flush(stdout))
+        end
+        workers() == [1] || rmprocs(workers())                        # leave the REPL as it was
+    end
+    failed = count(startswith("FAILED"), results)
+    for (job, line) in zip(todo, results)
+        startswith(line, "FAILED") && println("FAILED  $(job.N) $(job.settlement) | $(job.rung) | $(job.system) seed $(job.seed): ", first(line, 400))
+    end
+    failed > 0 && @warn "$failed runs failed; call run_all again to retry them (finished runs are kept)"
+
+    # the combined files and summaries
+    for (N, settlement) in ladders
+        dir = parts_dir(N, settlement, rounds, variant)
+        isdir(dir) || continue
+        # 14 Oct: only the files of steps on the current ladder — a renamed or removed step leaves orphans in the folder (Y8-loyal,
+        # a duplicated S3-W block), which must not reach the summary
+        name_of = Dict(safe(r[1]) => r[1] for r in ladder(N, rounds, settlement).rungs)
+        current = Set(keys(name_of))
+        stepof(f) = first(rsplit(basename(f), "__"; limit = 3))        # 16 Oct: from the right — a name ending in ')' or '%' leaves '___' in the file name
+        files = filter(f -> endswith(f, ".csv") && stepof(f) in current, readdir(dir; join = true))
+        orphans = count(f -> endswith(f, ".csv") && !(stepof(f) in current), readdir(dir; join = true))
+        orphans > 0 && println("$(orphans) part files of steps no longer on the ladder are left out of the summary.")
+        isempty(files) && continue
+        # 16 Oct: the step, side and seed come from the file name — a mirror copy carries its source's labels inside (GP10-40's SuMSy
+        # side was summarised as UP8, and T10's copies of T8 counted twice under T8)
+        function labelled(f)
+            df = CSV.read(f, DataFrame)
+            step, system, seed = rsplit(replace(basename(f), ".csv" => ""), "__"; limit = 3)
+            df.rung .= name_of[step]; df.system .= String(system); df.seed .= parse(Int, seed)
+            return df
+        end
+        rounds_df = reduce((a, b) -> vcat(a, b; cols = :union), [labelled(f) for f in files])
+        name = ladder_name(N, settlement, variant)
+        write_split(joinpath(ROOT, "results", "$(name)_rounds.csv"), rounds_df)   # under GitHub's 100 MB limit (25 Sept)
+        CSV.write(joinpath(ROOT, "results", "$(name)_summary.csv"), summarise(rounds_df, N))
+        println("wrote results/$(name)_rounds*.csv and results/$(name)_summary.csv ($(length(files)) runs)")
+        if settlement == :invoicing
+            run(addenv(`$(Base.julia_cmd()) --project=$ROOT $(joinpath(ROOT, "scripts", "dump_rungs.jl")) $seeds $rounds all $N`, "SETTLEMENT" => "invoicing"))
+        end
+    end
+    elapsed = Dates.value(now() - start_time) ÷ 1000
+    println("\nAll done in $(elapsed ÷ 3600) h $(lpad((elapsed % 3600) ÷ 60, 2, '0')) min $(lpad(elapsed % 60, 2, '0')) s (started $(Dates.format(start_time, "yyyy-mm-dd HH:MM")), finished $(Dates.format(now(), "yyyy-mm-dd HH:MM")))."); flush(stdout)
+    return (; done = length(results) - failed, skipped = length(jobs_list) - length(todo), failed)
 end
-elapsed = Dates.value(now() - START_TIME) ÷ 1000                      # seconds
-println("\nAll done in $(elapsed ÷ 3600) h $(lpad((elapsed % 3600) ÷ 60, 2, '0')) min $(lpad(elapsed % 60, 2, '0')) s (started $(Dates.format(START_TIME, "yyyy-mm-dd HH:MM")), finished $(Dates.format(now(), "yyyy-mm-dd HH:MM"))).")
+
+# ---- the command line: the environment variables of before ------------------------------------------------------------
+function settings_from_env()
+    kw = Dict{Symbol, Any}()
+    haskey(ENV, "JOBS") && (kw[:jobs] = parse(Int, ENV["JOBS"]))
+    haskey(ENV, "SEEDS") && (kw[:seeds] = parse(Int, ENV["SEEDS"]))
+    haskey(ENV, "ROUNDS") && (kw[:rounds] = parse(Int, ENV["ROUNDS"]))
+    haskey(ENV, "LADDERS") && (kw[:ladders] = [(parse(Int, split(x, ":")[1]), Symbol(split(x, ":")[2])) for x in split(ENV["LADDERS"], ",")])
+    haskey(ENV, "RUNGS") && (kw[:rungs] = filter(!isempty, split(ENV["RUNGS"], ",")))
+    get(ENV, "SKIP_TESTS", "0") == "1" && (kw[:skip_tests] = true)
+    get(ENV, "SUMMARY_ONLY", "0") == "1" && (kw[:summary_only] = true)
+    haskey(ENV, "SHARD") && (kw[:shard] = ENV["SHARD"])
+    haskey(ENV, "CONTRACT_SHARE") && !isempty(ENV["CONTRACT_SHARE"]) && (kw[:contract_share] = parse(Float64, ENV["CONTRACT_SHARE"]))
+    haskey(ENV, "WORKER_RECYCLE") && (kw[:worker_recycle] = parse(Int, ENV["WORKER_RECYCLE"]))
+    haskey(ENV, "HEAP_HINT") && (kw[:heap_hint] = ENV["HEAP_HINT"])
+    get(ENV, "UPDATE_ECONOSIM", "0") == "1" && (kw[:update_econosim] = true)
+    return (; kw...)
+end
+abspath(PROGRAM_FILE) == abspath(@__FILE__) && run_all(; settings_from_env()...)
