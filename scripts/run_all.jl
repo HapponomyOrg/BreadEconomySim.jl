@@ -390,4 +390,7 @@ function settings_from_env()
     get(ENV, "UPDATE_ECONOSIM", "0") == "1" && (kw[:update_econosim] = true)
     return (; kw...)
 end
-abspath(PROGRAM_FILE) == abspath(@__FILE__) && run_all(; settings_from_env()...)
+if abspath(PROGRAM_FILE) == abspath(@__FILE__)                       # run from the command line: the environment variables
+    run_all(; settings_from_env()...)
+end
+nothing                                                               # include() in the REPL returns nothing (it returned `false` before)
