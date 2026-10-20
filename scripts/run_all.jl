@@ -311,7 +311,10 @@ function run_all(; jobs::Int = max(Sys.CPU_THREADS - 1, 1), seeds::Int = 10, rou
         println("Shard $k of $n: this machine takes $(length(todo)) of the runs still to do."); flush(stdout)
     end
     summary_only && (todo = empty(todo); println("summary_only: no runs; summarising what is there."))
-    println("\n$(length(jobs_list)) runs in total, $(length(jobs_list) - length(todo)) already done, $(length(todo)) to go, on $(min(jobs, max(length(todo), 1))) process(es).\n"); flush(stdout)
+    # 20 Oct (Stef): the progress lines count this call's runs — on a shard, [  12/1075] rather than [  24/2150]
+    todo = [(; j..., index = k, total = length(todo)) for (k, j) in enumerate(todo)]
+    done_before = count(j -> isfile(j.file), jobs_list)
+    println("\n$(length(jobs_list)) runs in total, $(done_before) already done; this call runs $(length(todo))$(isempty(shard) ? "" : " (shard $shard)"), on $(min(jobs, max(length(todo), 1))) process(es).\n"); flush(stdout)
 
     # the runs, in chunks with fresh workers
     results = String[]
