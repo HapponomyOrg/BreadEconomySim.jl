@@ -575,6 +575,7 @@ function grain_market!(model)
     for f in enterprises(model, :farm)
         f.market[:grain].offered = grain_units(f)
     end
+    opening = Dict(f.id => f.ask[:grain] for f in enterprises(model, :farm))     # 20 Oct
     for round_ in 1:max(p.market_rounds, 1)                                # 19 Oct: rounds within the month
     active = [b for b in bakeries if b.market[:grain].got < b.market[:grain].wanted - 1e-9]
     isempty(active) && break
@@ -607,6 +608,7 @@ function grain_market!(model)
     round_ < p.market_rounds || break
     next_market_round!(model, enterprises(model, :farm), :grain) || break
     end
+    restore_opening_asks!(model, opening, :grain)
     return nothing
 end
 
@@ -614,6 +616,18 @@ end
 
 sellable_bread(b::Enterprise) = bread_units(b)
 oldest_bread_age(b::Enterprise) = isempty(b.bread) ? 0 : maximum(i.age for i in b.bread)
+
+"""After the month's market rounds (20 October): each seller's ask goes back to what it opened the month with, and the monthly
+price rule adapts it from there on what was sold and left. Carried over, the lowered asks ratcheted prices down every month
+with stock left (no-contract SuMSy village, seed 7: bread −14 % a year, the grain market frozen for eleven months, 100 alive)."""
+function restore_opening_asks!(model, opening, good::Symbol)
+    parameters(model).market_rounds > 1 || return nothing
+    for (id, a) in opening
+        s = model[id]; (s isa Enterprise && s.alive) || continue
+        s.ask[good] = a
+    end
+    return nothing
+end
 
 """
     next_market_round!(model, sellers, good)
@@ -740,6 +754,7 @@ function bread_market!(model)
         alive_n = max(length(persons(model)), 1)
         model.ration_this_round = max(p.breads_per_meal, min(p.ration_breads_per_person, floor(Int, sum(b.market[:bread].offered for b in enterprises(model, :bakery); init = 0.0) / alive_n)))
     end
+    opening = Dict(b.id => b.ask[:bread] for b in enterprises(model, :bakery))   # 20 Oct: the asks the month opened with
     for round_ in 1:max(p.market_rounds, 1)                                # 19 Oct: rounds within the month
     buyers = round_ == 1 ? stable_shuffle(rng, persons(model)) : stable_shuffle(rng, [w for w in persons(model) if bread_units(w) < meal - 1e-9 && cash(w) > 1e-6])
     round_ > 1 && isempty(buyers) && break
@@ -783,6 +798,7 @@ function bread_market!(model)
     round_ < p.market_rounds || break
     next_market_round!(model, enterprises(model, :bakery), :bread) || break
     end
+    restore_opening_asks!(model, opening, :bread)
     return nothing
 end
 
@@ -839,12 +855,14 @@ function ticket_market!(model)
         w.market[:ticket].wanted = wanted
         buy_tickets!(w, wanted)
     end
+    opening = Dict(t.id => t.ask[:ticket] for t in theatres)               # 20 Oct
     for round_ in 2:max(p.market_rounds, 1)                                 # 19 Oct: rounds within the month — those who wanted seats and did not get them
         next_market_round!(model, theatres, :ticket) || break
         short = [w for w in stable_shuffle(rng, persons(model)) if w.market[:ticket].got < w.market[:ticket].wanted]
         isempty(short) && break
         for w in short; buy_tickets!(w, Int(w.market[:ticket].wanted - w.market[:ticket].got)); end
     end
+    restore_opening_asks!(model, opening, :ticket)
     return nothing
 end
 

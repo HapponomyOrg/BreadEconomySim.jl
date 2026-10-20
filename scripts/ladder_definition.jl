@@ -3,6 +3,10 @@ using BreadEconomySim, OrderedCollections
 # The ladder as a function of the village size, the run length and the settlement system (22 September), so that one
 # process can build several ladders (scripts/run_all.jl). ladder2_rungs.jl calls it with the command-line values.
 function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol)
+    # 20 Oct (evening): the base reproduces the 17 October run exactly (checked: step 8, debt, seed 1, identical in every month) —
+    # this week's realistic labour market (contracts at 0.8, own-market planning, four market rounds, at least two firms, failing
+    # firms with uncovered debt offered for sale) showed effects not yet understood in the 2026-10-20.0 run, so it is a cell (RB8,
+    # RB11) until they are traced. The talk and the report stand on this base with the new measures (bonds, three Ginis).
     # 20 Oct: NOTHING may follow a comment on the RULES lines — a comment runs to the end of the line, and four comments
     # inserted mid-line on 18 and 19 October silently dropped eighteen rules (the settlement, the food emergency, founding
     # equity, the owner guarantee, greedy pricing, plan_greedy_on_purchases, notice, the minimum labour offer, …) and the
@@ -10,7 +14,7 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol)
     # checks that the base holds every rule. The week's additions: contracts at 0.8 with notice and loyalty (18–19 Oct, Stef),
     # at least two firms of each kind (19 Oct), own-market planning with the village plan as the emergency rule, and up to
     # four market rounds a month (19 Oct).
-    RULES = (; ask_floor = :cost, bread_bid_base_multiplier = 1.2, ticket_max_in_breads = 2.0, employer_wage_margin = 0.20, number_of_persons = N, number_of_landowners = N ÷ 4, land_per_person = 1.5, initial_production_target = 10 * N ÷ 128, shares_per_person = 10, shareholder_count = 4, number_of_farms = 4, number_of_bakeries = 4, shows_per_round = 1, theatre_seat_margin = 0.25, unmet_demand_share = 0.05, unsold_share = 0.05, wage_threshold = true, wage_cut_maximum = 0.005, wage_floor_months = 1, joint_labour_market = true, contracts = true, contract_share = 0.8, refound_minimum = 2, employer_loyalty = true, notice_months = 3, minimum_labour_offer = 0.5, volunteer_share = 1.0, spoilage_acceptance = 0.5, greedy_pricing = true, distress_pricing = true, distress_cost_cutting = true, plan_greedy_on_purchases = true, plan_within_capacity = true, own_market_planning = true, market_rounds = 4, food_emergency_share = 0.9, employer_loss_tolerance = 0.10, owner_guarantee = true, interest_from_equity = true, bank_capital_ratio = 0.08, founding_equity = true, founders = :distinct, settlement = SETTLEMENT,   # 23 Sept: founders capitalise their firms
+    RULES = (; ask_floor = :cost, bread_bid_base_multiplier = 1.2, ticket_max_in_breads = 2.0, employer_wage_margin = 0.20, number_of_persons = N, number_of_landowners = N ÷ 4, land_per_person = 1.5, initial_production_target = 10 * N ÷ 128, shares_per_person = 10, shareholder_count = 4, number_of_farms = 4, number_of_bakeries = 4, shows_per_round = 1, theatre_seat_margin = 0.25, unmet_demand_share = 0.05, unsold_share = 0.05, wage_threshold = true, wage_cut_maximum = 0.005, wage_floor_months = 1, joint_labour_market = true, contracts = false, contract_share = 0.8, refound_minimum = 1, uncovered_debt_sale = false, employer_loyalty = true, notice_months = 3, minimum_labour_offer = 0.5, volunteer_share = 1.0, spoilage_acceptance = 0.5, greedy_pricing = true, distress_pricing = true, distress_cost_cutting = true, plan_greedy_on_purchases = true, plan_within_capacity = true, own_market_planning = false, firms_plan_on_sales = true, market_rounds = 1, food_emergency_share = 0.9, employer_loss_tolerance = 0.10, owner_guarantee = true, interest_from_equity = true, bank_capital_ratio = 0.08, founding_equity = true, founders = :distinct, settlement = SETTLEMENT,   # 23 Sept: founders capitalise their firms
            # 22 September: :invoicing = the settlement design (cash at the counter, wages at month end, invoices between firms, clearing among banks)
              initial_interest_rate = 0.005, maximum_interest_rate = 0.015,   # a month: 6 % a year to start, at most about 20 %; the rate itself covers the banks' costs (one staff unit per bank: staff scaled with customers bankrupted the banks at 512, 22 Sept)
               demand_based_targets = true, wage_ceiling_from_own_ask = true, expected_price_from_asks = true, ask_increase_only_on_unmet_demand = true,
@@ -52,6 +56,7 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol)
     PARKPOLICY = (; tax_policy = :scale, tax_response_coverage = 1.0, tax_response_step = 0.02, tax_scale_maximum = 10.0)   # SuMSy: the parking tax covers the public payroll
     ENTRY    = (; market_entry = true, entry_coop_share = 0.0)   # 25 Sept: firms enter on unmet demand or high margins
     level(fee) = 30 + 5 / (fee + 0.01)                              # a villager's settled money: cushion + guaranteed income ÷ (fee + parking tax)
+    REALISTIC = (; contracts = true, contract_share = 0.8, refound_minimum = 2, uncovered_debt_sale = true, own_market_planning = true, firms_plan_on_sales = false, market_rounds = 1)   # 20 Oct (rounds off: they ratchet prices down)
     DEMTAX15 = (; wage_tax_rate = 0.0, capital_tax_rate = 0.0, dividend_tax_rate = 0.0, demurrage_tax_rate = 0.015, demurrage_free_buffer = 30.0)   # 14 Oct: a demurrage tax instead of income tax, on debt money
     PRODUCTIVE = (; breads_per_grain = 4, customers_per_labour_unit = 1.0, initial_prices = OrderedDict(:bread => 3.0, :grain => 5.2, :rent => 0.75, :wage => 3.92, :ticket => 5.0),
                   shows_per_round = 2, standard_of_living_tickets = 2, refound_minimum = 4)   # 15 Oct: prices free (Stef: the productive village is for full employment; fixed prices are the test, V8-P)
@@ -220,20 +225,20 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol)
         # Labour contracts (17 October, Stef): the dial from temps to contracts — the share of its hands an employer may hold on
         # contract; a temp who has worked three months running gets one while there is room; contracted workers are off the market,
         # with three months' notice from the employer and one from the worker. Both moneys.
-        ("J8-50 step 8, contracts for half the hands", (; V8_DEBT..., contract_share = 0.5), (; V8_SUMSY..., contract_share = 0.5)),
+        ("J8-50 step 8, contracts for half the hands", (; V8_DEBT..., contracts = true, contract_share = 0.5), (; V8_SUMSY..., contracts = true, contract_share = 0.5)),
         # The contracts dial at its ends (19 October, Stef): the base holds 0.8 on contract; every hand on contract (J…-100) and none
         # (NJ…) beside it where the labour market matters — the first government step, step 8, step 11, the productive village and the
         # everyone-greedy village. Both moneys.
         ("NJ2 step 2, no contracts (temps only)", (; planning_margin = 0.1, GOV_DEBT..., contracts = false), (; planning_margin = 0.1, GOV_SUMSY..., contracts = false)),
-        ("J2-100 step 2, every hand on contract", (; planning_margin = 0.1, GOV_DEBT..., contract_share = 1.0), (; planning_margin = 0.1, GOV_SUMSY..., contract_share = 1.0)),
+        ("J2-100 step 2, every hand on contract", (; planning_margin = 0.1, GOV_DEBT..., contracts = true, contract_share = 1.0), (; planning_margin = 0.1, GOV_SUMSY..., contracts = true, contract_share = 1.0)),
         ("NJ8 step 8, no contracts (temps only)", (; V8_DEBT..., contracts = false), (; V8_SUMSY..., contracts = false)),
-        ("J8-100 step 8, every hand on contract", (; V8_DEBT..., contract_share = 1.0), (; V8_SUMSY..., contract_share = 1.0)),
+        ("J8-100 step 8, every hand on contract", (; V8_DEBT..., contracts = true, contract_share = 1.0), (; V8_SUMSY..., contracts = true, contract_share = 1.0)),
         ("NJ11 step 11, no contracts (temps only)", (; V8_DEBT..., PRICES..., RESERVE..., FISCAL..., contracts = false), (; V8_SUMSY..., PRICES..., RESERVE..., FISCAL..., contracts = false)),
-        ("J11-100 step 11, every hand on contract", (; V8_DEBT..., PRICES..., RESERVE..., FISCAL..., contract_share = 1.0), (; V8_SUMSY..., PRICES..., RESERVE..., FISCAL..., contract_share = 1.0)),
+        ("J11-100 step 11, every hand on contract", (; V8_DEBT..., PRICES..., RESERVE..., FISCAL..., contracts = true, contract_share = 1.0), (; V8_SUMSY..., PRICES..., RESERVE..., FISCAL..., contracts = true, contract_share = 1.0)),
         ("V8-NJ productive village, no contracts (temps only)", (; V8_DEBT..., PRODUCTIVE..., contracts = false), (; V8_SUMSY..., PRODUCTIVE..., contracts = false)),
-        ("V8-J100 productive village, every hand on contract", (; V8_DEBT..., PRODUCTIVE..., contract_share = 1.0), (; V8_SUMSY..., PRODUCTIVE..., contract_share = 1.0)),
+        ("V8-J100 productive village, every hand on contract", (; V8_DEBT..., PRODUCTIVE..., contracts = true, contract_share = 1.0), (; V8_SUMSY..., PRODUCTIVE..., contracts = true, contract_share = 1.0)),
         ("S3-NJ step 10, everyone greedy, no contracts (temps only)", (; V8_DEBT..., PRICES..., RESERVE..., GREEDY_A..., contracts = false), (; V8_SUMSY..., PRICES..., RESERVE..., GREEDY_A..., contracts = false)),
-        ("S3-J100 step 10, everyone greedy, every hand on contract", (; V8_DEBT..., PRICES..., RESERVE..., GREEDY_A..., contract_share = 1.0), (; V8_SUMSY..., PRICES..., RESERVE..., GREEDY_A..., contract_share = 1.0)),
+        ("S3-J100 step 10, everyone greedy, every hand on contract", (; V8_DEBT..., PRICES..., RESERVE..., GREEDY_A..., contracts = true, contract_share = 1.0), (; V8_SUMSY..., PRICES..., RESERVE..., GREEDY_A..., contracts = true, contract_share = 1.0)),
         # Experience (17 October, Stef): level 2 after 3 months running in a kind of enterprise, level 3 after 9; +10 % and +20 % output
         # per unit; a level lost for every 3 months not worked in that kind. Both moneys.
         ("XP8 step 8, experience", (; V8_DEBT..., experience = true), (; V8_SUMSY..., experience = true)),
@@ -246,6 +251,10 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol)
         # 18 Oct (Stef): the dwelling rent and those on the benefit — exempted, or the rent added to the benefit. Debt side (under SuMSy the dividend covers it).
         ("PL8-X step 8, public land, those on the benefit exempt from the dwelling rent", (; V8_DEBT..., land_pricing = :multiple, public_land = true, public_land_farm_rent_in_breads = 1.0, public_land_firm_rent_in_breads = 2.0, public_land_dwelling_rent_in_breads = 0.25, public_land_dwelling_exempt_benefit = true), (;)),
         ("PL8-B step 8, public land, the dwelling rent added to the benefit", (; V8_DEBT..., land_pricing = :multiple, public_land = true, public_land_farm_rent_in_breads = 1.0, public_land_firm_rent_in_breads = 2.0, public_land_dwelling_rent_in_breads = 0.25, public_land_dwelling_in_benefit = true), (;)),
+        # This week's realistic labour market as one cell (20 October): contracts at 0.8, own-market planning with the emergency rule,
+        # four market rounds, at least two firms of each kind, failing firms with uncovered debt offered for sale. Both moneys.
+        ("RB8 step 8, the realistic labour market of 18-20 October", (; V8_DEBT..., REALISTIC...), (; V8_SUMSY..., REALISTIC...)),
+        ("RB11 step 11, the realistic labour market of 18-20 October", (; V8_DEBT..., PRICES..., RESERVE..., FISCAL..., REALISTIC...), (; V8_SUMSY..., PRICES..., RESERVE..., FISCAL..., REALISTIC...)),
         # The benefit fixed in money (26 September): the debt village's transfer as a fixed sum, like SuMSy's guaranteed income —
         # separates the money system from the indexation of the transfer. Debt side only.
         ("I2 step 2, benefit fixed in money", (; planning_margin = 0.1, GOV_DEBT..., benefit_indexed = false), (;)),

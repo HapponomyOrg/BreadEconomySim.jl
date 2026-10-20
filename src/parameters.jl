@@ -578,7 +578,8 @@ Base.@kwdef struct SimulationParameters
     # Market rounds within the month (19 October, Stef): a month is long; a seller left with stock while buyers went without lowers
     # his ask before the month is out. Bread, grain and tickets clear in up to `market_rounds` rounds; between rounds every seller
     # with stock left lowers his ask by `ask_decrease_after_partial_sale`, never below his floor, and the month's negotiations are
-    # struck afresh; only buyers still short take part in later rounds. 1 = one round, as before.
+    # struck afresh; only buyers still short take part in later rounds; after the month each ask returns to its opening value and the
+    # monthly rule adapts it (20 Oct: carried over, the lowered asks ratcheted prices down). 1 = one round, as before.
     market_rounds::Int = 1
     uncovered_debt_sale::Bool = true                  # 19–20 Oct: a firm closed for uncovered debt is offered for sale first (false = closed outright, as before 19 Oct)
     intervention_exit_months::Int = 2

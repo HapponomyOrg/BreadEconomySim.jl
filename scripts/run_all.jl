@@ -10,6 +10,7 @@
 #     run_all(shard = "1/2")                   # this machine takes every second job (the other machine: shard = "2/2")
 #     run_all(summary_only = true)             # rebuild the summary from the part files already there; runs nothing
 #     run_all(contract_share = 1.0)            # the whole ladder again at another contracts setting, in its own folder
+#     run_all(variant = REALISTIC_LABOUR, variant_label = "realistic")   # the whole ladder with this week's labour market
 #
 # From the command line the environment variables still work as before (JOBS, SEEDS, ROUNDS, LADDERS, RUNGS, SKIP_TESTS,
 # SUMMARY_ONLY, SHARD, CONTRACT_SHARE, WORKER_RECYCLE, HEAP_HINT, UPDATE_ECONOSIM):
@@ -26,6 +27,7 @@
 #   summary_only    write the summaries from the part files already there and run nothing
 #   shard           "k/n": take every n-th job starting at the k-th, to split a run over n machines
 #   contract_share  nothing (the ladder as defined) or a number: every step again at that contracts setting, own folder
+#   variant         a NamedTuple of settings added to every step (e.g. REALISTIC_LABOUR), with variant_label naming its folder
 #   worker_recycle  jobs per worker before the workers are replaced (a model process retains memory across runs) (20)
 #   heap_hint       the workers' --heap-size-hint ("4G")
 #   update_econosim move EconoSim.jl to the latest commit on its main branch first (false)
@@ -39,7 +41,7 @@ using Dates, Pkg, Distributed
 
 const ROOT = normpath(joinpath(@__DIR__, ".."))
 
-const MODEL_VERSION = "2026-10-20.2"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
+const MODEL_VERSION = "2026-10-20.4"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
 
 # ---- packages (once per session) ---------------------------------------------------------------------------------------
 const PACKAGES_READY = Ref(false)
@@ -90,8 +92,13 @@ function run_tests!(; skip::Bool = false)
 end
 
 # ---- names and places ---------------------------------------------------------------------------------------------------
-variant_name(contract_share) = contract_share === nothing ? "" : "_contracts$(round(Int, 100 * contract_share))"
-variant_extra(contract_share) = contract_share === nothing ? (;) : (; contract_share = Float64(contract_share))
+variant_name(contract_share, variant = nothing, label = "variant") = contract_share !== nothing ? "_contracts$(round(Int, 100 * contract_share))" : variant === nothing ? "" : "_" * label
+variant_extra(contract_share, variant = nothing) = contract_share !== nothing ? (; contract_share = Float64(contract_share)) : variant === nothing ? (;) : variant
+# 20 Oct: this week's realistic labour market as a variant of the whole ladder — run_all(variant = REALISTIC_LABOUR, variant_label = "realistic")
+# runs every step with it, into its own folder (…_realistic_…). Market rounds stay at one: with four, the lowered asks pushed
+# prices down month after month until the grain market froze (no-contract SuMSy village, seed 7: 100 alive; one round: 512).
+const REALISTIC_LABOUR = (; contracts = true, contract_share = 0.8, refound_minimum = 2, uncovered_debt_sale = true,
+                            own_market_planning = true, firms_plan_on_sales = false, market_rounds = 1)
 with_extra(kw, extra) = isempty(kw) ? kw : (; kw..., extra...)
 ladder_name(N, settlement, variant = "") = (settlement == :invoicing ? "ladder2_$(N)" : "ladder2_$(N)_$(settlement)") * variant
 parts_dir(N, settlement, rounds, variant = "") = joinpath(ROOT, "results", "parts", "$(ladder_name(N, settlement, variant))_$(rounds)months_$(MODEL_VERSION)")   # the run length and the model version are part of the key
@@ -263,12 +270,13 @@ Returns how many runs this call did and how many failed, how many were already d
 """
 function run_all(; jobs::Int = max(Sys.CPU_THREADS - 1, 1), seeds::Int = 10, rounds::Int = 120,
                    ladders = [(512, :invoicing)], rungs = String[], skip_tests::Bool = false, summary_only::Bool = false,
-                   shard::AbstractString = "", contract_share = nothing, worker_recycle::Int = 20, heap_hint::AbstractString = "4G",
+                   shard::AbstractString = "", contract_share = nothing, variant = nothing, variant_label::AbstractString = "variant",
+                   worker_recycle::Int = 20, heap_hint::AbstractString = "4G",
                    update_econosim::Bool = false)
     start_time = now()
     update_econosim && prepare_packages!(; update_econosim = true)
     run_tests!(; skip = skip_tests || summary_only)
-    variant = variant_name(contract_share); extra = variant_extra(contract_share)
+    extra = variant_extra(contract_share, variant); variant = variant_name(contract_share, variant, String(variant_label))
     rungs = String.(rungs)
 
     # the jobs
