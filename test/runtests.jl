@@ -1824,6 +1824,7 @@ end
     @test battr[owner] ≈ 100.0 * e.shares[owner] / sum(values(e.shares))
     B.record!(m); x = m.data[end]
     @test x.bonds_firms >= 100.0 - 1e-9 && hasproperty(x, :bonds_persons) && hasproperty(x, :bonds_top10_persons)
+    @test x.gini_total_wealth_persons ≈ x.gini_net_wealth_persons            # no gold here: the two wealth Ginis agree
 end
 
 @testset "cooperative forms (14 September 2026)" begin

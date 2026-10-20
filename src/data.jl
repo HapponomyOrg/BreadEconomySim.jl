@@ -203,7 +203,8 @@ function record!(model)
         land_banks = sum(a.land for a in banks; init = 0),
         landholders = count(a -> a.land > 0, ps),
         gini_cash_persons = gini([cash(a) for a in ps]),
-        gini_net_wealth_persons = gini([mw(a) for a in ps]),
+        gini_net_wealth_persons = gini([mw(a) for a in ps]),                 # wealth without gold (gold is reported beside wealth, never in it)
+        gini_total_wealth_persons = gini([mw(a) + a.gold * model.gold_valuation for a in ps]),   # 20 Oct (Stef): everything, gold included (equal to the above where there is no gold)
         bonds_persons = sum(bond_holdings(model, w) for w in ps; init = 0.0), bonds_firms = sum(bond_holdings(model, e) for e in model.enterprise_list if e.alive && !is_bank(e); init = 0.0),
         bonds_top10_persons = (let k = max(length(ps) ÷ 10, 1), top = sort(ps; by = w -> -mw(w))[1:min(k, length(ps))]; sum(bond_holdings(model, w) + get(battr, w.id, 0.0) for w in top; init = 0.0) end),   # 20 Oct: who holds the government's bonds
         gini_income_persons = gini([a.labour_income + a.rent_income + a.fee_received for a in ps]),

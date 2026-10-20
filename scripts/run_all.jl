@@ -39,7 +39,7 @@ using Dates, Pkg, Distributed
 
 const ROOT = normpath(joinpath(@__DIR__, ".."))
 
-const MODEL_VERSION = "2026-10-20.1"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
+const MODEL_VERSION = "2026-10-20.2"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
 
 # ---- packages (once per session) ---------------------------------------------------------------------------------------
 const PACKAGES_READY = Ref(false)
@@ -239,7 +239,8 @@ function summarise(rounds::DataFrame, N::Int)
         :owes_nothing => count => :runs_debt_repaid,   # 15 Oct: runs that owe nothing at the end (a run that never borrowed counted as unpaid before)
          :debt_repaid_month => (x -> all(ismissing, x) ? missing : mean(skipmissing(x))) => :public_debt_repaid_month,
         :gini_cash_persons => m => :gini_cash,
-        :gini_net_wealth_persons => (x -> (v = collect(skipmissing(x)); (isempty(v) || any(g -> !(0 <= g <= 1), v)) ? missing : mean(v))) => :gini_wealth,   # not defined when net wealth goes negative (review 5)
+        :gini_net_wealth_persons => (x -> (v = collect(skipmissing(x)); (isempty(v) || any(g -> !(0 <= g <= 1), v)) ? missing : mean(v))) => :gini_wealth,   # not defined when net wealth goes negative
+        :gini_total_wealth_persons => (x -> (v = collect(skipmissing(x)); (isempty(v) || any(g -> !(0 <= g <= 1), v)) ? missing : mean(v))) => :gini_total_wealth,   # 20 Oct: gold included (review 5)
         :wealth_gap_meals => m => :wealth_gap_meals, :wealth_bottom10_meals => m => :wealth_bottom10_meals,
         :cash_gap_meals => m => :cash_gap_meals, :cash_bottom10_meals => m => :cash_bottom10_meals,
         :negative_wealth_persons => m => :under_water, :zero_cash_persons => m => :without_cash,
