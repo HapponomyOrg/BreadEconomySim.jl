@@ -335,11 +335,12 @@ end
     # 15 September values are superseded and kept only in git history.
     golden = Dict(
         ("single", "debt") => (; price_bread = 6.315871875000001, price_wage = 4.778102558823528, money = 2088.5076000000004, debt = 2136.9815000000003, gov_debt = 1501.7097, gini = 0.46687493505357125, cash_persons = 1761.8283000000001, tax = 34.2685),
-        ("single", "debt_bonds") => (; price_bread = 5.463324242424242, price_wage = 3.906711011029414, money = 729.5627, debt = 606.1003, gov_debt = 1385.1892999999998, gini = 0.45734222815193815, cash_persons = 588.9098999999999, tax = 28.11439999999999),
+        ("single", "debt_bonds") => (; price_bread = 5.463324242424242, price_wage = 3.906711011029414, money = 729.5627, debt = 606.1003, gov_debt = 1385.1892999999998, gini = 0.44926952631242467, cash_persons = 588.9098999999999, tax = 28.11439999999999),
         ("single", "sumsy") => (; price_bread = 4.716076470588236, price_wage = 3.4243705882352957, money = 2483.5764, debt = 10.598600000000001, gov_debt = 0.0, gini = 0.5351819353471121, cash_persons = 1706.7677000000003, tax = 0.0),
         ("streams", "debt") => (; price_bread = 5.916084848484848, price_wage = 4.581315493259804, money = 2051.6816999999996, debt = 2099.1299, gov_debt = 1484.3687, gini = 0.46190433292821576, cash_persons = 1757.2860999999996, tax = 33.174899999999994),
-        ("streams", "debt_bonds") => (; price_bread = 5.571720588235295, price_wage = 3.8882152496292637, money = 776.7808, debt = 653.0337999999999, gov_debt = 1391.4052, gini = 0.45563444421603605, cash_persons = 585.6147, tax = 29.69620000000004),
+        ("streams", "debt_bonds") => (; price_bread = 5.571720588235295, price_wage = 3.8882152496292637, money = 776.7808, debt = 653.0337999999999, gov_debt = 1391.4052, gini = 0.4491868476612597, cash_persons = 585.6147, tax = 29.69620000000004),
         ("streams", "sumsy") => (; price_bread = 4.457366666666666, price_wage = 3.296194117647059, money = 2483.6059000000005, debt = 1.7051, gov_debt = 0.0, gini = 0.5122876828682883, cash_persons = 1716.5401000000002, tax = 0.0))
+    # 20 Oct: the two debt_bonds Ginis re-baselined — firm-held bonds are now attributed to their owners (a measure, not a behaviour: every other golden value is unchanged)
     configs = Dict("debt" => BEH, "sumsy" => (; BEH..., SUM...),
                    "debt_bonds" => (; BEH..., government_bonds = true, deposit_interest_period = 12, deposit_interest_rate = 0.01, loyalty_bonus_rate = 0.02))
     for (mode, streams) in (("single", false), ("streams", true)), (name, kw) in configs
@@ -1811,6 +1812,18 @@ end
             @test haskey(base, k)
         end
     end
+end
+
+
+@testset "bonds in the wealth measures (20 October 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., ownership = :shareholders, maximum_rounds = 2))
+    B.econo_step!(m, 1)
+    e = first(x for x in m.enterprise_list if x.alive && !isempty(x.shares)); owner = first(keys(e.shares))
+    push!(m.bonds, B.Bond(length(m.bonds) + 1, e.id, 100.0, 0.005, 1, 60, false))
+    battr, _ = B.attributed_firm_bonds(m)
+    @test battr[owner] ≈ 100.0 * e.shares[owner] / sum(values(e.shares))
+    B.record!(m); x = m.data[end]
+    @test x.bonds_firms >= 100.0 - 1e-9 && hasproperty(x, :bonds_persons) && hasproperty(x, :bonds_top10_persons)
 end
 
 @testset "cooperative forms (14 September 2026)" begin

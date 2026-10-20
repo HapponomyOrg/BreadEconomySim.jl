@@ -72,8 +72,35 @@ function update_expected_prices!(model)
     return nothing
 end
 
+"""
+    attributed_firm_bonds(model)
+
+Bonds held by firms, attributed to their owners (20 October, Stef: bond ownership must count in the Gini and the percentiles).
+A firm's book value leaves out the bonds it holds, so its owners' shares did not carry them: here each firm's bonds go to its
+shareholders by their share of the units, to a co-op's members equally; an ownerless producer's bonds are returned as a pool
+spread over everyone, as its book value already is in the attributed Gini. Measurement only: no decision in the model reads it.
+"""
+function attributed_firm_bonds(model)
+    attr = Dict{Int, Float64}(); pool = 0.0
+    for e in model.enterprise_list
+        (e.alive && !is_bank(e)) || continue
+        b = bond_holdings(model, e); b > 1e-9 || continue
+        if !isempty(e.shares)
+            tot = sum(values(e.shares))
+            for (id, u) in e.shares; attr[id] = get(attr, id, 0.0) + b * u / tot; end
+        elseif !isempty(e.members)
+            for id in keys(e.members); attr[id] = get(attr, id, 0.0) + b / length(e.members); end
+        else
+            pool += b
+        end
+    end
+    return attr, pool
+end
+
 function record!(model)
     ps = persons(model); alive = alive_agents(model)
+    battr, bpool = attributed_firm_bonds(model)                              # 20 Oct: firm-held bonds in their owners' wealth
+    mw(w) = net_wealth(model, w) + get(battr, w.id, 0.0) + bpool / max(length(ps), 1)   # the measured wealth of a person
     banks = enterprises(model, :bank); gov = government(model)
     r = current_round(model)
     ev = @view model.events[model.event_start:end]
@@ -95,12 +122,12 @@ function record!(model)
         government_outlay = model.government_outlay_this_round, tax_shortfall = model.tax_shortfall, tax_policy_step = model.tax_policy_step,
         consumption_tax = model.consumption_tax_this_round, consumption_tax_scale = model.consumption_tax_scale,
         wealth_tax = model.wealth_tax_this_round, wealth_tax_base = model.wealth_tax_base, wealth_tax_scale = model.wealth_tax_scale,
-        clearing_residue = model.clearing_residue, negative_wealth_persons = count(w -> net_wealth(model, w) < 0, ps),
+        clearing_residue = model.clearing_residue, negative_wealth_persons = count(w -> mw(w) < 0, ps),
         zero_cash_persons = count(w -> cash(w) <= 1e-6, ps),
         # 24 Sept (review 5): land held by households, and a wealth Gini with the equity of firms nobody owns spread over the villagers
         land_households_share = (let tot = sum(a.land for a in agents_by_id(model) if a.alive; init = 0); tot > 0 ? sum(w.land for w in ps; init = 0) / tot : NaN end),
         gini_wealth_attributed = (let pool = sum(book_value(model, e) for e in model.enterprise_list if e.alive && is_producer(e) && isempty(e.shares) && isempty(e.members); init = 0.0)
-            isempty(ps) ? NaN : gini([net_wealth(model, w) + pool / length(ps) for w in ps]) end),
+            isempty(ps) ? NaN : gini([mw(w) + pool / length(ps) for w in ps]) end),
         intervention = model.intervention, intervention_months = model.intervention_months,
         basic_income = model.basic_income_this_round, levy_dividend = model.levy_dividend_this_round, ground_rent = model.ground_rent_this_round,
         premium_loaves = model.premium_loaves_this_round, premium_revenue = model.premium_revenue_this_round, premium_labour = model.premium_labour_this_round,
@@ -115,7 +142,7 @@ function record!(model)
         # the rich–poor gap: richest tenth minus poorest tenth of the living, in meals (two loaves at this month's price),
         # so that it works with zero and negative holdings and compares across villages with different price levels; the
         # poorest tenth's own holding is reported too, since the gap can also narrow because the top falls
-        (let meal = max(meal_price(model), 1e-9), (wb, wt) = decile_ends(net_wealth(model, w) for w in ps), (cb, ct) = decile_ends(cash(w) for w in ps)
+        (let meal = max(meal_price(model), 1e-9), (wb, wt) = decile_ends(mw(w) for w in ps), (cb, ct) = decile_ends(cash(w) for w in ps)
             (; wealth_gap_meals = (wt - wb) / meal, wealth_bottom10_meals = wb / meal, wealth_top10_meals = wt / meal,
                cash_gap_meals = (ct - cb) / meal, cash_bottom10_meals = cb / meal, cash_top10_meals = ct / meal)
         end)...,
@@ -176,7 +203,9 @@ function record!(model)
         land_banks = sum(a.land for a in banks; init = 0),
         landholders = count(a -> a.land > 0, ps),
         gini_cash_persons = gini([cash(a) for a in ps]),
-        gini_net_wealth_persons = gini([net_wealth(model, a) for a in ps]),
+        gini_net_wealth_persons = gini([mw(a) for a in ps]),
+        bonds_persons = sum(bond_holdings(model, w) for w in ps; init = 0.0), bonds_firms = sum(bond_holdings(model, e) for e in model.enterprise_list if e.alive && !is_bank(e); init = 0.0),
+        bonds_top10_persons = (let k = max(length(ps) ÷ 10, 1), top = sort(ps; by = w -> -mw(w))[1:min(k, length(ps))]; sum(bond_holdings(model, w) + get(battr, w.id, 0.0) for w in top; init = 0.0) end),   # 20 Oct: who holds the government's bonds
         gini_income_persons = gini([a.labour_income + a.rent_income + a.fee_received for a in ps]),
         persons_below_meal = count(a -> cash(a) < meal_price(model), ps),
         persons_income = sum(a.labour_income + a.rent_income + a.fee_received for a in ps; init = 0.0) + model.gi_this_round + model.deposit_interest_this_round - model.demurrage_persons_this_round,
@@ -185,12 +214,12 @@ function record!(model)
         tickets_sold = sum(t[2] for t in model.transactions[:ticket]; init = 0.0),
         n_greedy = count(w -> w.greed != :none, ps), hungry_greedy = count(w -> w.greed != :none && w.hunger > 0, ps), hungry_others = count(w -> w.greed == :none && w.hunger > 0, ps),
         cash_greedy = sum(cash(w) for w in ps if w.greed != :none; init = 0.0), land_greedy = sum(w.land for w in ps if w.greed != :none; init = 0),
-        wealth_greedy = sum(net_wealth(model, w) for w in ps if w.greed != :none; init = 0.0), wealth_persons = sum(net_wealth(model, w) for w in ps; init = 0.0),
+        wealth_greedy = sum(mw(w) for w in ps if w.greed != :none; init = 0.0), wealth_persons = sum(mw(w) for w in ps; init = 0.0),
         bread_greedy = sum(bread_units(w) for w in ps if w.greed == :greedy; init = 0.0),
         greedy_loaves = model.greedy_loaves_this_round, greedy_tickets = model.greedy_tickets_this_round, ration = model.ration_this_round,
         tier_multiplier = mean_or_nan([e.tier_multiplier for e in alive if is_bakery(e)]), tier_sold = sum(e.tier_sold for e in alive if is_bakery(e); init = 0), tier_revenue = model.tier_revenue_this_round,
         n_consumers = count(w -> w.greed == :greedy, ps), n_hoarders = count(w -> w.greed == :greedy, ps),
-        wealth_hoarders = sum(net_wealth(model, w) for w in ps if w.greed == :greedy; init = 0.0), land_hoarders = sum(w.land for w in ps if w.greed == :greedy; init = 0),
+        wealth_hoarders = sum(mw(w) for w in ps if w.greed == :greedy; init = 0.0), land_hoarders = sum(w.land for w in ps if w.greed == :greedy; init = 0),
         shares_hoarders = sum(get(e.shares, w.id, 0.0) for e in alive if e isa Enterprise && e.ownership == :shareholders for w in ps if w.greed == :greedy; init = 0.0),
         greedy_land = model.greedy_land_this_round, greedy_shares = model.greedy_shares_this_round, ticket_revenue = sum(t[1] * t[2] for t in model.transactions[:ticket]; init = 0.0),
         theatre_labour = sum(e.hired_labour for e in alive if is_theatre(e); init = 0.0), cash_theatres = sum(cash(e) for e in alive if is_theatre(e); init = 0.0),

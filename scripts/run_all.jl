@@ -39,7 +39,7 @@ using Dates, Pkg, Distributed
 
 const ROOT = normpath(joinpath(@__DIR__, ".."))
 
-const MODEL_VERSION = "2026-10-20.0"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
+const MODEL_VERSION = "2026-10-20.1"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
 
 # ---- packages (once per session) ---------------------------------------------------------------------------------------
 const PACKAGES_READY = Ref(false)
@@ -258,7 +258,7 @@ end
             update_econosim = false)
 
 Run the ladders and write their combined files and summaries. See the head of scripts/run_all.jl for every setting.
-Returns the number of runs done, skipped and failed.
+Returns how many runs this call did and how many failed, how many were already done, and how many it left to another shard.
 """
 function run_all(; jobs::Int = max(Sys.CPU_THREADS - 1, 1), seeds::Int = 10, rounds::Int = 120,
                    ladders = [(512, :invoicing)], rungs = String[], skip_tests::Bool = false, summary_only::Bool = false,
@@ -373,7 +373,7 @@ function run_all(; jobs::Int = max(Sys.CPU_THREADS - 1, 1), seeds::Int = 10, rou
     end
     elapsed = Dates.value(now() - start_time) ÷ 1000
     println("\nAll done in $(elapsed ÷ 3600) h $(lpad((elapsed % 3600) ÷ 60, 2, '0')) min $(lpad(elapsed % 60, 2, '0')) s (started $(Dates.format(start_time, "yyyy-mm-dd HH:MM")), finished $(Dates.format(now(), "yyyy-mm-dd HH:MM")))."); flush(stdout)
-    return (; done = length(results) - failed, skipped = length(jobs_list) - length(todo), failed)
+    return (; done = length(results) - failed, failed, already_done = done_before, not_in_this_call = length(jobs_list) - done_before - length(todo))   # 20 Oct: a shard's other half is 'not in this call', not 'skipped'
 end
 
 # ---- the command line: the environment variables of before ------------------------------------------------------------
