@@ -187,6 +187,8 @@ end
     community::Bool = false             # a volunteer-run community theatre (15 Oct)
     plan_share::Float64 = -1.0          # 16 Oct: the firm's share of its kind's planned output, adjusted gradually (< 0 = not yet set)
     share_trend::Int = 0                # 16 Oct: consecutive months its sales share has moved the same way (+ up, − down)
+    pricing::Symbol = :sector           # 21 Oct: :sector (its sector's pricing_target), :reserve or :margin — set per firm by `pricing_margin_share`
+    sales_history::Vector{Float64} = Float64[]   # 21 Oct: the last months' sales plus turned-away customers, for own-market planning
     land_levy_arrears::Float64 = 0.0    # land levy due but unpaid
     revenue_period::Float64 = 0.0       # profit tax: sales since the last assessment (accrued at the sale)
     revenue_this_round::Float64 = 0.0   # sales this month (for the turnover in the liquidation test)

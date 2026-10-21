@@ -2,6 +2,17 @@
 
 hired_share(model, e::Enterprise) = e.production_target <= 0 ? 0.0 : 1.0   # enterprises have no own capacity
 
+"""The factor a sector's floor is raised by when it prices on a target margin (21 October): 1 + the net margin grossed up for
+the profit tax, so that the margin left after tax is the target."""
+function margin_factor(model, kind::Symbol, firm_pricing::Symbol = :sector)
+    p = parameters(model)
+    mode = firm_pricing != :sector ? firm_pricing : kind == :farm ? p.pricing_target_farm : kind == :bakery ? p.pricing_target_bakery : kind == :theatre ? p.pricing_target_theatre : :reserve
+    mode == :margin || return 1.0
+    m = kind == :farm ? p.target_net_margin_farm : kind == :bakery ? p.target_net_margin_bakery : p.target_net_margin_theatre
+    tax = p.profit_tax_rate > 0 ? min(p.profit_tax_rate * model.profit_tax_scale, 0.95) : 0.0
+    return 1 + m / (1 - tax)
+end
+
 function seller_reservation(model, seller::Agent, good::Symbol; age::Int = 0)
     p = parameters(model)
     if good == :wage          # person: one meal per round at full capacity, net of tax
@@ -13,14 +24,14 @@ function seller_reservation(model, seller::Agent, good::Symbol; age::Int = 0)
         p.wage_reservation_net_of_tax && (base /= (1 - effective_wage_tax_rate(model)))
         return base * max(1 - p.hunger_wage_discount * seller.hunger, 0.0)
     elseif good == :ticket    # theatre: wages per customer served
-        return expected_price(model, :wage) / p.customers_per_labour_unit
+        return expected_price(model, :wage) / p.customers_per_labour_unit * margin_factor(model, :theatre, seller isa Enterprise ? seller.pricing : :sector)
     elseif good == :grain     # farm: rent + wages per unit
-        return expected_price(model, :rent) + expected_price(model, :wage)
+        return (expected_price(model, :rent) + expected_price(model, :wage)) * margin_factor(model, :farm, seller isa Enterprise ? seller.pricing : :sector)
     elseif good == :bread     # bakery: (grain + wages) per grain unit, per bread, at this round's actual input prices; ageing discount
         grain_paid = average_price(model, :grain); wage_paid = average_price(model, :wage)
         g = (isnan(grain_paid) || p.indexed_pricing) ? expected_price(model, :grain) : max(grain_paid, expected_price(model, :grain))
         w = (isnan(wage_paid) || p.indexed_pricing) ? expected_price(model, :wage) : max(wage_paid, expected_price(model, :wage))
-        base = (g + w) / p.breads_per_grain
+        base = (g + w) / p.breads_per_grain * margin_factor(model, :bakery, seller isa Enterprise ? seller.pricing : :sector)
         return base * max(1 - p.bread_price_ageing_discount * age, 0.0)
     elseif good == :rent      # landowner: a meal from full letting; bank: the going rent
         seller isa Person || return expected_price(model, :rent) * 0.5
@@ -318,34 +329,47 @@ function update_intervention!(model)
     return nothing
 end
 
-"""A firm's own plan (19 October): its target follows what it sold, at the gradual pace; sold out, it plans `plan_step` more."""
+"""A firm's own plan (19 October; 21 October: on the average of its last `plan_window` months, net of usable stock): what it sold
+plus its share of the customers turned away, averaged over the window (the months before its first taken as its first plan);
+a firm that sold out plans `plan_step` more; the stock it carries into next month that will not spoil first is deducted."""
 function own_plan!(model, e::Enterprise, good::Symbol, per_unit::Float64, cap::Int, n_kind::Int = 1)
     p = parameters(model); r = e.market[good]
     r.offered > 1e-9 || return nothing                                      # nothing offered last month: keep the plan
-    turned_away = p.own_plan_counts_unmet ? r.unmet_units / max(n_kind, 1) : 0.0   # 21 Oct: unmet demand is booked on every seller of the kind; this firm's share
-    sold_units = (r.sold + turned_away) / per_unit
-    desired = sold_units * (1 + p.planning_margin)
-    r.sold >= r.offered * (1 - p.unsold_share) - 1e-9 && (desired = max(desired, e.production_target * (1 + p.plan_step)))   # sold out: more
-    current = Float64(e.production_target); gap = desired - current
-    if abs(gap) <= max(p.plan_small_change * current, 1.0)                 # a small change is followed at once
-        e.share_trend = 0; target = desired
-    else                                                                  # a large one a third, two thirds, then all the way
-        dir = gap > 0 ? 1 : -1
-        e.share_trend = sign(e.share_trend) == dir ? e.share_trend + dir : dir
-        target = current + min(abs(e.share_trend), p.plan_adjustment_months) / p.plan_adjustment_months * gap
+    turned_away = p.own_plan_counts_unmet ? r.unmet_units / max(n_kind, 1) : 0.0   # unmet demand is booked on every seller of the kind; this firm's share
+    observed = r.sold + turned_away
+    if p.plan_window > 1
+        h = e.sales_history
+        isempty(h) && append!(h, fill(e.production_target * per_unit, p.plan_window - 1))   # the missing months: its first plan
+        push!(h, observed); while length(h) > p.plan_window; popfirst!(h); end
+        # 21 Oct: the average guards against a dip; a rise is followed at once (the average alone kept firms sold out longer, and
+        # every sold-out month raised the price: SuMSy step 8 +7 %/yr against +3.5 % on last month alone)
+        expected = (p.plan_window_follows_rises ? max(sum(h) / length(h), observed) : sum(h) / length(h)) * (1 + p.planning_margin)
+    else
+        expected = observed * (1 + p.planning_margin)
+    end
+    r.sold >= r.offered * (1 - p.unsold_share) - 1e-9 && (expected = max(expected, e.production_target * per_unit * (1 + p.plan_step)))   # sold out: more
+    if p.plan_nets_stock                                                    # the stock that will still be good next month
+        items = good == :bread ? e.bread : good == :grain ? e.grain : StockItem[]
+        usable = sum(i.units for i in items if i.age < p.spoilage_age_in_rounds - 1; init = 0.0)
+        expected = max(expected - usable, 0.0)
+    end
+    desired = expected / per_unit
+    if p.plan_window > 1
+        target = desired                                                    # the window already smooths: no gradual pace on top
+    else
+        current = Float64(e.production_target); gap = desired - current
+        if abs(gap) <= max(p.plan_small_change * current, 1.0)
+            e.share_trend = 0; target = desired
+        else
+            dir = gap > 0 ? 1 : -1
+            e.share_trend = sign(e.share_trend) == dir ? e.share_trend + dir : dir
+            target = current + min(abs(e.share_trend), p.plan_adjustment_months) / p.plan_adjustment_months * gap
+        end
     end
     e.production_target = clamp(ceil(Int, target - 1e-9), 1, cap)
     return nothing
 end
 
-"""
-    plan_targets!(model)
-
-Demand-based production planning: bakeries plan the grain (→ bread) needed to feed the living population next
-round, net of the bread they hold; farms plan the grain the bakeries will ask for, net of the grain they hold.
-Whole units are allotted round-robin so the total matches demand (no structural glut). Targets do not shrink
-with hunger: the population, not last round's sales, sets the plan.
-"""
 function plan_targets!(model)
     p = parameters(model)
     ps = persons(model)

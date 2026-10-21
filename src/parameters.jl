@@ -63,6 +63,30 @@ Base.@kwdef struct SimulationParameters
     # (a producer) or savings buffer (a person). Realistic: nobody prices new output below what it cost to make.
     ask_floor::Symbol = :none
     ask_floor_markup_when_short::Float64 = 0.05
+    # Pricing on a target profit margin (21 Oct, Stef): per sector, :reserve prices at cost (the floor above, as before) and
+    # :margin prices at cost × (1 + the target net margin, grossed up for the profit tax). Targets from docs/data/
+    # sector_margin_targets.csv (Vena / NYU Stern, February 2026): farms 7.12 %, bakeries 6.00 %, theatres 0.5 % (no subsidies yet).
+    # `margin_profit_mode`: :payout (default) keeps the reserve target of `reserve_target_in_rounds` and pays the rest out as
+    # dividends, as before — only the price floor changes; :retain keeps the net profit as reserve and pays dividends only above
+    # `margin_retain_ceiling_in_rounds` months of costs (owners' wealth then grows with the margin).
+    pricing_target_farm::Symbol = :reserve
+    pricing_target_bakery::Symbol = :reserve
+    pricing_target_theatre::Symbol = :reserve
+    target_net_margin_farm::Float64 = 0.0712
+    target_net_margin_bakery::Float64 = 0.0600
+    target_net_margin_theatre::Float64 = 0.0050
+    margin_profit_mode::Symbol = :payout
+    margin_retain_ceiling_in_rounds::Float64 = 12.0
+    # 21 Oct (Stef): margin targets against reserve targets is greed against sufficiency — a margin target never has enough, a
+    # reserve target does. With `pricing_margin_share` > 0 this fraction of each sector's firms prices on its margin and the rest
+    # at cost (the sector settings above are then ignored): at the founding the first firms of each kind by their index, later
+    # entrants by a draw. Each firm's strategy is in `e.pricing`; `scripts/pricing_strategy_test.jl` compares their survival.
+    pricing_margin_share::Float64 = 0.0
+    # 21 Oct: in the wealth measures a shareholder's shares are valued at the firm's book value per unit (cash, land, minus debts —
+    # what the owners would divide), not at the last traded share price, which moves only when shares change hands and so hid
+    # retained profit (and, with :retain above, made owners look poorer the more their firms kept). Measurement only; the
+    # share market still trades at its own price. The talk's run (2026-10-20.4) was measured at the traded price.
+    shares_at_book_in_measures::Bool = true
     bread_bid_hunger_multiplier::Float64 = 0.4
     initial_production_target::Int = 6
 
@@ -148,6 +172,12 @@ Base.@kwdef struct SimulationParameters
     guaranteed_income::Float64 = 5.0                  # per person per round, fixed nominal (one bread at the initial price)
     guaranteed_income_in_breads::Float64 = 0.0        # > 0: the income is this many loaves at the expected bread price each round (indexed; breaks the bounded money stock — a test, not a design)
     demurrage_rate::Float64 = 0.02                    # per round, on balances above the buffer; destroys money
+    # Tiered demurrage (21 Oct, Stef; EconoSim's tiers): (lower bound above the cushion, rate per round), marginal like tax
+    # brackets — the first bound is 0; empty = the flat `demurrage_rate`. Computed with EconoSim's `make_tiers` and
+    # `calculate_time_range_demurrage`. The test tiers (`DEMURRAGE_TIERS_TEST`): 2 % on the first 250 above the cushion — what a
+    # villager who never spends settles at under the flat rate (income ÷ rate) —, 5 % up to 1,000 (four years of bread at the
+    # starting price), 10 % above. Bounds in money, like the cushion (so they drift with prices, as it does).
+    demurrage_tiers::Vector{Tuple{Float64, Float64}} = Tuple{Float64, Float64}[]
     demurrage_tax_rate::Float64 = 0.0                 # surcharge on the same base, transferred to the government
     # 14 Oct (a reader's question: does any village with a basic income and a land dividend keep its people alive?): under debt
     # money `demurrage_tax_rate` > 0 runs too — a tax on balances above the cushion, paid to the government, nothing destroyed —
@@ -583,6 +613,16 @@ Base.@kwdef struct SimulationParameters
     # price of bread up, the indexed contract wages followed, costs and asks rose, and the premium price with them: with
     # contracts, +29 % a year in the premium-loaf village. false = the premium price, as before.
     premium_at_plain_price::Bool = true
+    # 21 Oct (Stef): one month of lower sales should not cut the plan — a firm planning on its own market plans on the average of
+    # its last `plan_window` months (sold plus turned away) when sales fall, and on last month's when they rise, the missing months at the start taken as its first plan; it plans
+    # net of the stock it carries into next month that will not spoil first (a farm's grain, a bakery's bread). With the
+    # average in place the gradual pace (`plan_adjustment_months`) is not applied on top of it.
+    plan_window::Int = 3
+    plan_nets_stock::Bool = true
+    # 21 Oct: with true, a rise above the average is followed at once (a dip is still averaged). Tried on seed 1 with the realistic
+    # set: the debt village keeps 475 instead of 471, but SuMSy inflates 18 %/yr instead of 7 % — every sold-out month raises the
+    # price, and the quick rises make more of them. Off until that is understood.
+    plan_window_follows_rises::Bool = false
     # Market rounds within the month (19 October, Stef): a month is long; a seller left with stock while buyers went without lowers
     # his ask before the month is out. Bread, grain and tickets clear in up to `market_rounds` rounds; between rounds every seller
     # with stock left lowers his ask by `ask_decrease_after_partial_sale`, never below his floor, and the month's negotiations are

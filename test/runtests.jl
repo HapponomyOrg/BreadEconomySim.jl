@@ -1760,7 +1760,7 @@ end
 
 
 @testset "own-market planning and the emergency rule (19 October 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., own_market_planning = true, plan_within_capacity = true, maximum_rounds = 4))
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., own_market_planning = true, plan_within_capacity = true, plan_window = 1, plan_nets_stock = false, maximum_rounds = 4))
     for _ in 1:3; B.econo_step!(m, 1); end
     b = first(B.enterprises(m, :bakery)); p = B.parameters(m)
     b.production_target = 20; b.share_trend = 0
@@ -1825,6 +1825,51 @@ end
     B.record!(m); x = m.data[end]
     @test x.bonds_firms >= 100.0 - 1e-9 && hasproperty(x, :bonds_persons) && hasproperty(x, :bonds_top10_persons)
     @test x.gini_total_wealth_persons ≈ x.gini_net_wealth_persons            # no gold here: the two wealth Ginis agree
+end
+
+
+@testset "own-market planning on a three-month average, net of stock (21 October 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., own_market_planning = true, plan_window = 3, plan_nets_stock = true, maximum_rounds = 4))
+    for _ in 1:3; B.econo_step!(m, 1); end
+    f = first(B.enterprises(m, :farm)); empty!(f.sales_history); empty!(f.grain); f.production_target = 30
+    for sold in (30.0, 30.0)
+        f.market[:grain].offered = 40.0; f.market[:grain].sold = sold; f.market[:grain].unmet_units = 0.0
+        B.own_plan!(m, f, :grain, 1.0, 1000, 1)
+    end
+    f.market[:grain].offered = 40.0; f.market[:grain].sold = 3.0                    # one bad month
+    B.own_plan!(m, f, :grain, 1.0, 1000, 1)
+    @test f.production_target >= 20                                                   # the plan falls by a third of the dip, not to 3
+    push!(f.grain, B.StockItem(10.0, 0)); f.market[:grain].sold = 30.0
+    t1 = f.production_target; B.own_plan!(m, f, :grain, 1.0, 1000, 1)
+    @test f.production_target <= ceil(Int, (30 + 3 + 30) / 3 * (1 + B.parameters(m).planning_margin)) - 9   # the grain in store is deducted
+end
+
+
+@testset "pricing on a target margin (21 October 2026)" begin
+    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., maximum_rounds = 2))
+    m1 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., pricing_target_bakery = :margin, pricing_target_farm = :margin, pricing_target_theatre = :margin, maximum_rounds = 2))
+    for m in (m0, m1); B.econo_step!(m, 1); end
+    b0 = first(B.enterprises(m0, :bakery)); b1 = first(B.enterprises(m1, :bakery))
+    @test B.margin_factor(m1, :bakery) ≈ 1.06 && B.margin_factor(m0, :bakery) == 1.0
+    @test B.seller_reservation(m1, b1, :bread) > B.seller_reservation(m0, b0, :bread)                 # the floor carries the margin
+    @test B.reserve_target(m1, b1) ≈ B.reserve_target(m0, b0) rtol = 0.5                              # :payout keeps the reserve target
+    m2 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., pricing_target_bakery = :margin, margin_profit_mode = :retain, maximum_rounds = 2))
+    B.econo_step!(m2, 1); b2 = first(B.enterprises(m2, :bakery))
+    @test B.reserve_target(m2, b2) > 3 * B.reserve_target(m0, b0)                                  # :retain keeps the profit up to the ceiling
+    mt = create_bread_economy(SimulationParameters(; seed = 1, BEH..., pricing_target_bakery = :margin, profit_tax_rate = 0.25, maximum_rounds = 2))
+    @test B.margin_factor(mt, :bakery) ≈ 1 + 0.06 / 0.75                                            # grossed up for the profit tax
+    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., pricing_target_bakery = :margin, pricing_target_farm = :margin))) < 1e-6
+end
+
+
+@testset "tiered demurrage (21 October 2026, EconoSim's tiers)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., SUM..., demurrage_tiers = DEMURRAGE_TIERS_TEST, maximum_rounds = 2))
+    @test B.demurrage_due(m, 100.0) ≈ 2.0                                        # inside the first tier: the flat 2 %
+    @test B.demurrage_due(m, 500.0) ≈ 250 * 0.02 + 250 * 0.05                    # marginal, like tax brackets
+    @test B.demurrage_due(m, 1200.0) ≈ 250 * 0.02 + 750 * 0.05 + 200 * 0.10
+    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., SUM..., maximum_rounds = 2))
+    @test B.demurrage_due(m0, 500.0) ≈ 10.0                                      # no tiers: the flat rate
+    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., SUM..., demurrage_tiers = DEMURRAGE_TIERS_TEST))) < 1e-6
 end
 
 @testset "cooperative forms (14 September 2026)" begin

@@ -1,0 +1,102 @@
+# Average gross and net profit margins by industry (US-listed firms), in percent of revenue.
+# Source: Vena Solutions, 'Industry Benchmarks of Gross, Net and Operating Profit Margins', Nicole Bennett, 19 February 2026,
+#   https://www.venasolutions.com/blog/average-profit-margin-by-industry — which reproduces the NYU Stern (Aswath Damodaran) margin
+#   dataset, https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datafile/margin.html (January update). Fetched 21 October 2026.
+# For the dashboard's database (docs/dashboard_spec.md): one row per industry; the simulated sectors map to it in
+#   docs/data/sector_margin_targets.csv.
+industry,gross_margin_pct,net_margin_pct
+"Advertising",28.11,0.89
+"Aerospace/Defense",17.27,4.96
+"Air Transport",25.80,2.79
+"Apparel",51.93,3.15
+"Auto & Truck",12.45,3.53
+"Auto Parts",15.01,1.62
+"Bank (Money Center)",100.00,30.89
+"Banks (Regional)",99.36,29.67
+"Beverage (Alcoholic)",45.25,8.59
+"Beverage (Soft)",54.52,13.73
+"Broadcasting",38.57,-1.41
+"Brokerage & Investment Banking",62.06,12.44
+"Building Materials",30.94,8.00
+"Business & Consumer Services",33.50,5.45
+"Cable TV",59.05,10.69
+"Chemical (Basic)",13.75,3.52
+"Chemical (Diversified)",18.18,-1.01
+"Chemical (Specialty)",33.13,10.93
+"Coal & Related Energy",34.60,15.80
+"Computer Services",25.52,4.40
+"Computers/Peripherals",37.54,17.47
+"Construction Supplies",24.94,10.17
+"Diversified",28.22,15.84
+"Drugs (Biotechnology)",56.37,-11.88
+"Drugs (Pharmaceutical)",65.26,15.20
+"Education",44.23,1.30
+"Electrical Equipment",32.52,15.22
+"Electronics (Consumer & Office)",32.36,-3.05
+"Electronics (General)",27.36,4.69
+"Engineering/Construction",13.85,1.67
+"Entertainment",38.09,-0.23
+"Environmental & Waste Services",34.65,8.09
+"Farming/Agriculture",16.49,7.12
+"Financial Services (Non-bank & Insurance)",65.99,15.44
+"Food Processing",24.53,6.00
+"Food Wholesalers",14.86,1.21
+"Furn/Home Furnishings",26.04,-2.24
+"Green & Renewable Energy",61.67,15.26
+"Healthcare Products",55.64,8.19
+"Healthcare Support Services",14.37,2.25
+"Healthcare Information and Technology",47.67,5.72
+"Homebuilding",25.06,12.27
+"Hospitals/Healthcare Facilities",35.99,5.12
+"Hotel/Gaming",59.52,10.08
+"Household Products",48.70,11.08
+"Information Services",32.72,3.49
+"Insurance (General)",33.93,8.88
+"Insurance (Life)",20.49,0.72
+"Insurance (Prop/Cas.)",23.43,5.00
+"Investments & Asset Management",66.89,19.82
+"Machinery",35.54,9.77
+"Metals & Mining",31.13,7.23
+"Office Equipment & Services",35.33,0.81
+"Oil/Gas (Integrated)",37.33,12.40
+"Oil/Gas (Production and Exploration)",58.75,28.26
+"Oil/Gas Distribution",52.91,23.59
+"Oilfield Services/Equip.",14.09,6.22
+"Packaging & Container",21.71,2.85
+"Paper/Forest Products",20.20,3.86
+"Power",37.41,8.51
+"Precious Metals",32.47,-4.26
+"Publishing & Newspapers",45.99,1.82
+"R.E.I.T.",57.48,12.61
+"Real Estate (Development)",32.20,-16.35
+"Real Estate (General/Diversified)",46.70,16.91
+"Real Estate (Operations & Services)",34.10,-3.14
+"Recreation",36.73,0.90
+"Reinsurance",15.72,6.36
+"Restaurant/Dining",32.43,10.66
+"Retail (Automotive)",21.88,4.32
+"Retail (Building Supply)",34.17,8.40
+"Retail (Distributors)",32.34,7.55
+"Retail (General)",30.86,3.09
+"Retail (Grocery and Food)",25.54,1.18
+"Retail (REITs)",77.63,23.32
+"Retail (Special Lines)",29.88,1.45
+"Rubber & Tires",16.56,-2.53
+"Semiconductor",51.72,16.47
+"Semiconductor Equip",44.27,17.94
+"Shipbuilding & Marine",25.44,7.75
+"Shoe",45.36,9.49
+"Software (Entertainment)",63.43,20.35
+"Software (Internet)",59.11,-14.32
+"Software (System & Application)",71.52,19.14
+"Steel",19.30,9.25
+"Telecom (Wireless)",61.35,8.79
+"Telecom. Equipment",55.56,13.98
+"Telecom. Services",58.24,-0.28
+"Tobacco",61.25,27.52
+"Transportation",25.12,5.96
+"Transportation (Railroads)",49.76,23.52
+"Trucking",21.95,5.37
+"Utility (General)",40.55,13.51
+"Utility (Water)",55.50,19.34
+"Total Market",36.56,8.54

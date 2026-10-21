@@ -188,12 +188,13 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
             b.staff_target = max(1.0, parameters.number_of_persons / (length(bks) * parameters.bank_customers_per_labour_unit))
         end
     end
+    strategy(k, n) = parameters.pricing_margin_share > 0 ? ((k - 1) / max(n, 1) < parameters.pricing_margin_share - 1e-9 ? :margin : :reserve) : :sector   # 21 Oct
     for k in 1:parameters.number_of_farms
-        add_agent!(Enterprise, model; kind = :farm, balance = Balance(), production_target = parameters.initial_production_target,
+        add_agent!(Enterprise, model; kind = :farm, balance = Balance(), production_target = parameters.initial_production_target, pricing = strategy(k, parameters.number_of_farms),
                    ask = OrderedDict{Symbol, Float64}(prices), bid = OrderedDict{Symbol, Float64}(prices))
     end
     for k in 1:parameters.number_of_bakeries
-        add_agent!(Enterprise, model; kind = :bakery, balance = Balance(), production_target = parameters.initial_production_target,
+        add_agent!(Enterprise, model; kind = :bakery, balance = Balance(), production_target = parameters.initial_production_target, pricing = strategy(k, parameters.number_of_bakeries),
                    ask = OrderedDict{Symbol, Float64}(prices), bid = OrderedDict{Symbol, Float64}(prices))
     end
     add_agent!(Enterprise, model; kind = :government, balance = Balance(), ask = OrderedDict{Symbol, Float64}(prices), bid = OrderedDict{Symbol, Float64}(prices))
@@ -210,7 +211,7 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
     if parameters.entertainment
         target0 = max(ceil(Int, parameters.number_of_persons * parameters.entertainment_propensity / parameters.customers_per_labour_unit / parameters.number_of_theatres), 1)
         for k in 1:parameters.number_of_theatres
-            add_agent!(Enterprise, model; kind = :theatre, balance = Balance(), production_target = target0,
+            add_agent!(Enterprise, model; kind = :theatre, balance = Balance(), production_target = target0, pricing = strategy(k, parameters.number_of_theatres),
                        ask = OrderedDict{Symbol, Float64}(prices), bid = OrderedDict{Symbol, Float64}(prices))
         end
     end

@@ -207,7 +207,11 @@ function reserve_target(model, a::Enterprise)
     p = parameters(model)
     labour = max(a.production_target, 0) * expected_price(model, :wage)
     input = a.kind == :farm ? a.production_target * expected_price(model, :rent) : a.kind == :bakery ? a.production_target * expected_price(model, :grain) : 0.0
-    return p.reserve_target_in_rounds * (labour + input)
+    rounds = p.reserve_target_in_rounds
+    if p.margin_profit_mode == :retain && margin_factor(model, a.kind, a.pricing) > 1    # 21 Oct: a firm pricing on a margin keeps its profit up to a ceiling
+        rounds = max(rounds, p.margin_retain_ceiling_in_rounds)
+    end
+    return rounds * (labour + input)
 end
 
 """Under clearing every purchase is a promise and the credit decision is taken once, on the net position, in `clear!`;
@@ -870,7 +874,7 @@ A cooperative is refounded as a shareholder firm unless `liquidated_coop_stays_c
 with one share at par, if their spare cash reaches the price). Returns false when no group can reach the price.
 """
 function refound!(model, e::Enterprise)
-    e.plan_share = -1.0; e.share_trend = 0                     # 16 Oct: a restarted firm plans afresh, from an equal share
+    e.plan_share = -1.0; e.share_trend = 0; empty!(e.sales_history)   # 16 Oct: a restarted firm plans afresh (21 Oct: and forgets its sales)
     p = parameters(model)
     book = max(book_value_net(model, e), 0.0)
     price = round(max(p.liquidation_price_share * book, total_debt(model, e) - cash(e), 0.0), digits = 4)
@@ -1219,8 +1223,10 @@ function firm_shell!(model, kind::Symbol)
     shells = [e for e in model.enterprise_list if !e.alive && e.kind == kind]
     !isempty(shells) && return shells[argmax([x.closed_round for x in shells])]
     ref = first(enterprises(model, kind))
+    share = parameters(model).pricing_margin_share
     e = add_agent!(Enterprise, model; kind = kind, balance = Balance(), production_target = parameters(model).initial_production_target,
-                   ask = OrderedDict{Symbol, Float64}(ref.ask), bid = OrderedDict{Symbol, Float64}(ref.bid))
+                   ask = OrderedDict{Symbol, Float64}(ref.ask), bid = OrderedDict{Symbol, Float64}(ref.bid),
+                   pricing = share > 0 ? (rand(stream(model, :entry)) < share ? :margin : :reserve) : :sector)   # 21 Oct: an entrant's strategy by a draw
     push!(model.agent_list, e); push!(model.enterprise_list, e)
     return e
 end

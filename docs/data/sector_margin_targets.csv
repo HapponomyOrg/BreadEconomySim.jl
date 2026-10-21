@@ -1,0 +1,9 @@
+# Target net profit margins for the simulated sectors (21 October 2026, Stef), chosen from docs/data/profit_margins_by_industry.csv.
+# Theatres are set at 0.5 % rather than the industry's -0.23 % (Entertainment) or 0.90 % (Recreation) because government subsidies
+#   for the arts are not in the model yet. Banks: the model's banks earn their living from the interest spread, so the figure is
+#   for reference until bank pricing is designed. Fractions, not percent.
+sector,target_net_margin,reference_industry,reference_net_margin_pct,reference_gross_margin_pct,note
+farm,0.0712,"Farming/Agriculture",7.12,16.49,""
+bakery,0.0600,"Food Processing",6.00,24.53,"Retail (Grocery and Food) would give 1.18; Restaurant/Dining 10.66 — a village bakery sits between a food processor and a shop"
+theatre,0.0050,"Entertainment",-0.23,38.09,"set at 0.5 % until subsidies exist; Recreation is 0.90"
+bank,0.2967,"Banks (Regional)",29.67,99.36,"reference only"

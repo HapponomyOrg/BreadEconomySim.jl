@@ -17,6 +17,7 @@ using OrderedCollections
 export SimulationParameters, create_bread_economy, run_simulation, run_simulation!
 export round_data, event_log, agent_end_state, money_identity_gap, gini, land_units_per_landowner
 export Person, Enterprise
+export DEMURRAGE_TIERS_TEST
 
 include("stable_random.jl")
 include("parameters.jl")

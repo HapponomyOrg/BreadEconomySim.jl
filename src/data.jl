@@ -97,10 +97,24 @@ function attributed_firm_bonds(model)
     return attr, pool
 end
 
+"""A person's share wealth for the measures (21 October): shares at the firm's book value per unit when `shares_at_book_in_measures`,
+else at the last traded price (`share_wealth`). Co-op membership stakes are left as `share_wealth` values them."""
+function measured_share_wealth(model, w::Person)
+    parameters(model).shares_at_book_in_measures || return share_wealth(model, w)
+    total = 0.0
+    for e in alive_agents(model)
+        (e isa Enterprise && e.ownership == :shareholders) || continue
+        u = get(e.shares, w.id, 0.0); u > 0 || continue
+        units = sum(values(e.shares)); units > 0 || continue
+        total += u * max(book_value(model, e), 0.0) / units
+    end
+    return total + (share_wealth(model, w) - sum(e.share_price * get(e.shares, w.id, 0.0) for e in alive_agents(model) if e isa Enterprise && e.ownership == :shareholders; init = 0.0))   # the co-op part of share_wealth, unchanged
+end
+
 function record!(model)
     ps = persons(model); alive = alive_agents(model)
     battr, bpool = attributed_firm_bonds(model)                              # 20 Oct: firm-held bonds in their owners' wealth
-    mw(w) = net_wealth(model, w) + get(battr, w.id, 0.0) + bpool / max(length(ps), 1)   # the measured wealth of a person
+    mw(w) = net_wealth(model, w) - share_wealth(model, w) + measured_share_wealth(model, w) + get(battr, w.id, 0.0) + bpool / max(length(ps), 1)   # the measured wealth of a person (shares at book)
     banks = enterprises(model, :bank); gov = government(model)
     r = current_round(model)
     ev = @view model.events[model.event_start:end]
@@ -205,6 +219,7 @@ function record!(model)
         gini_cash_persons = gini([cash(a) for a in ps]),
         gini_net_wealth_persons = gini([mw(a) for a in ps]),                 # wealth without gold (gold is reported beside wealth, never in it)
         gini_total_wealth_persons = gini([mw(a) + a.gold * model.gold_valuation for a in ps]),   # 20 Oct (Stef): everything, gold included (equal to the above where there is no gold)
+        firms_on_margin = count(e -> e isa Enterprise && is_producer(e) && e.pricing == :margin, alive), firms_on_reserve = count(e -> e isa Enterprise && is_producer(e) && e.pricing == :reserve, alive),   # 21 Oct
         bonds_persons = sum(bond_holdings(model, w) for w in ps; init = 0.0), bonds_firms = sum(bond_holdings(model, e) for e in model.enterprise_list if e.alive && !is_bank(e); init = 0.0),
         bonds_top10_persons = (let k = max(length(ps) ÷ 10, 1), top = sort(ps; by = w -> -mw(w))[1:min(k, length(ps))]; sum(bond_holdings(model, w) + get(battr, w.id, 0.0) for w in top; init = 0.0) end),   # 20 Oct: who holds the government's bonds
         gini_income_persons = gini([a.labour_income + a.rent_income + a.fee_received for a in ps]),

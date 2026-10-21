@@ -75,6 +75,16 @@ function manage_buffer_pool!(model)
     return nothing
 end
 
+const DEMURRAGE_TIERS_TEST = [(0.0, 0.02), (250.0, 0.05), (1000.0, 0.10)]   # 21 Oct: the test tiers (see parameters)
+
+"""The month's demurrage on `excess` above the cushion (21 October): the flat rate, or EconoSim's marginal tiers."""
+function demurrage_due(model, excess::Float64)
+    p = parameters(model)
+    isempty(p.demurrage_tiers) && return p.demurrage_rate * excess
+    tiers = EconoSim.make_tiers([(Float64(b), Float64(r)) for (b, r) in p.demurrage_tiers])
+    return Float64(EconoSim.calculate_time_range_demurrage(excess, tiers, 0.0, 1, 1, false))   # the cushion is already off
+end
+
 """Demurrage destroys money above the buffer; the demurrage tax on the same base goes to the government."""
 function apply_demurrage!(model)
     p = parameters(model)
@@ -84,7 +94,7 @@ function apply_demurrage!(model)
         is_authority(a) && continue
         excess = cash(a) - demurrage_buffer(model, a)
         excess <= 1e-9 && continue
-        dem = is_sumsy(model) ? destroy_money!(model, a, round(p.demurrage_rate * excess, digits = 4)) : 0.0   # debt money: nothing destroyed
+        dem = is_sumsy(model) ? destroy_money!(model, a, round(demurrage_due(model, excess), digits = 4)) : 0.0   # debt money: nothing destroyed; 21 Oct: tiers
         model.demurrage_this_round += dem
         a isa Person && (model.demurrage_persons_this_round += dem)
         if p.demurrage_tax_rate > 0 && a !== gov
