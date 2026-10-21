@@ -2,6 +2,14 @@
 
 hired_share(model, e::Enterprise) = e.production_target <= 0 ? 0.0 : 1.0   # enterprises have no own capacity
 
+"""A firm's debt service next month per unit of the good it plans (21 October): instalments and interest ÷ (planned units ×
+goods per unit); 0 for anyone who is not a firm, has no loans, or when the switch is off."""
+function debt_service_per_unit(model, seller, goods_per_unit::Float64)
+    seller isa Enterprise || return 0.0
+    due = debt_service_due(model, seller; interest_only = true); due > 0 || return 0.0   # the cost of capital is the interest; the instalments are a cash need, counted in the reserve
+    return due / max(seller.production_target * goods_per_unit, 1.0)
+end
+
 """The factor a sector's floor is raised by when it prices on a target margin (21 October): 1 + the net margin grossed up for
 the profit tax, so that the margin left after tax is the target."""
 function margin_factor(model, kind::Symbol, firm_pricing::Symbol = :sector)
@@ -24,14 +32,14 @@ function seller_reservation(model, seller::Agent, good::Symbol; age::Int = 0)
         p.wage_reservation_net_of_tax && (base /= (1 - effective_wage_tax_rate(model)))
         return base * max(1 - p.hunger_wage_discount * seller.hunger, 0.0)
     elseif good == :ticket    # theatre: wages per customer served
-        return expected_price(model, :wage) / p.customers_per_labour_unit * margin_factor(model, :theatre, seller isa Enterprise ? seller.pricing : :sector)
+        return (expected_price(model, :wage) / p.customers_per_labour_unit + debt_service_per_unit(model, seller, p.customers_per_labour_unit)) * margin_factor(model, :theatre, seller isa Enterprise ? seller.pricing : :sector)
     elseif good == :grain     # farm: rent + wages per unit
-        return (expected_price(model, :rent) + expected_price(model, :wage)) * margin_factor(model, :farm, seller isa Enterprise ? seller.pricing : :sector)
+        return (expected_price(model, :rent) + expected_price(model, :wage) + debt_service_per_unit(model, seller, 1.0)) * margin_factor(model, :farm, seller isa Enterprise ? seller.pricing : :sector)
     elseif good == :bread     # bakery: (grain + wages) per grain unit, per bread, at this round's actual input prices; ageing discount
         grain_paid = average_price(model, :grain); wage_paid = average_price(model, :wage)
         g = (isnan(grain_paid) || p.indexed_pricing) ? expected_price(model, :grain) : max(grain_paid, expected_price(model, :grain))
         w = (isnan(wage_paid) || p.indexed_pricing) ? expected_price(model, :wage) : max(wage_paid, expected_price(model, :wage))
-        base = (g + w) / p.breads_per_grain * margin_factor(model, :bakery, seller isa Enterprise ? seller.pricing : :sector)
+        base = ((g + w) / p.breads_per_grain + debt_service_per_unit(model, seller, Float64(p.breads_per_grain))) * margin_factor(model, :bakery, seller isa Enterprise ? seller.pricing : :sector)
         return base * max(1 - p.bread_price_ageing_discount * age, 0.0)
     elseif good == :rent      # landowner: a meal from full letting; bank: the going rent
         seller isa Person || return expected_price(model, :rent) * 0.5

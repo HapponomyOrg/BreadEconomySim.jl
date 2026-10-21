@@ -1872,6 +1872,22 @@ end
     @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., SUM..., demurrage_tiers = DEMURRAGE_TIERS_TEST))) < 1e-6
 end
 
+
+@testset "the cost floor and the reserve count the loans (21 October 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., cost_floor_includes_debt_service = true, maximum_rounds = 3))
+    for _ in 1:2; B.econo_step!(m, 1); end
+    f = first(x for x in B.enterprises(m, :farm) if !isempty(B.debtor_loans(m, x)))     # a farm with its founding loan
+    due = B.debt_service_due(m, f)
+    @test due > 0
+    @test B.debt_service_per_unit(m, f, 1.0) ≈ B.debt_service_due(m, f; interest_only = true) / max(f.production_target, 1)   # the floor carries the interest; the reserve the full service
+    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., cost_floor_includes_debt_service = false, maximum_rounds = 3))
+    for _ in 1:2; B.econo_step!(m0, 1); end
+    f0 = first(x for x in B.enterprises(m0, :farm) if x.id == f.id)
+    @test B.seller_reservation(m, f, :grain) > B.seller_reservation(m0, f0, :grain)         # the floor is higher with the loans counted
+    @test B.reserve_target(m, f) > B.reserve_target(m0, f0)
+    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., cost_floor_includes_debt_service = true))) < 1e-6
+end
+
 @testset "cooperative forms (14 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     params(m) = B.parameters(m)

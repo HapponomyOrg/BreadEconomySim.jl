@@ -82,6 +82,11 @@ Base.@kwdef struct SimulationParameters
     # at cost (the sector settings above are then ignored): at the founding the first firms of each kind by their index, later
     # entrants by a draw. Each firm's strategy is in `e.pricing`; `scripts/pricing_strategy_test.jl` compares their survival.
     pricing_margin_share::Float64 = 0.0
+    # 21 Oct (Stef: reserve planners should take their loans into account): a firm's cost floor counts the interest due next
+    # month on its bank and peer loans per unit of planned output (the cost of capital), and its reserve target counts
+    # `reserve_target_in_rounds` months of the full debt service, instalments included (the cash need). Before, a farm with a founding loan pricing at cost had nothing to
+    # pay the bank from, and the reserve farms in the debt village failed within a year. false = the old floors (variable cost only).
+    cost_floor_includes_debt_service::Bool = false   # off on the base for now: on, it shifts every golden value and one scale-invariance check fails from month 10 — to be settled after the talk
     # 21 Oct: in the wealth measures a shareholder's shares are valued at the firm's book value per unit (cash, land, minus debts —
     # what the owners would divide), not at the last traded share price, which moves only when shares change hands and so hid
     # retained profit (and, with :retain above, made owners look poorer the more their firms kept). Measurement only; the
