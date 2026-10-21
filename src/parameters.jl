@@ -575,6 +575,14 @@ Base.@kwdef struct SimulationParameters
     # need (no sales yet).
     own_market_planning::Bool = false
     plan_step::Float64 = 0.1
+    # 21 Oct: a firm planning on its own market counts the customers it turned away (its share of the month's unmet demand for
+    # its good) beside what it sold — it can never sell more than it offered, so sales alone hide demand and a sold-out firm
+    # stays sold out, raising its price month after month (with indexed contracts: +13 % a year at step 8). false = sales only.
+    own_plan_counts_unmet::Bool = true
+    # 21 Oct: a premium loaf enters the bread price at its plain value (price ÷ markup). At its full price it pushed the measured
+    # price of bread up, the indexed contract wages followed, costs and asks rose, and the premium price with them: with
+    # contracts, +29 % a year in the premium-loaf village. false = the premium price, as before.
+    premium_at_plain_price::Bool = true
     # Market rounds within the month (19 October, Stef): a month is long; a seller left with stock while buyers went without lowers
     # his ask before the month is out. Bread, grain and tickets clear in up to `market_rounds` rounds; between rounds every seller
     # with stock left lowers his ask by `ask_decrease_after_partial_sale`, never below his floor, and the month's negotiations are

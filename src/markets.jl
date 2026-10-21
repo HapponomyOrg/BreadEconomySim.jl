@@ -735,7 +735,7 @@ function premium_market!(model)
         pay_consumption!(model, buyer, s, cost, :bread)
         take_stock!(s.bread, size); push!(buyer.bread, StockItem(size, 0))
         s.market[:bread].sold += size; buyer.market[:bread].got = size
-        record_transaction!(model, :bread, price, size)
+        record_transaction!(model, :bread, p.premium_at_plain_price ? price / p.premium_markup : price, size)   # 21 Oct: the bread price sees the plain value
         model.premium_loaves_this_round += size; model.premium_revenue_this_round += cost; model.premium_labour_this_round += hired
         log_event!(model, :premium_sale; bakery = s.id, buyer = buyer.id, size = size, price = price, labour = hired)
     end

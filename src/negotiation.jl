@@ -319,10 +319,11 @@ function update_intervention!(model)
 end
 
 """A firm's own plan (19 October): its target follows what it sold, at the gradual pace; sold out, it plans `plan_step` more."""
-function own_plan!(model, e::Enterprise, good::Symbol, per_unit::Float64, cap::Int)
+function own_plan!(model, e::Enterprise, good::Symbol, per_unit::Float64, cap::Int, n_kind::Int = 1)
     p = parameters(model); r = e.market[good]
     r.offered > 1e-9 || return nothing                                      # nothing offered last month: keep the plan
-    sold_units = r.sold / per_unit
+    turned_away = p.own_plan_counts_unmet ? r.unmet_units / max(n_kind, 1) : 0.0   # 21 Oct: unmet demand is booked on every seller of the kind; this firm's share
+    sold_units = (r.sold + turned_away) / per_unit
     desired = sold_units * (1 + p.planning_margin)
     r.sold >= r.offered * (1 - p.unsold_share) - 1e-9 && (desired = max(desired, e.production_target * (1 + p.plan_step)))   # sold out: more
     current = Float64(e.production_target); gap = desired - current
@@ -421,7 +422,7 @@ function plan_targets!(model)
     end
     if own
         cap_each = p.plan_within_capacity ? ceil(Int, bakery_capacity_loaves(model) / p.breads_per_grain) : typemax(Int) ÷ 2
-        for b in bakeries; own_plan!(model, b, :bread, Float64(p.breads_per_grain), cap_each); end
+        for b in bakeries; own_plan!(model, b, :bread, Float64(p.breads_per_grain), cap_each, length(bakeries)); end
     else
         isempty(bakeries) || by_sales!(grain_for_bread, bakeries, :bread)
     end
@@ -431,7 +432,7 @@ function plan_targets!(model)
     end
     grain_demand = sum(max(b.production_target - floor(Int, grain_units(b) + 1e-9), 0) for b in bakeries; init = 0)
     if own
-        for f in farms; own_plan!(model, f, :grain, 1.0, typemax(Int) ÷ 2); end
+        for f in farms; own_plan!(model, f, :grain, 1.0, typemax(Int) ÷ 2, length(farms)); end
     else
         isempty(farms) || by_sales!(grain_demand, farms, :grain)
     end
@@ -453,7 +454,7 @@ function plan_targets!(model)
         end
         units = max(ceil(Int, expected / p.customers_per_labour_unit), length(theatres))
         if own
-            for t in theatres; own_plan!(model, t, :ticket, p.customers_per_labour_unit, max(floor(Int, theatre_labour_cap(model, t)), 1)); end
+            for t in theatres; own_plan!(model, t, :ticket, p.customers_per_labour_unit, max(floor(Int, theatre_labour_cap(model, t)), 1), length(theatres)); end
         else
             by_sales!(units, theatres, :ticket)
         end                                                              # 15 Oct: the same logic as bakeries and farms
