@@ -81,7 +81,7 @@ const CONTRACTS = (; contracts = true, contract_share = 0.8)                    
 const DEBT_AWARE = (; cost_floor_includes_debt_service = true)                                   # interest in the floor, the full service in the reserve, land sold when the floor is not paid
 const FULL_SERVICE = (; floor_debt_service = :full)                                              # 22 Oct: instalments in the floor too — inflated both villages; kept for comparison                                   # 21 Oct (Stef): reserve planners count their loans — interest in the floor, the full service in the reserve
 const SOUND_LAND = (; firm_land_loan_max_rounds = 240, land_price_meets_offers = true)       # 22 Oct (Stef): a farm buys land only on a term the rent and its reserve can carry; unsold land's price falls to the best offer
-const REALISTIC = merge(PRICE_ON_EXPECTED, DEBT_AWARE, EXPECTED_SALES, CONTRACTS, SOUND_LAND, (; refound_minimum = 2, uncovered_debt_sale = true))   # everything of 18–22 October together
+const REALISTIC = merge(PRICE_ON_EXPECTED, DEBT_AWARE, EXPECTED_SALES, CONTRACTS, SOUND_LAND, (; refound_minimum = 2, uncovered_debt_sale = true, grow_only_with_reserve = true))   # everything of 18–22 October together
 
 """
     strategy_test(; step = "8 ", seeds = 1:10, rounds = 120, share = 0.5, extra = (;), label = "", jobs = max(Sys.CPU_THREADS - 1, 1))

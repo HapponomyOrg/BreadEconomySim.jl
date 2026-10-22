@@ -408,6 +408,9 @@ function own_plan!(model, e::Enterprise, good::Symbol, per_unit::Float64, cap::I
         e.expected_sales = base_expected
         expected = base_expected * (1 + e.buffer_share)
     end
+    if p.grow_only_with_reserve && cash(e) < reserve_target(model, e)       # 22 Oct: no expansion until the reserve is met
+        expected = min(expected, e.production_target * per_unit)
+    end
     if p.plan_nets_stock                                                    # the stock that will still be good next month
         items = good == :bread ? e.bread : good == :grain ? e.grain : StockItem[]
         usable = sum(i.units for i in items if i.age < p.spoilage_age_in_rounds - 1; init = 0.0)

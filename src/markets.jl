@@ -108,7 +108,7 @@ function deleverage!(model)
         r = e.market[e.kind == :farm ? :grain : :bread]
         short = e.expected_sales > 0 && r.offered > 1e-9 && r.sold < e.expected_sales * (1 - p.expected_sales_tolerance) - 1e-9
         e.short_months = short ? e.short_months + 1 : 0
-        (e.short_months >= p.deleverage_after_months || cash(e) < reserve_target(model, e)) || continue
+        (e.short_months >= p.deleverage_after_months || (cash(e) < reserve_target(model, e) && has_arrears(model, e))) || continue   # 22 Oct: below the reserve alone sold a new farm's plots in its first months
         bids = [(b, min(land_buyer_reservation(model, b, :cash), b isa Person ? cash(b) - buffer_target(model, b) : available_cash(b)))
                 for b in alive_agents(model) if b.id != e.id && !is_government(b) && !is_bank(b) && (b isa Person || (is_farm(b) && debt_service_due(model, b) <= 0))]
         bids = [(b, x) for (b, x) in bids if x > 1e-6]

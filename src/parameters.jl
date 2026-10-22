@@ -89,7 +89,7 @@ Base.@kwdef struct SimulationParameters
     # pay the bank from, and the reserve farms in the debt village failed within a year. false = the old floors (variable cost only).
     cost_floor_includes_debt_service::Bool = false
     # 22 Oct (Stef): a firm whose floor the market will not pay — sold less than (1 − expected_sales_tolerance) of what it expected
-    # for `deleverage_after_months` months running, or cash below its reserve — and that owns land and owes money sells one plot
+    # for `deleverage_after_months` months running, or cash below its reserve while in arrears — and that owns land and owes money sells one plot
     # a month, repays its loans with the proceeds (peer loans first, instalments scaled down with the outstanding) and so lowers
     # its debt service. Needs cost_floor_includes_debt_service.
     # 22 Oct: what of the debt service the floor carries — :interest (the cost of capital; the instalments are a cash need met by
@@ -102,6 +102,10 @@ Base.@kwdef struct SimulationParameters
     # what the reserve above its target can carry per month over that term; if no term works, it rents. 0 = the old rule
     # (`instalment_rounds` for everyone, no test). Land bought on these terms is paid for at the pace of the rent it replaces.
     firm_land_loan_max_rounds::Int = 0      # off on the base (it moves the golden values); 240 in the realistic set
+    # 22 Oct (the trace of the sufficient farms): a firm planning on its own market grows only while its reserve is met — a sufficient
+    # firm fills its reserve before it expands; the farms traced grew from 111 to 187 units in six months on bank credit, asking
+    # below their floor, and were wound up in month 7 with 2,400 of debt. Off on the base; in the realistic set.
+    grow_only_with_reserve::Bool = false
     deleverage_by_land_sales::Bool = true
     deleverage_after_months::Int = 2
     # 22 Oct (Stef): a sufficient firm prices at cost per unit it expects to SELL, not per unit produced — the units it will not

@@ -1928,7 +1928,7 @@ end
     f = first(B.enterprises(m, :farm)); lender = first(B.persons(m))
     l = B.PeerLoan(length(m.peer_loans) + 1, lender.id, f.id, lender.id, 50.0, 50.0, 5.0, 0.005, 0.005, false, 1, 0, false, false, 0.0)   # a land loan of 50, 5 a month
     push!(m.peer_loans, l); f.land = max(f.land, 1)
-    f.expected_sales = 100.0; f.market[:grain].offered = 100.0; f.market[:grain].sold = 10.0; f.short_months = B.parameters(m).deleverage_after_months - 1
+    f.expected_sales = 100.0; f.market[:grain].offered = 100.0; f.market[:grain].sold = 10.0; f.short_months = B.parameters(m).deleverage_after_months - 1   # short of sales: the trigger
     land0 = f.land; out0 = l.outstanding
     B.deleverage!(m)
     @test f.land == land0 - 1 && l.outstanding < out0 && l.installment < 5.0      # a plot sold, the loan repaid with it, the instalment scaled down
