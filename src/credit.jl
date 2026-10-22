@@ -10,10 +10,12 @@ debtor_loans(model, a::Agent) = [l for l in model.loans if !l.settled && l.debto
 
 """What a firm must pay its creditors next month (21 October): the bank loans' next instalment and interest, and the peer loans'
 instalment and interest. Counted in the cost floor (per unit of planned output) and in the reserve target."""
-function debt_service_due(model, a::Enterprise; interest_only::Bool = false)
-    parameters(model).cost_floor_includes_debt_service || return 0.0
-    bank = sum((interest_only ? 0.0 : next_installment(l)) + l.debt.interest_rate * outstanding_principal(l) + rest_interest(l) for l in debtor_loans(model, a); init = 0.0)
-    peer = sum((interest_only ? 0.0 : min(l.installment, l.outstanding)) + l.rate * l.outstanding for l in peer_loans_of(model, a); init = 0.0)
+function debt_service_due(model, a::Enterprise; interest_only::Bool = false, long_only::Bool = false)
+    p = parameters(model); p.cost_floor_includes_debt_service || return 0.0
+    long(l::Loan) = length(l.debt.installments) >= p.long_loan_min_rounds                 # 22 Oct: a loan with at least this many instalments left is capital, not working credit
+    long(l::PeerLoan) = l.installment > 0 && l.outstanding / l.installment >= p.long_loan_min_rounds
+    bank = sum((interest_only || (long_only && !long(l)) ? 0.0 : next_installment(l)) + l.debt.interest_rate * outstanding_principal(l) + rest_interest(l) for l in debtor_loans(model, a); init = 0.0)
+    peer = sum((interest_only || (long_only && !long(l)) ? 0.0 : min(l.installment, l.outstanding)) + l.rate * l.outstanding for l in peer_loans_of(model, a); init = 0.0)
     return Float64(bank + peer)
 end
 creditor_loans(model, a::Agent) = [l for l in model.loans if !l.settled && l.creditor_id == a.id]
