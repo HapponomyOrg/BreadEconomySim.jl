@@ -13,6 +13,8 @@
 #     run_all(variant = REALISTIC_LABOUR, variant_label = "realistic")   # the whole ladder with this week's labour market
 #     run_all(variant = REALISTIC_LABOUR_90, variant_label = "realistic90")   # the same with contract wages indexed at 0.9
 #     run_all(seeds = 4, fiscal = :taxes, rungs = ["8"], variant = FLOOR_TWO_LOAVES, variant_label = "floor2")   # the collection-floor test (and fiscal = :parking): 32 jobs
+#     run_all(seeds = 4, fiscal = :taxes, rungs = ["11"], variant = PARTIAL_BENEFIT, variant_label = "partial")   # the step-11 test: floor2, partial, both — each with fiscal = :taxes and :parking: 48 jobs
+#     run_all(seeds = 4, fiscal = :taxes, rungs = ["11"], variant = FLOOR_AND_PARTIAL, variant_label = "floor2_partial")
 #
 # From the command line the environment variables still work as before (JOBS, SEEDS, ROUNDS, LADDERS, RUNGS, SKIP_TESTS,
 # SUMMARY_ONLY, SHARD, CONTRACT_SHARE, WORKER_RECYCLE, HEAP_HINT, UPDATE_ECONOSIM):
@@ -107,6 +109,8 @@ const REALISTIC_LABOUR = (; contracts = true, contract_share = 0.8, refound_mini
                             floor_per_unit_sold = true, firm_land_loan_max_rounds = 240, land_price_meets_offers = true)   # 22 Oct: the same set as REALISTIC in scripts/pricing_strategy_test.jl (without the strategy mix)
 const REALISTIC_LABOUR_90 = (; REALISTIC_LABOUR..., contract_indexation = 0.9)   # 22 Oct (Stef): the same with wages indexed at nine tenths
 const FLOOR_TWO_LOAVES = (; collection_floor_in_breads = 2.0)   # 22 Oct (the talk chat): debt collection may not take a villager below two loaves (a meal) instead of one — does the debt village then keep everyone?
+const PARTIAL_BENEFIT = (; partial_unemployment_fee = true)      # 22 Oct (the talk chat): the benefit pro rata for a villager with a little work, instead of stopping at the first hour
+const FLOOR_AND_PARTIAL = (; FLOOR_TWO_LOAVES..., PARTIAL_BENEFIT...)
 with_extra(kw, extra) = isempty(kw) ? kw : (; kw..., extra...)
 ladder_name(N, settlement, variant = "") = (settlement == :invoicing ? "ladder2_$(N)" : "ladder2_$(N)_$(settlement)") * variant
 parts_dir(N, settlement, rounds, variant = "") = joinpath(ROOT, "results", "parts", "$(ladder_name(N, settlement, variant))_$(rounds)months_$(MODEL_VERSION)")   # the run length and the model version are part of the key
