@@ -2,6 +2,29 @@
 
 hired_share(model, e::Enterprise) = e.production_target <= 0 ? 0.0 : 1.0   # enterprises have no own capacity
 
+"""The factor a firm's cost floor is divided by when it prices per unit it expects to sell (22 October): 1 − its expected
+unsold share (the average of its last months, capped). 1 when the switch is off, for anyone who is not a firm, or with no
+history yet."""
+function expected_sales_factor(model, seller)
+    p = parameters(model)
+    (p.floor_per_unit_sold && seller isa Enterprise && !isempty(seller.unsold_history)) || return 1.0
+    u = min(sum(seller.unsold_history) / length(seller.unsold_history), p.expected_unsold_cap)
+    return max(1 - u, 1 - p.expected_unsold_cap)
+end
+
+"""Each firm's unsold share of what it offered this month, kept for `plan_window` months (22 October)."""
+function record_unsold!(model)
+    p = parameters(model)
+    for e in model.enterprise_list
+        (e.alive && is_producer(e)) || continue
+        good = e.kind == :bakery ? :bread : e.kind == :farm ? :grain : :ticket
+        r = e.market[good]; r.offered > 1e-9 || continue
+        push!(e.unsold_history, max(1 - r.sold / r.offered, 0.0))
+        while length(e.unsold_history) > max(p.plan_window, 1); popfirst!(e.unsold_history); end
+    end
+    return nothing
+end
+
 """A firm's debt service next month per unit of the good it plans (21 October): instalments and interest ÷ (planned units ×
 goods per unit); 0 for anyone who is not a firm, has no loans, or when the switch is off."""
 function debt_service_per_unit(model, seller, goods_per_unit::Float64)
@@ -32,14 +55,14 @@ function seller_reservation(model, seller::Agent, good::Symbol; age::Int = 0)
         p.wage_reservation_net_of_tax && (base /= (1 - effective_wage_tax_rate(model)))
         return base * max(1 - p.hunger_wage_discount * seller.hunger, 0.0)
     elseif good == :ticket    # theatre: wages per customer served
-        return (expected_price(model, :wage) / p.customers_per_labour_unit + debt_service_per_unit(model, seller, p.customers_per_labour_unit)) * margin_factor(model, :theatre, seller isa Enterprise ? seller.pricing : :sector)
+        return (expected_price(model, :wage) / p.customers_per_labour_unit + debt_service_per_unit(model, seller, p.customers_per_labour_unit)) / expected_sales_factor(model, seller) * margin_factor(model, :theatre, seller isa Enterprise ? seller.pricing : :sector)
     elseif good == :grain     # farm: rent + wages per unit
-        return (expected_price(model, :rent) + expected_price(model, :wage) + debt_service_per_unit(model, seller, 1.0)) * margin_factor(model, :farm, seller isa Enterprise ? seller.pricing : :sector)
+        return (expected_price(model, :rent) + expected_price(model, :wage) + debt_service_per_unit(model, seller, 1.0)) / expected_sales_factor(model, seller) * margin_factor(model, :farm, seller isa Enterprise ? seller.pricing : :sector)
     elseif good == :bread     # bakery: (grain + wages) per grain unit, per bread, at this round's actual input prices; ageing discount
         grain_paid = average_price(model, :grain); wage_paid = average_price(model, :wage)
         g = (isnan(grain_paid) || p.indexed_pricing) ? expected_price(model, :grain) : max(grain_paid, expected_price(model, :grain))
         w = (isnan(wage_paid) || p.indexed_pricing) ? expected_price(model, :wage) : max(wage_paid, expected_price(model, :wage))
-        base = ((g + w) / p.breads_per_grain + debt_service_per_unit(model, seller, Float64(p.breads_per_grain))) * margin_factor(model, :bakery, seller isa Enterprise ? seller.pricing : :sector)
+        base = ((g + w) / p.breads_per_grain + debt_service_per_unit(model, seller, Float64(p.breads_per_grain))) / expected_sales_factor(model, seller) * margin_factor(model, :bakery, seller isa Enterprise ? seller.pricing : :sector)
         return base * max(1 - p.bread_price_ageing_discount * age, 0.0)
     elseif good == :rent      # landowner: a meal from full letting; bank: the going rent
         seller isa Person || return expected_price(model, :rent) * 0.5
@@ -247,6 +270,19 @@ function adapt_prices!(model)
                 a.ask[g] = round(p.community_ticket_in_breads * expected_price(model, :bread), digits = 4); continue
             end
             r.offered <= 1e-9 && continue
+            if p.price_on_expected_sales && a isa Enterprise && g != :wage && a.expected_sales > 0   # 22 Oct: against what it expected to sell
+                r.idle_rounds = r.sold > 1e-9 ? 0 : r.idle_rounds + 1
+                if r.sold > a.expected_sales + 1e-9
+                    (!p.ask_increase_only_on_unmet_demand || demand_unmet(model, a, g) || r.sold >= r.offered - 1e-9) && (a.ask[g] *= 1 + p.ask_increase_after_sellout)
+                elseif r.sold < a.expected_sales * (1 - p.expected_sales_tolerance) - 1e-9
+                    a.ask[g] *= 1 - (r.sold > 1e-9 ? p.ask_decrease_after_partial_sale : p.ask_decrease_when_idle[min(r.idle_rounds, length(p.ask_decrease_when_idle))])
+                end
+                if p.affordability_pricing && r.failed_for_cash > 0 && r.max_failed_cash > 0
+                    a.ask[g] = max(seller_reservation(model, a, g), min(a.ask[g], 0.95 * r.max_failed_cash))
+                end
+                a.ask[g] = max(a.ask[g], seller_reservation(model, a, g))
+                continue
+            end
             if r.sold >= r.offered - 1e-9
                 r.idle_rounds = 0
                 (!p.ask_increase_only_on_unmet_demand || demand_unmet(model, a, g)) && (a.ask[g] *= 1 + p.ask_increase_after_sellout)
@@ -356,6 +392,17 @@ function own_plan!(model, e::Enterprise, good::Symbol, per_unit::Float64, cap::I
         expected = observed * (1 + p.planning_margin)
     end
     r.sold >= r.offered * (1 - p.unsold_share) - 1e-9 && (expected = max(expected, e.production_target * per_unit * (1 + p.plan_step)))   # sold out: more
+    if p.price_on_expected_sales                                            # 22 Oct: the plan is expected sales plus the firm's own buffer
+        e.buffer_share < 0 && (e.buffer_share = max(p.planning_margin, p.buffer_min))
+        base_expected = expected / (1 + p.planning_margin)                  # the margin was applied above; the firm's buffer replaces it
+        if r.sold > e.expected_sales + 1e-9 && e.expected_sales > 0          # sold into the buffer: keep more
+            e.buffer_share = min(e.buffer_share * (1 + p.buffer_step), p.buffer_max)
+        elseif e.expected_sales > 0 && r.offered - r.sold >= e.expected_sales * e.buffer_share - 1e-9   # the extra never sold: keep less, never nothing
+            e.buffer_share = max(e.buffer_share * (1 - p.buffer_step), p.buffer_min)
+        end
+        e.expected_sales = base_expected
+        expected = base_expected * (1 + e.buffer_share)
+    end
     if p.plan_nets_stock                                                    # the stock that will still be good next month
         items = good == :bread ? e.bread : good == :grain ? e.grain : StockItem[]
         usable = sum(i.units for i in items if i.age < p.spoilage_age_in_rounds - 1; init = 0.0)

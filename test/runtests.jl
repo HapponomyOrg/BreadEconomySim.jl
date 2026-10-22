@@ -1888,6 +1888,36 @@ end
     @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., cost_floor_includes_debt_service = true))) < 1e-6
 end
 
+
+@testset "the floor per unit expected to sell (22 October 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., floor_per_unit_sold = true, maximum_rounds = 3))
+    for _ in 1:2; B.econo_step!(m, 1); end
+    f = first(B.enterprises(m, :farm)); empty!(f.unsold_history)
+    @test B.expected_sales_factor(m, f) == 1.0                                   # no history: the plain floor
+    append!(f.unsold_history, [0.1, 0.1, 0.1])
+    @test B.expected_sales_factor(m, f) ≈ 0.9                                    # a tenth unsold: the sold units carry it
+    f0 = f; base_floor = B.seller_reservation(m, f0, :grain)
+    empty!(f.unsold_history); @test B.seller_reservation(m, f, :grain) ≈ base_floor * 0.9 atol = 1e-6
+    append!(f.unsold_history, [0.9]); @test B.expected_sales_factor(m, f) ≈ 0.5    # capped
+    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., floor_per_unit_sold = true))) < 1e-6
+end
+
+
+@testset "prices against expected sales, with an adaptive buffer (22 October 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., own_market_planning = true, price_on_expected_sales = true, plan_window = 1, planning_margin = 0.1, maximum_rounds = 6))
+    for _ in 1:4; B.econo_step!(m, 1); end
+    b = first(B.enterprises(m, :bakery)); p = B.parameters(m)
+    @test b.expected_sales > 0 && b.buffer_share > 0
+    ask0 = b.ask[:bread]; r = b.market[:bread]
+    r.offered = b.expected_sales * (1 + b.buffer_share); r.sold = b.expected_sales * 0.95; r.failed_for_cash = 0   # sold what it expected (within a tenth): no change
+    B.adapt_prices!(m); @test b.ask[:bread] ≈ ask0
+    r.sold = b.expected_sales * 0.8; B.adapt_prices!(m); @test b.ask[:bread] < ask0                                # a fifth short: down
+    ask1 = b.ask[:bread]; r.sold = r.offered; B.adapt_prices!(m); @test b.ask[:bread] > ask1                       # sold into the buffer: up
+    buf = b.buffer_share; r.sold = b.expected_sales * 1.05; r.offered = b.expected_sales * (1 + buf)
+    B.own_plan!(m, b, :bread, Float64(p.breads_per_grain), 1000, 4); @test b.buffer_share > buf                   # sold into the buffer: keep more
+    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., own_market_planning = true, price_on_expected_sales = true))) < 1e-6
+end
+
 @testset "cooperative forms (14 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     params(m) = B.parameters(m)

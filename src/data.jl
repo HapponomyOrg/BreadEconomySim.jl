@@ -332,6 +332,7 @@ function record_and_adapt!(model)
         e.revenue_this_round = 0.0
     end
     roll_patronage_window!(model)
+    record_unsold!(model)                                               # 22 Oct: each firm's unsold share this month, for the floor per unit sold
     update_intervention!(model)                                         # 19 Oct: the emergency rule's state, from this month's row
     adapt_prices!(model)
     adapt_targets!(model)

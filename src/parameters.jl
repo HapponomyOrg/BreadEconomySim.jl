@@ -86,7 +86,24 @@ Base.@kwdef struct SimulationParameters
     # month on its bank and peer loans per unit of planned output (the cost of capital), and its reserve target counts
     # `reserve_target_in_rounds` months of the full debt service, instalments included (the cash need). Before, a farm with a founding loan pricing at cost had nothing to
     # pay the bank from, and the reserve farms in the debt village failed within a year. false = the old floors (variable cost only).
-    cost_floor_includes_debt_service::Bool = false   # off on the base for now: on, it shifts every golden value and one scale-invariance check fails from month 10 — to be settled after the talk
+    cost_floor_includes_debt_service::Bool = false
+    # 22 Oct (Stef): a sufficient firm prices at cost per unit it expects to SELL, not per unit produced — the units it will not
+    # sell (the planning margin, the customers that went elsewhere) are a cost the sold units must carry. The floor is divided by
+    # (1 − the firm's expected unsold share), the share averaged over its last `plan_window` months, capped at
+    # `expected_unsold_cap`. Before, a farm pricing at cost lost its unsold tenth every month and failed within a year in the
+    # debt village while a farm with a margin lived. false = the floor per unit produced, as before.
+    floor_per_unit_sold::Bool = false
+    expected_unsold_cap::Float64 = 0.5
+    # 22 Oct (Stef): prices against EXPECTED sales, not against production. A firm planning on its own market expects to sell
+    # what its history says and produces a buffer above it (`buffer_share`, starting at the planning margin). Its ask falls only
+    # when it sold less than (1 − `expected_sales_tolerance`) of what it expected, and rises only when it sold more than it
+    # expected (into the buffer). The buffer itself adapts at `buffer_step` a month: down when the extra never sells (never
+    # below `buffer_min`), up when it sells into it (never above `buffer_max`). Needs own_market_planning; false = the old rule.
+    price_on_expected_sales::Bool = false
+    expected_sales_tolerance::Float64 = 0.1
+    buffer_step::Float64 = 0.1
+    buffer_min::Float64 = 0.03
+    buffer_max::Float64 = 0.5   # off on the base for now: on, it shifts every golden value and one scale-invariance check fails from month 10 — to be settled after the talk
     # 21 Oct: in the wealth measures a shareholder's shares are valued at the firm's book value per unit (cash, land, minus debts —
     # what the owners would divide), not at the last traded share price, which moves only when shares change hands and so hid
     # retained profit (and, with :retain above, made owners look poorer the more their firms kept). Measurement only; the

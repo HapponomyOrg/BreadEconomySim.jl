@@ -25,6 +25,10 @@
 #     strategy_test(extra = merge(SPARE_SUPPLY, OWN_PLANNING), label = "spare_own")     # both
 #     strategy_test(extra = OVERCAPACITY, label = "overcapacity")                       # eight firms of each kind (market structure, not spare supply)
 #     strategy_test(extra = merge(SPARE_SUPPLY, OWN_PLANNING, DEBT_AWARE), label = "spare_own_debt")   # and the firms count their loans
+#     strategy_test(extra = merge(SPARE_SUPPLY, OWN_PLANNING, DEBT_AWARE, EXPECTED_SALES), label = "spare_own_debt_sold")   # and price per unit they expect to sell
+#     strategy_test(extra = merge(PRICE_ON_EXPECTED, DEBT_AWARE, EXPECTED_SALES), label = "expected")   # 22 Oct: prices against expected sales, adaptive buffer
+#     strategy_test(extra = merge(PRICE_ON_EXPECTED, DEBT_AWARE, EXPECTED_SALES, CONTRACTS), label = "expected_contracts")   # with contracts (none of the earlier runs had them)
+#     strategy_test(extra = REALISTIC, label = "realistic")                         # the whole realistic set: planning, pricing, loans, contracts, minimum, sale before closure
 # `extra` is any set of SimulationParameters, applied last; `label` names the output files. The summary carries each strategy's
 # unsold share (what it offered and did not sell), which says whether supply exceeded demand.
 # ======================================================================================================================
@@ -73,6 +77,10 @@ Distributed.remotecall_eval(Main, [1], PS_SETUP)
 const SPARE_SUPPLY = (; planning_margin = 0.3)                                                   # a third more than the village will buy
 const OWN_PLANNING = (; own_market_planning = true, firms_plan_on_sales = false, market_rounds = 1)   # the 19–21 October planning rule (window 3, net of stock, turned-away counted)
 const OVERCAPACITY = (; number_of_farms = 8, number_of_bakeries = 8, number_of_theatres = 8)   # twice the firms of each kind (smaller firms, the same supply)
+const EXPECTED_SALES = (; floor_per_unit_sold = true)                                           # 22 Oct (Stef): sufficiency prices per unit it expects to sell
+const PRICE_ON_EXPECTED = (; own_market_planning = true, firms_plan_on_sales = false, market_rounds = 1, price_on_expected_sales = true)   # 22 Oct (Stef): asks move against expected sales, with an adaptive buffer
+const CONTRACTS = (; contracts = true, contract_share = 0.8)                                      # 22 Oct (Stef): the realistic labour market — contracts for four fifths of the hands, which hold wages and so the cost floor
+const REALISTIC = merge(PRICE_ON_EXPECTED, DEBT_AWARE, EXPECTED_SALES, CONTRACTS, (; refound_minimum = 2, uncovered_debt_sale = true))   # everything of 18–22 October together
 const DEBT_AWARE = (; cost_floor_includes_debt_service = true)                                   # 21 Oct (Stef): reserve planners count their loans — interest in the floor, the full service in the reserve
 
 """

@@ -883,7 +883,7 @@ A cooperative is refounded as a shareholder firm unless `liquidated_coop_stays_c
 with one share at par, if their spare cash reaches the price). Returns false when no group can reach the price.
 """
 function refound!(model, e::Enterprise)
-    e.plan_share = -1.0; e.share_trend = 0; empty!(e.sales_history)   # 16 Oct: a restarted firm plans afresh (21 Oct: and forgets its sales)
+    e.plan_share = -1.0; e.share_trend = 0; empty!(e.sales_history); empty!(e.unsold_history); e.expected_sales = 0.0; e.buffer_share = -1.0   # 16 Oct: a restarted firm plans afresh (21 Oct: and forgets its sales)
     p = parameters(model)
     book = max(book_value_net(model, e), 0.0)
     price = round(max(p.liquidation_price_share * book, total_debt(model, e) - cash(e), 0.0), digits = 4)
