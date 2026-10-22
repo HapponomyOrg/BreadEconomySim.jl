@@ -1895,7 +1895,9 @@ end
     f = first(B.enterprises(m, :farm)); empty!(f.unsold_history)
     @test B.expected_sales_factor(m, f) == 1.0                                   # no history: the plain floor
     append!(f.unsold_history, [0.1, 0.1, 0.1])
-    @test B.expected_sales_factor(m, f) ≈ 0.9                                    # a tenth unsold: the sold units carry it
+    @test B.expected_sales_factor(m, f) ≈ 0.9                                    # a tenth lost (spoiled): the sold units carry it
+    f.spoiled_this_round = 2.0; f.market[:grain].offered = 20.0; empty!(f.unsold_history); B.record_unsold!(m)
+    @test f.unsold_history == [0.1] && f.spoiled_this_round == 0.0               # the lost share is what spoiled, not what was unsold
     f0 = f; base_floor = B.seller_reservation(m, f0, :grain)
     empty!(f.unsold_history); @test B.seller_reservation(m, f, :grain) ≈ base_floor * 0.9 atol = 1e-6
     append!(f.unsold_history, [0.9]); @test B.expected_sales_factor(m, f) ≈ 0.5    # capped

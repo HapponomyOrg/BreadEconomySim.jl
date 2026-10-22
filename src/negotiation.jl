@@ -18,8 +18,12 @@ function record_unsold!(model)
     for e in model.enterprise_list
         (e.alive && is_producer(e)) || continue
         good = e.kind == :bakery ? :bread : e.kind == :farm ? :grain : :ticket
-        r = e.market[good]; r.offered > 1e-9 || continue
-        push!(e.unsold_history, max(1 - r.sold / r.offered, 0.0))
+        r = e.market[good]
+        if r.offered > 1e-9                                                  # 22 Oct (second version): the LOST share — what spoiled — not the unsold share:
+            push!(e.unsold_history, min(e.spoiled_this_round / r.offered, 1.0))   # a buffer carried into next month is not a loss, and counting it
+        end                                                                  # as one made the floor 1/(1 − buffer) higher every month, which indexed wages turned into inflation
+        e.spoiled_this_round = 0.0
+        r.offered > 1e-9 || continue
         while length(e.unsold_history) > max(p.plan_window, 1); popfirst!(e.unsold_history); end
     end
     return nothing

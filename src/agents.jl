@@ -191,6 +191,7 @@ end
     sales_history::Vector{Float64} = Float64[]   # 21 Oct: the last months' sales plus turned-away customers, for own-market planning
     unsold_history::Vector{Float64} = Float64[]  # 22 Oct: the last months' unsold share of what it offered, for the floor per unit sold
     expected_sales::Float64 = 0.0       # 22 Oct: what the firm expected to sell this month (goods units), set by its own plan
+    spoiled_this_round::Float64 = 0.0   # 22 Oct: units of its own good that spoiled this month — the real loss the sold units must carry
     buffer_share::Float64 = -1.0        # 22 Oct: its overproduction above expected sales (−1 = the planning margin until set)
     land_levy_arrears::Float64 = 0.0    # land levy due but unpaid
     revenue_period::Float64 = 0.0       # profit tax: sales since the last assessment (accrued at the sale)

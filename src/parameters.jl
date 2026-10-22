@@ -89,8 +89,10 @@ Base.@kwdef struct SimulationParameters
     cost_floor_includes_debt_service::Bool = false
     # 22 Oct (Stef): a sufficient firm prices at cost per unit it expects to SELL, not per unit produced — the units it will not
     # sell (the planning margin, the customers that went elsewhere) are a cost the sold units must carry. The floor is divided by
-    # (1 − the firm's expected unsold share), the share averaged over its last `plan_window` months, capped at
-    # `expected_unsold_cap`. Before, a farm pricing at cost lost its unsold tenth every month and failed within a year in the
+    # (1 − the firm's expected LOST share: what spoiled, as a share of what it offered, averaged over its last `plan_window`
+    # months, capped at `expected_unsold_cap`). Stock carried into next month is not a loss (22 Oct, second version: counting the
+    # whole unsold share, with a permanent buffer and wages indexed to bread, multiplied the floor every month — bread 17 in the
+    # debt village, 6.7 in the SuMSy one). Before, a farm pricing at cost lost its unsold tenth every month and failed within a year in the
     # debt village while a farm with a margin lived. false = the floor per unit produced, as before.
     floor_per_unit_sold::Bool = false
     expected_unsold_cap::Float64 = 0.5
