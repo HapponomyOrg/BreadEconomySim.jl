@@ -41,7 +41,7 @@ using Dates, Pkg, Distributed
 
 const ROOT = normpath(joinpath(@__DIR__, ".."))
 
-const MODEL_VERSION = "2026-10-22.9"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
+const MODEL_VERSION = "2026-10-22.10"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
 
 # ---- packages (once per session) ---------------------------------------------------------------------------------------
 const PACKAGES_READY = Ref(false)
@@ -100,7 +100,7 @@ variant_extra(contract_share, variant = nothing) = contract_share !== nothing ? 
 const REALISTIC_LABOUR = (; contracts = true, contract_share = 0.8, refound_minimum = 2, uncovered_debt_sale = true,
                             own_market_planning = true, firms_plan_on_sales = false, market_rounds = 1,
                             price_on_expected_sales = true, cost_floor_includes_debt_service = true, floor_debt_service = :long,
-                            floor_per_unit_sold = true, firm_land_loan_max_rounds = 240, land_price_meets_offers = true)   # 22 Oct: the same set as REALISTIC in scripts/pricing_strategy_test.jl (without the strategy mix)
+                            floor_per_unit_sold = true, firm_land_loan_max_rounds = 240, land_price_meets_offers = true, reserve_build_months = 12)   # 22 Oct: the same set as REALISTIC in scripts/pricing_strategy_test.jl (without the strategy mix)
 with_extra(kw, extra) = isempty(kw) ? kw : (; kw..., extra...)
 ladder_name(N, settlement, variant = "") = (settlement == :invoicing ? "ladder2_$(N)" : "ladder2_$(N)_$(settlement)") * variant
 parts_dir(N, settlement, rounds, variant = "") = joinpath(ROOT, "results", "parts", "$(ladder_name(N, settlement, variant))_$(rounds)months_$(MODEL_VERSION)")   # the run length and the model version are part of the key

@@ -110,6 +110,11 @@ Base.@kwdef struct SimulationParameters
     # firm fills its reserve before it expands; the farms traced grew from 111 to 187 units in six months on bank credit, asking
     # below their floor, and were wound up in month 7 with 2,400 of debt. Off on the base; in the realistic set.
     grow_only_with_reserve::Bool = false
+    # 22 Oct (after the .9 run): sufficiency has a target — the reserve. A firm pricing at cost (not on a margin) adds to its
+    # floor what it takes to bring its reserve to target over `reserve_build_months`, per unit of its normal volume; nothing once
+    # the reserve is met. Without it a zero-margin firm with a founding loan and a month's timing between paying and selling
+    # borrows every month and never gets ahead (the sufficient farms: wound up at 5–23 months in every version). 0 = off.
+    reserve_build_months::Int = 0
     deleverage_by_land_sales::Bool = true
     deleverage_after_months::Int = 2
     # 22 Oct (Stef): a sufficient firm prices at cost per unit it expects to SELL, not per unit produced — the units it will not

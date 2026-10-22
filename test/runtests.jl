@@ -1945,6 +1945,18 @@ end
     @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., land_pricing = :market, instalment_purchases = true, land_price_meets_offers = true, firm_land_loan_max_rounds = 240))) < 1e-6
 end
 
+
+@testset "a firm at cost prices to build its reserve (22 October 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., reserve_build_months = 12, maximum_rounds = 3))
+    for _ in 1:2; B.econo_step!(m, 1); end
+    f = first(B.enterprises(m, :farm)); short = B.reserve_target(m, f) - B.cash(f)
+    if short > 0
+        @test B.reserve_build_per_unit(m, f, 1.0) ≈ short / (12 * max(f.production_target, f.expected_sales, 1.0))
+    end
+    f.pricing = :margin; @test B.reserve_build_per_unit(m, f, 1.0) == 0.0            # a firm on a margin builds nothing extra
+    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., reserve_build_months = 12))) < 1e-6
+end
+
 @testset "cooperative forms (14 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     params(m) = B.parameters(m)
