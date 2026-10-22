@@ -23,7 +23,6 @@
 #     strategy_test(extra = SPARE_SUPPLY, label = "spare_supply")                       # planning margin 30 %
 #     strategy_test(extra = OWN_PLANNING, label = "own_planning")                       # firms plan on their own market
 #     strategy_test(extra = merge(SPARE_SUPPLY, OWN_PLANNING), label = "spare_own")     # both
-#     strategy_test(extra = OVERCAPACITY, label = "overcapacity")                       # eight firms of each kind (market structure, not spare supply)
 #     strategy_test(extra = merge(SPARE_SUPPLY, OWN_PLANNING, DEBT_AWARE), label = "spare_own_debt")   # and the firms count their loans
 #     strategy_test(extra = merge(SPARE_SUPPLY, OWN_PLANNING, DEBT_AWARE, EXPECTED_SALES), label = "spare_own_debt_sold")   # and price per unit they expect to sell
 #     strategy_test(extra = merge(PRICE_ON_EXPECTED, DEBT_AWARE, EXPECTED_SALES), label = "expected")   # 22 Oct: prices against expected sales, adaptive buffer
@@ -76,7 +75,6 @@ Distributed.remotecall_eval(Main, [1], PS_SETUP)
 
 const SPARE_SUPPLY = (; planning_margin = 0.3)                                                   # a third more than the village will buy
 const OWN_PLANNING = (; own_market_planning = true, firms_plan_on_sales = false, market_rounds = 1)   # the 19–21 October planning rule (window 3, net of stock, turned-away counted)
-const OVERCAPACITY = (; number_of_farms = 8, number_of_bakeries = 8, number_of_theatres = 8)   # twice the firms of each kind (smaller firms, the same supply)
 const EXPECTED_SALES = (; floor_per_unit_sold = true)                                           # 22 Oct (Stef): sufficiency prices per unit it expects to sell
 const PRICE_ON_EXPECTED = (; own_market_planning = true, firms_plan_on_sales = false, market_rounds = 1, price_on_expected_sales = true)   # 22 Oct (Stef): asks move against expected sales, with an adaptive buffer
 const CONTRACTS = (; contracts = true, contract_share = 0.8)                                      # 22 Oct (Stef): the realistic labour market — contracts for four fifths of the hands, which hold wages and so the cost floor
@@ -86,7 +84,7 @@ const REALISTIC = merge(PRICE_ON_EXPECTED, DEBT_AWARE, EXPECTED_SALES, CONTRACTS
 """
     strategy_test(; step = "8 ", seeds = 1:10, rounds = 120, share = 0.5, extra = (;), label = "", jobs = max(Sys.CPU_THREADS - 1, 1))
 
-Both villages at `step`, `share` of each sector's firms on margins, `extra` settings applied last (e.g. OVERCAPACITY). Prints the
+Both villages at `step`, `share` of each sector's firms on margins, `extra` settings applied last (e.g. REALISTIC). Prints the
 summary per money, kind and strategy; writes results/pricing_strategy_test[_label].csv (one row per firm) and
 results/pricing_strategy_summary[_label].csv; returns the per-firm DataFrame.
 """

@@ -96,8 +96,9 @@ Base.@kwdef struct SimulationParameters
     expected_unsold_cap::Float64 = 0.5
     # 22 Oct (Stef): prices against EXPECTED sales, not against production. A firm planning on its own market expects to sell
     # what its history says and produces a buffer above it (`buffer_share`, starting at the planning margin). Its ask falls only
-    # when it sold less than (1 − `expected_sales_tolerance`) of what it expected, and rises only when it sold more than it
-    # expected (into the buffer). The buffer itself adapts at `buffer_step` a month: down when the extra never sells (never
+    # when it sold less than (1 − `expected_sales_tolerance`) of what it expected, and rises only when it sold everything,
+    # buffer included, and still turned customers away; selling into the buffer raises the buffer, not the price (22 Oct, Stef —
+    # the first version raised the price on any sale into the buffer: bread 49 in the debt village). The buffer itself adapts at `buffer_step` a month: down when the extra never sells (never
     # below `buffer_min`), up when it sells into it (never above `buffer_max`). Needs own_market_planning; false = the old rule.
     price_on_expected_sales::Bool = false
     expected_sales_tolerance::Float64 = 0.1

@@ -1912,7 +1912,8 @@ end
     r.offered = b.expected_sales * (1 + b.buffer_share); r.sold = b.expected_sales * 0.95; r.failed_for_cash = 0   # sold what it expected (within a tenth): no change
     B.adapt_prices!(m); @test b.ask[:bread] ≈ ask0
     r.sold = b.expected_sales * 0.8; B.adapt_prices!(m); @test b.ask[:bread] < ask0                                # a fifth short: down
-    ask1 = b.ask[:bread]; r.sold = r.offered; B.adapt_prices!(m); @test b.ask[:bread] > ask1                       # sold into the buffer: up
+    ask1 = b.ask[:bread]; r.sold = r.offered; B.adapt_prices!(m); @test b.ask[:bread] ≈ ask1                       # the whole buffer sold, nobody turned away: no change
+    r.unmet_demand = true; r.unmet_units = 5.0; B.adapt_prices!(m); @test b.ask[:bread] > ask1                       # sold out with customers turned away: up
     buf = b.buffer_share; r.sold = b.expected_sales * 1.05; r.offered = b.expected_sales * (1 + buf)
     B.own_plan!(m, b, :bread, Float64(p.breads_per_grain), 1000, 4); @test b.buffer_share > buf                   # sold into the buffer: keep more
     @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., own_market_planning = true, price_on_expected_sales = true))) < 1e-6

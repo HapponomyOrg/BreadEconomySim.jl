@@ -272,8 +272,8 @@ function adapt_prices!(model)
             r.offered <= 1e-9 && continue
             if p.price_on_expected_sales && a isa Enterprise && g != :wage && a.expected_sales > 0   # 22 Oct: against what it expected to sell
                 r.idle_rounds = r.sold > 1e-9 ? 0 : r.idle_rounds + 1
-                if r.sold > a.expected_sales + 1e-9
-                    (!p.ask_increase_only_on_unmet_demand || demand_unmet(model, a, g) || r.sold >= r.offered - 1e-9) && (a.ask[g] *= 1 + p.ask_increase_after_sellout)
+                if r.sold >= r.offered - 1e-9 && demand_unmet(model, a, g)           # 22 Oct (Stef): up only when the whole buffer is gone AND customers were turned away — selling into the buffer raises the buffer, not the price
+                    a.ask[g] *= 1 + p.ask_increase_after_sellout
                 elseif r.sold < a.expected_sales * (1 - p.expected_sales_tolerance) - 1e-9
                     a.ask[g] *= 1 - (r.sold > 1e-9 ? p.ask_decrease_after_partial_sale : p.ask_decrease_when_idle[min(r.idle_rounds, length(p.ask_decrease_when_idle))])
                 end
