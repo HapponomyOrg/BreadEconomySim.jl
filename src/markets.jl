@@ -178,6 +178,17 @@ function land_market!(model)
             pm0 = parameters(model)
             # 24 Sept: seller credit (instalments) in both villages — ordinary seller credit exists in debt economies too
             instalment = pm0.instalment_purchases && (pm0.monetary_system == :sumsy || pm0.land_pricing == :market) && surplus < price
+            firm_term = pm0.instalment_rounds
+            if instalment && b isa Enterprise && pm0.firm_land_loan_max_rounds > 0 && wants            # 22 Oct (Stef): buy only when the instalment can be carried by the rent it replaces plus the reserve
+                irate = pm0.land_pricing == :market ? instalment_rate(model, b) : 0.0
+                rent_now = expected_price(model, :rent)
+                carry = max(available_cash(b) - reserve_target(model, b), 0.0)
+                firm_term = 0
+                for n in pm0.instalment_rounds:pm0.firm_land_loan_max_rounds
+                    price / n + max(irate, 0.0) * price <= rent_now + carry / n + 1e-9 && (firm_term = n; break)
+                end
+                firm_term == 0 && (wants = false)                                                      # no term works: it rents
+            end
             bres = Inf
             if pm0.land_pricing == :market && wants
                 via = surplus >= price ? :cash : instalment ? :instalment : :loan
@@ -208,9 +219,10 @@ function land_market!(model)
             if instalment
                 bank = bank_of(model, b)
                 irate = pm0.land_pricing == :market ? instalment_rate(model, b) : 0.0      # 24 Sept: a market rate, negative under SuMSy
-                push!(model.peer_loans, PeerLoan(length(model.peer_loans) + 1, s.id, b.id, bank === nothing ? s.id : bank.id, price, price, price / pm0.instalment_rounds,
+                term = b isa Enterprise ? firm_term : pm0.instalment_rounds
+                push!(model.peer_loans, PeerLoan(length(model.peer_loans) + 1, s.id, b.id, bank === nothing ? s.id : bank.id, price, price, price / term,
                                                  irate, irate, pm0.default_insurance && s isa Person, current_round(model), 0, false, false, 0.0))
-                log_event!(model, :instalment_purchase; buyer = b.id, buyer_kind = kind_of(b), seller = s.id, price = price, rounds = pm0.instalment_rounds)
+                log_event!(model, :instalment_purchase; buyer = b.id, buyer_kind = kind_of(b), seller = s.id, price = price, rounds = term)
             else
                 pay!(model, b, s, price, :land_purchase)
             end

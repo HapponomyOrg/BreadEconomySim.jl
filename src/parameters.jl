@@ -97,6 +97,11 @@ Base.@kwdef struct SimulationParameters
     # (bread 24–71, the SuMSy village losing people for the first time): a farm buying land on instalments passes the purchase
     # into its price, wages indexed to bread follow, the land's valuation rises with the rents, and the next purchase costs more.
     floor_debt_service::Symbol = :interest
+    # 22 Oct (Stef): a farm buys land instead of renting only when it is a sound investment — the term is the shortest, up to
+    # `firm_land_loan_max_rounds`, at which the instalment (principal ÷ term + interest on the price) is at most the rent plus
+    # what the reserve above its target can carry per month over that term; if no term works, it rents. 0 = the old rule
+    # (`instalment_rounds` for everyone, no test). Land bought on these terms is paid for at the pace of the rent it replaces.
+    firm_land_loan_max_rounds::Int = 0      # off on the base (it moves the golden values); 240 in the realistic set
     deleverage_by_land_sales::Bool = true
     deleverage_after_months::Int = 2
     # 22 Oct (Stef): a sufficient firm prices at cost per unit it expects to SELL, not per unit produced — the units it will not

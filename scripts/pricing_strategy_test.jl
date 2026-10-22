@@ -26,7 +26,7 @@
 #     strategy_test(extra = merge(SPARE_SUPPLY, OWN_PLANNING, DEBT_AWARE), label = "spare_own_debt")   # and the firms count their loans
 #     strategy_test(extra = merge(SPARE_SUPPLY, OWN_PLANNING, DEBT_AWARE, EXPECTED_SALES), label = "spare_own_debt_sold")   # and price per unit they expect to sell
 #     strategy_test(extra = merge(PRICE_ON_EXPECTED, DEBT_AWARE, EXPECTED_SALES), label = "expected")   # 22 Oct: prices against expected sales, adaptive buffer
-#     strategy_test(extra = merge(PRICE_ON_EXPECTED, DEBT_AWARE, EXPECTED_SALES, CONTRACTS), label = "expected_contracts")   # with contracts (none of the earlier runs had them)
+#     strategy_test(extra = merge(PRICE_ON_EXPECTED, DEBT_AWARE, EXPECTED_SALES, CONTRACTS, SOUND_LAND), label = "expected_contracts")   # with contracts and sound land purchases
 #     strategy_test(extra = REALISTIC, label = "realistic")                         # the whole realistic set: planning, pricing, loans, contracts, minimum, sale before closure
 # `extra` is any set of SimulationParameters, applied last; `label` names the output files. The summary carries each strategy's
 # unsold share (what it offered and did not sell), which says whether supply exceeded demand.
@@ -80,7 +80,8 @@ const PRICE_ON_EXPECTED = (; own_market_planning = true, firms_plan_on_sales = f
 const CONTRACTS = (; contracts = true, contract_share = 0.8)                                      # 22 Oct (Stef): the realistic labour market — contracts for four fifths of the hands, which hold wages and so the cost floor
 const DEBT_AWARE = (; cost_floor_includes_debt_service = true)                                   # interest in the floor, the full service in the reserve, land sold when the floor is not paid
 const FULL_SERVICE = (; floor_debt_service = :full)                                              # 22 Oct: instalments in the floor too — inflated both villages; kept for comparison                                   # 21 Oct (Stef): reserve planners count their loans — interest in the floor, the full service in the reserve
-const REALISTIC = merge(PRICE_ON_EXPECTED, DEBT_AWARE, EXPECTED_SALES, CONTRACTS, (; refound_minimum = 2, uncovered_debt_sale = true))   # everything of 18–22 October together
+const SOUND_LAND = (; firm_land_loan_max_rounds = 240)                                         # 22 Oct (Stef): a farm buys land only on a term the rent and its reserve can carry
+const REALISTIC = merge(PRICE_ON_EXPECTED, DEBT_AWARE, EXPECTED_SALES, CONTRACTS, SOUND_LAND, (; refound_minimum = 2, uncovered_debt_sale = true))   # everything of 18–22 October together
 
 """
     strategy_test(; step = "8 ", seeds = 1:10, rounds = 120, share = 0.5, extra = (;), label = "", jobs = max(Sys.CPU_THREADS - 1, 1))
