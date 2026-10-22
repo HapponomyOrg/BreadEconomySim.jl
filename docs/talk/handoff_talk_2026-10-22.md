@@ -54,6 +54,37 @@ Review notes (facts and wording; the talk chat decides what to do with them):
 
 **Caveats to state once:** the income (5) and the cushion (30) are fixed in money, so a deflating village makes them worth more every year and an inflating one less — part of SuMSy's record at the later steps is that drift; the villages do not grow; one step of the ladder is one configuration, not a calibration.
 
+
+## 4b. The same fiscal rules on both sides — the numbers for the side-by-side slides (22 Oct, four seeds, version 2026-10-22.12)
+
+Four folders: package T (income taxes 15/15/30/10 %, benefit 2 loaves, public jobs 10 %) and package P (a 1.5 % tax on balances above a cushion of 30 instead of income taxes), each with the base labour market and with the realistic set. From step 8 both villages carry the land levy, its dividend and a 3-month reserve, surplus paid per head. Four seeds; the worst run in brackets. **These are the numbers to put beside each other.** Step 0 (no government) is the same under any package: debt 149 (144), SuMSy 453 (450).
+
+**Base labour market, package T — alive / public debt / poorest tenth (meals) / wealth Gini:**
+
+| step | debt village | SuMSy village |
+|---|---|---|
+| 2 government | 510 (510) / 198k / 1.0 / 0.74 | 512 / 0 / 16.0 / 0.74 |
+| 8 shares | 477 (466) / 122k / 0.6 / 0.78 | 512 / 0 / 21.1 / 0.53 |
+| 11 VAT | 390 (379) / 25k / −5.0 / 0.81 | 512 / 0 / 28.7 / 0.45 |
+| V8 productive | 475 (467) / 18k / −4.1 / 0.66 | 512 / 0 / 76.9 / 0.22 |
+| S3 everyone greedy | 480 (469) / 178k / 1.8 / 0.68 | 512 / 0 / 23.4 / 0.42 |
+
+**Base labour market, package P:**
+
+| step | debt village | SuMSy village |
+|---|---|---|
+| 2 | 510 (509) / 99k / 1.1 / 0.75 | 512 / 0 / 18.3 / 0.74 |
+| 8 | 480 (448) / 18k / 0.8 / 0.70 | 512 / 0 / 17.4 / 0.52 |
+| 11 | 425 (409) / 0.1k / −1.5 / 0.70 | 512 / 0 / 15.8 / 0.41 |
+| V8 | 468 (458) / 22k / 0.2 / 0.60 | 512 / 0 / 38.9 / 0.25 |
+| S3 | 494 (481) / 94k / 1.0 / 0.75 | 512 / 0 / 29.0 / 0.18 |
+
+**What holds on identical rules, and may be said:** (1) with a government the SuMSy village keeps all 512 in every seed at every step, the debt village loses 2 to 122 people; (2) the SuMSy government never borrows, the debt village's borrows at every step under T (18k–198k) and far less under P — the parking tax funds its budget at steps 8 and 11 — but its people still die; (3) the poorest tenth: 16–77 meals in the SuMSy village against −5 to 1.8 in the debt one; (4) the wealth Gini: equal at step 2 (0.74 both), lower in the SuMSy village from step 8 (0.52–0.53 against 0.70–0.78; 0.22–0.25 against 0.60–0.66 in the productive village) — so the 20.4 gap was partly the levy's doing, and on the same rules it is smaller but it is there; (5) the SuMSy village's **cash** Gini is the higher one at step 8 (0.45–0.62 against 0.33–0.35) — show both Ginis. Prices deflate in both villages at every step (SuMSy faster); fixed income and cushion caveat as in §4.
+
+**The realistic set on the same rules** (contracts 0.8, own-market planning, the :long floor, …): the same pattern, the debt village losing more — package T: debt 473 (409) at step 2, 435 (430) at step 8, 410 (400) at step 11, 454 (442) productive, 474 (451) greedy; SuMSy 512 at every step with a government (511, worst 508, at step 8); package P: debt 499 / 450 / 439 / 481 / 484; SuMSy 512. Step 0 under the realistic set: debt 16 (12), SuMSy 473 (358) — the bare-bones debt village cannot survive contracts and own-market planning without a government. Prices: SuMSy near the base's at steps 8 and 11, the debt village deflating 9–17 % a year under P. The realistic numbers are four seeds on a set frozen this afternoon; say so.
+
+Not in these folders: the paired tests (run per folder, never across), the levy rates charged (§3.5) and the deposit interest paid (§3.12); the talk chat should ask for them by name.
+
 ## 5. The realistic results — in, with the struggle
 
 **What the realistic set is** (18–22 October): contracts for four fifths of the hands (indexed to bread, three months' notice both ways), firms planning on their own market (three-month average of sales plus turned-away customers, net of stock; prices move only against expected sales; an adaptive buffer), the cost floor carrying the interest and the long loans' instalments and spreading what spoils over what sells, at least two firms of each kind, failing firms offered for sale before closure, farms buying land only on a term the rent and the reserve can carry, the land price meeting the best offer. Set `REALISTIC_LABOUR` in `scripts/run_all.jl` = `REALISTIC` in `scripts/pricing_strategy_test.jl`.
