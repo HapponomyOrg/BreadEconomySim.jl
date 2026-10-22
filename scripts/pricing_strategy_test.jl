@@ -80,8 +80,8 @@ const OVERCAPACITY = (; number_of_farms = 8, number_of_bakeries = 8, number_of_t
 const EXPECTED_SALES = (; floor_per_unit_sold = true)                                           # 22 Oct (Stef): sufficiency prices per unit it expects to sell
 const PRICE_ON_EXPECTED = (; own_market_planning = true, firms_plan_on_sales = false, market_rounds = 1, price_on_expected_sales = true)   # 22 Oct (Stef): asks move against expected sales, with an adaptive buffer
 const CONTRACTS = (; contracts = true, contract_share = 0.8)                                      # 22 Oct (Stef): the realistic labour market — contracts for four fifths of the hands, which hold wages and so the cost floor
-const REALISTIC = merge(PRICE_ON_EXPECTED, DEBT_AWARE, EXPECTED_SALES, CONTRACTS, (; refound_minimum = 2, uncovered_debt_sale = true))   # everything of 18–22 October together
 const DEBT_AWARE = (; cost_floor_includes_debt_service = true)                                   # 21 Oct (Stef): reserve planners count their loans — interest in the floor, the full service in the reserve
+const REALISTIC = merge(PRICE_ON_EXPECTED, DEBT_AWARE, EXPECTED_SALES, CONTRACTS, (; refound_minimum = 2, uncovered_debt_sale = true))   # everything of 18–22 October together
 
 """
     strategy_test(; step = "8 ", seeds = 1:10, rounds = 120, share = 0.5, extra = (;), label = "", jobs = max(Sys.CPU_THREADS - 1, 1))
