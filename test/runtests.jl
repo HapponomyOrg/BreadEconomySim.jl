@@ -1879,7 +1879,7 @@ end
     f = first(x for x in B.enterprises(m, :farm) if !isempty(B.debtor_loans(m, x)))     # a farm with its founding loan
     due = B.debt_service_due(m, f)
     @test due > 0
-    @test B.debt_service_per_unit(m, f, 1.0) ≈ B.debt_service_due(m, f; interest_only = true) / max(f.production_target, 1)   # the floor carries the interest; the reserve the full service
+    @test B.debt_service_per_unit(m, f, 1.0) ≈ B.debt_service_due(m, f) / max(f.production_target, f.expected_sales, 1.0)   # 22 Oct: the full service over the normal volume
     m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., cost_floor_includes_debt_service = false, maximum_rounds = 3))
     for _ in 1:2; B.econo_step!(m0, 1); end
     f0 = first(x for x in B.enterprises(m0, :farm) if x.id == f.id)
@@ -1919,6 +1919,21 @@ end
     buf = b.buffer_share; r.sold = b.expected_sales * 1.05; r.offered = b.expected_sales * (1 + buf)
     B.own_plan!(m, b, :bread, Float64(p.breads_per_grain), 1000, 4); @test b.buffer_share > buf                   # sold into the buffer: keep more
     @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., own_market_planning = true, price_on_expected_sales = true))) < 1e-6
+end
+
+
+@testset "deleveraging by land sales (22 October 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., cost_floor_includes_debt_service = true, own_market_planning = true, maximum_rounds = 4))
+    for _ in 1:3; B.econo_step!(m, 1); end
+    f = first(B.enterprises(m, :farm)); lender = first(B.persons(m))
+    l = B.PeerLoan(length(m.peer_loans) + 1, lender.id, f.id, lender.id, 50.0, 50.0, 5.0, 0.005, 0.005, false, 1, 0, false, false, 0.0)   # a land loan of 50, 5 a month
+    push!(m.peer_loans, l); f.land = max(f.land, 1)
+    f.expected_sales = 100.0; f.market[:grain].offered = 100.0; f.market[:grain].sold = 10.0; f.short_months = B.parameters(m).deleverage_after_months - 1
+    land0 = f.land; out0 = l.outstanding
+    B.deleverage!(m)
+    @test f.land == land0 - 1 && l.outstanding < out0 && l.installment < 5.0      # a plot sold, the loan repaid with it, the instalment scaled down
+    @test B.debt_service_per_unit(m, f, 1.0) ≈ B.debt_service_due(m, f) / max(f.production_target, f.expected_sales, 1.0)   # the full service over the normal volume
+    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., cost_floor_includes_debt_service = true, own_market_planning = true))) < 1e-6
 end
 
 @testset "cooperative forms (14 September 2026)" begin

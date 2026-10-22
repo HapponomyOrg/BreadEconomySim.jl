@@ -92,6 +92,50 @@ function public_land!(model)
 end
 
 """
+    deleverage!(model)
+
+22 October (Stef): a firm pricing to carry its debt service, whose floor the market will not pay — short of what it expected
+`deleverage_after_months` months running, or below its reserve — sells one plot of its land to the best bidder and repays its
+loans with the proceeds, peer loans first (the instalment scaled down with the outstanding), then bank loans, so that its
+service falls. Runs before the land market. Needs `cost_floor_includes_debt_service`.
+"""
+function deleverage!(model)
+    p = parameters(model)
+    (p.cost_floor_includes_debt_service && p.deleverage_by_land_sales) || return nothing
+    rng = stream(model, :land)
+    for e in enterprises(model, :farm)
+        (e.land > 0 && debt_service_due(model, e) > 0) || continue
+        r = e.market[e.kind == :farm ? :grain : :bread]
+        short = e.expected_sales > 0 && r.offered > 1e-9 && r.sold < e.expected_sales * (1 - p.expected_sales_tolerance) - 1e-9
+        e.short_months = short ? e.short_months + 1 : 0
+        (e.short_months >= p.deleverage_after_months || cash(e) < reserve_target(model, e)) || continue
+        bids = [(b, min(land_buyer_reservation(model, b, :cash), b isa Person ? cash(b) - buffer_target(model, b) : available_cash(b)))
+                for b in alive_agents(model) if b.id != e.id && !is_government(b) && !is_bank(b) && (b isa Person || (is_farm(b) && debt_service_due(model, b) <= 0))]
+        bids = [(b, x) for (b, x) in bids if x > 1e-6]
+        isempty(bids) && continue
+        b, bid = bids[argmax([x for (_, x) in bids])]
+        bid = round(min(bid, land_valuation_price(model)), digits = 4)
+        bid > 1e-6 || continue
+        transfer!(model, b, e, bid, :deleverage_land_sale)
+        e.land -= 1; b.land += 1
+        b isa Enterprise && (b.market[:rent].wanted = max(b.production_target - b.land, 0))
+        log_event!(model, :deleverage_land_sale; seller = e.id, buyer = b.id, price = bid)
+        # repay with the proceeds: peer loans first, the instalment scaled down with the outstanding
+        left = bid
+        for l in sort(peer_loans_of(model, e); by = l -> -l.rate)
+            amt = round(min(l.outstanding, left, cash(e)), digits = 4); amt > 1e-6 || continue
+            before = l.outstanding
+            transfer!(model, e, model[l.lender_id], amt, :peer_loan_repayment); l.outstanding = round(before - amt, digits = 4)
+            l.installment = round(l.installment * l.outstanding / before, digits = 4)
+            l.outstanding <= 1e-6 && (l.settled = true)
+            left -= amt
+        end
+        e.short_months = 0
+    end
+    return nothing
+end
+
+"""
     land_market!(model)
 
 Farms take turns. Purchases first (debt-free, from reserves above target, banks' seized land first, then
@@ -99,6 +143,7 @@ landowners); enterprises have first refusal, then persons with surplus savings m
 at a time from the owner with the lowest rent ask, paid up front; rent income is taxed as capital income.
 """
 function land_market!(model)
+    deleverage!(model)                                                     # 22 Oct
     parameters(model).public_land && return public_land!(model)                 # 18 Oct: no land market — the land is public
     rng = stream(model, :land)
     farms = stable_shuffle(rng, enterprises(model, :farm))

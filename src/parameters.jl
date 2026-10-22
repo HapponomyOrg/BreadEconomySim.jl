@@ -82,11 +82,18 @@ Base.@kwdef struct SimulationParameters
     # at cost (the sector settings above are then ignored): at the founding the first firms of each kind by their index, later
     # entrants by a draw. Each firm's strategy is in `e.pricing`; `scripts/pricing_strategy_test.jl` compares their survival.
     pricing_margin_share::Float64 = 0.0
-    # 21 Oct (Stef: reserve planners should take their loans into account): a firm's cost floor counts the interest due next
-    # month on its bank and peer loans per unit of planned output (the cost of capital), and its reserve target counts
-    # `reserve_target_in_rounds` months of the full debt service, instalments included (the cash need). Before, a farm with a founding loan pricing at cost had nothing to
+    # 21 Oct (Stef: reserve planners should take their loans into account): a firm's cost floor counts the FULL debt service due next
+    # month on its bank and peer loans — instalments and interest, as a real firm prices a mortgage (22 Oct, Stef) — per unit of
+    # its normal volume, and its reserve target counts `reserve_target_in_rounds` months of it. When the market will not pay that
+    # floor, the firm sells land to bring its service down (`deleverage_by_land_sales`). Before, a farm with a founding loan pricing at cost had nothing to
     # pay the bank from, and the reserve farms in the debt village failed within a year. false = the old floors (variable cost only).
     cost_floor_includes_debt_service::Bool = false
+    # 22 Oct (Stef): a firm whose floor the market will not pay — sold less than (1 − expected_sales_tolerance) of what it expected
+    # for `deleverage_after_months` months running, or cash below its reserve — and that owns land and owes money sells one plot
+    # a month, repays its loans with the proceeds (peer loans first, instalments scaled down with the outstanding) and so lowers
+    # its debt service. Needs cost_floor_includes_debt_service.
+    deleverage_by_land_sales::Bool = true
+    deleverage_after_months::Int = 2
     # 22 Oct (Stef): a sufficient firm prices at cost per unit it expects to SELL, not per unit produced — the units it will not
     # sell (the planning margin, the customers that went elsewhere) are a cost the sold units must carry. The floor is divided by
     # (1 − the firm's expected LOST share: what spoiled, as a share of what it offered, averaged over its last `plan_window`
