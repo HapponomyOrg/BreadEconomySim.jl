@@ -33,7 +33,7 @@ end
 goods per unit); 0 for anyone who is not a firm, has no loans, or when the switch is off."""
 function debt_service_per_unit(model, seller, goods_per_unit::Float64)
     seller isa Enterprise || return 0.0
-    due = debt_service_due(model, seller); due > 0 || return 0.0           # 22 Oct (Stef): the FULL service — instalments and interest — as a real firm prices a mortgage
+    due = debt_service_due(model, seller; interest_only = parameters(model).floor_debt_service == :interest); due > 0 || return 0.0   # 22 Oct: see floor_debt_service
     volume = max(seller.production_target * goods_per_unit, seller.expected_sales, 1.0)   # over its normal volume: after a month of no output the target is tiny, and dividing by it priced bread at 15 (seed 6, month 22)
     return due / volume
 end

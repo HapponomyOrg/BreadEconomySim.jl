@@ -92,6 +92,11 @@ Base.@kwdef struct SimulationParameters
     # for `deleverage_after_months` months running, or cash below its reserve — and that owns land and owes money sells one plot
     # a month, repays its loans with the proceeds (peer loans first, instalments scaled down with the outstanding) and so lowers
     # its debt service. Needs cost_floor_includes_debt_service.
+    # 22 Oct: what of the debt service the floor carries — :interest (the cost of capital; the instalments are a cash need met by
+    # the reserve and by selling land) or :full (instalments too, as a real firm prices a mortgage). :full inflated both villages
+    # (bread 24–71, the SuMSy village losing people for the first time): a farm buying land on instalments passes the purchase
+    # into its price, wages indexed to bread follow, the land's valuation rises with the rents, and the next purchase costs more.
+    floor_debt_service::Symbol = :interest
     deleverage_by_land_sales::Bool = true
     deleverage_after_months::Int = 2
     # 22 Oct (Stef): a sufficient firm prices at cost per unit it expects to SELL, not per unit produced — the units it will not

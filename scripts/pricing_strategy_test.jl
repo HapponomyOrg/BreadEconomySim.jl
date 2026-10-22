@@ -78,7 +78,8 @@ const OWN_PLANNING = (; own_market_planning = true, firms_plan_on_sales = false,
 const EXPECTED_SALES = (; floor_per_unit_sold = true)                                           # 22 Oct (Stef): sufficiency prices per unit it expects to sell
 const PRICE_ON_EXPECTED = (; own_market_planning = true, firms_plan_on_sales = false, market_rounds = 1, price_on_expected_sales = true)   # 22 Oct (Stef): asks move against expected sales, with an adaptive buffer
 const CONTRACTS = (; contracts = true, contract_share = 0.8)                                      # 22 Oct (Stef): the realistic labour market — contracts for four fifths of the hands, which hold wages and so the cost floor
-const DEBT_AWARE = (; cost_floor_includes_debt_service = true)                                   # 21 Oct (Stef): reserve planners count their loans — interest in the floor, the full service in the reserve
+const DEBT_AWARE = (; cost_floor_includes_debt_service = true)                                   # interest in the floor, the full service in the reserve, land sold when the floor is not paid
+const FULL_SERVICE = (; floor_debt_service = :full)                                              # 22 Oct: instalments in the floor too — inflated both villages; kept for comparison                                   # 21 Oct (Stef): reserve planners count their loans — interest in the floor, the full service in the reserve
 const REALISTIC = merge(PRICE_ON_EXPECTED, DEBT_AWARE, EXPECTED_SALES, CONTRACTS, (; refound_minimum = 2, uncovered_debt_sale = true))   # everything of 18–22 October together
 
 """
