@@ -218,6 +218,8 @@ Base.@kwdef struct SimulationParameters
     land_units_per_landowner_override::Int = 0        # 0 = spec formula floor((n − p)/(p − 1))
     land_per_person::Float64 = 0.0                    # > 0: total land = land_per_person × persons, shared equally by the landowners (overrides the formula and the override); 2 makes four loaves a head feasible on the land side
     # Enterprise taxation (12 September 2026)
+    # 22 Oct (D9, Stef): whether the banks' loan rate covers the deposit interest they promise (on, as built) — a money setting
+    loan_rate_covers_deposit_interest::Bool = true
     enterprise_tax::Symbol = :none                    # :none | :income (on net operating cash flow minus interest; banks on interest received) | :reserves (on cash held at end of round)
     enterprise_income_tax_rate::Float64 = 0.10
     enterprise_reserve_tax_rate::Float64 = 0.10

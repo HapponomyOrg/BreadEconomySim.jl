@@ -28,6 +28,8 @@
 #     strategy_test(extra = merge(PRICE_ON_EXPECTED, DEBT_AWARE, EXPECTED_SALES), label = "expected")   # 22 Oct: prices against expected sales, adaptive buffer
 #     strategy_test(extra = merge(PRICE_ON_EXPECTED, DEBT_AWARE, EXPECTED_SALES, CONTRACTS, SOUND_LAND), label = "expected_contracts")   # with contracts and sound land purchases
 #     strategy_test(extra = REALISTIC, label = "realistic")                         # the whole realistic set: planning, pricing, loans, contracts, minimum, sale before closure
+#     strategy_test(extra = merge(REALISTIC, INDEX90), label = "realistic_index90")                  # 22 Oct: wages indexed at 0.9 — does partial indexation damp the spirals?
+#     strategy_test(extra = merge(REALISTIC, INDEX90, RESERVE_BUILD), label = "realistic_index90_reserve")   # and with the reserve-building markup, which inflated at full indexation
 # `extra` is any set of SimulationParameters, applied last; `label` names the output files. The summary carries each strategy's
 # unsold share (what it offered and did not sell), which says whether supply exceeded demand.
 # ======================================================================================================================
@@ -81,9 +83,10 @@ const CONTRACTS = (; contracts = true, contract_share = 0.8)                    
 const DEBT_AWARE = (; cost_floor_includes_debt_service = true)                                   # interest in the floor, the full service in the reserve, land sold when the floor is not paid
 const FULL_SERVICE = (; floor_debt_service = :full)                                              # 22 Oct: instalments in the floor too — inflated both villages; kept for comparison
 const LONG_SERVICE = (; floor_debt_service = :long)                                              # 22 Oct: the long loans' instalments (founding, land) in the floor, working credit not
-const RESERVE_BUILD = (; reserve_build_months = 12)                                              # 22 Oct: a firm at cost prices to bring its reserve to target over a year — sufficiency has a target                                   # 21 Oct (Stef): reserve planners count their loans — interest in the floor, the full service in the reserve
+const INDEX90 = (; contract_indexation = 0.9)                                                    # 22 Oct (Stef): indexation is often lower these days — contract wages follow nine tenths of the bread price
+const RESERVE_BUILD = (; reserve_build_months = 12)                                              # 22 Oct: a firm at cost prices to bring its reserve to target — inflated (debt bread 71, 314 alive): the target is in money and rises with the prices the markup causes; kept for comparison                                   # 21 Oct (Stef): reserve planners count their loans — interest in the floor, the full service in the reserve
 const SOUND_LAND = (; firm_land_loan_max_rounds = 240, land_price_meets_offers = true)       # 22 Oct (Stef): a farm buys land only on a term the rent and its reserve can carry; unsold land's price falls to the best offer
-const REALISTIC = merge(PRICE_ON_EXPECTED, DEBT_AWARE, EXPECTED_SALES, CONTRACTS, SOUND_LAND, LONG_SERVICE, RESERVE_BUILD, (; refound_minimum = 2, uncovered_debt_sale = true))   # grow_only_with_reserve dropped after .7 (it stopped all growth and inflated)   # everything of 18–22 October together
+const REALISTIC = merge(PRICE_ON_EXPECTED, DEBT_AWARE, EXPECTED_SALES, CONTRACTS, SOUND_LAND, LONG_SERVICE, (; refound_minimum = 2, uncovered_debt_sale = true))   # grow_only_with_reserve and RESERVE_BUILD dropped (both inflated) after .7 (it stopped all growth and inflated)   # everything of 18–22 October together
 
 """
     strategy_test(; step = "8 ", seeds = 1:10, rounds = 120, share = 0.5, extra = (;), label = "", jobs = max(Sys.CPU_THREADS - 1, 1))

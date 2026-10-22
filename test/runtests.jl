@@ -1957,6 +1957,25 @@ end
     @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., reserve_build_months = 12))) < 1e-6
 end
 
+
+@testset "the common fiscal packages: the two villages differ in the money only (22 October 2026)" begin
+    L = Module(); Base.include(L, joinpath(@__DIR__, "..", "scripts", "ladder_definition.jl"))
+    money = Set(L.MONEY_FIELDS)
+    for fiscal in (:taxes, :parking)
+        def = Base.invokelatest(L.ladder_definition, 512, 120, :invoicing; fiscal = fiscal)
+        for (name, kd, ks) in def.rungs
+            (isempty(kd) || isempty(ks)) && continue                                   # one-sided rungs are not compared
+            pd = SimulationParameters(; def.BARE_DEBT..., kd...); ps = SimulationParameters(; def.BARE_SUMSY..., ks...); d = Dict(f => getfield(pd, f) for f in fieldnames(SimulationParameters)); s = Dict(f => getfield(ps, f) for f in fieldnames(SimulationParameters))
+            for k in keys(d)
+                k in money && continue
+                @test (isequal(d[k], s[k]) || (isa(d[k], AbstractFloat) && isa(s[k], AbstractFloat) && isapprox(d[k], s[k]))) || error("fiscal = $fiscal, rung '$name': $k differs — debt $(d[k]), SuMSy $(s[k])")
+            end
+            # the money fields of D3/D4 may differ only in their direction: on for debt money, off for SuMSy
+            @test s[:deposit_interest_rate] == 0 && s[:loyalty_bonus_rate] == 0 && !s[:government_bonds]
+        end
+    end
+end
+
 @testset "cooperative forms (14 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     params(m) = B.parameters(m)

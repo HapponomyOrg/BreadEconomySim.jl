@@ -22,13 +22,16 @@ for (name, kd, ks) in rungs, (system, base, kw) in (("debt", BARE_DEBT, kd), ("s
         profit_tax = p.profit_tax_rate, income_tax_period = p.income_tax_period, profit_tax_period = p.profit_tax_period,
         deposit_interest = p.deposit_interest_rate, deposit_period = p.deposit_interest_period, bank_rate_start = p.initial_interest_rate, bank_rate_cap = p.maximum_interest_rate, government_rate = p.government_rate,
         guaranteed_income = p.monetary_system == :sumsy ? p.guaranteed_income : 0.0, buffer = p.monetary_system == :sumsy ? p.demurrage_free_buffer : 0.0,
-        parking_fee = p.monetary_system == :sumsy ? p.demurrage_rate : 0.0, parking_tax = p.monetary_system == :sumsy ? p.demurrage_tax_rate : 0.0,
-        account_fee_person = p.account_fee_person, account_fee_enterprise = p.account_fee_enterprise, charge_on_balances = p.enterprise_tax == :none ? 0.0 : p.enterprise_reserve_tax_rate,
+        parking_fee = p.monetary_system == :sumsy ? p.demurrage_rate : 0.0, parking_tax = p.demurrage_tax_rate,   # 22 Oct (§3.6): the parking tax for both moneys (DD8, DDGL8 … tax debt money too)
+        account_fee_person = p.account_fee_person, account_fee_enterprise = p.account_fee_enterprise,
+        charge_on_balances = p.enterprise_tax == :none ? 0.0 : (p.enterprise_tax == :reserves && p.monetary_system == :sumsy ? 0.0 : p.enterprise_reserve_tax_rate),   # 0 for SuMSy producers (D8: the model exempts them; banks still pay it)
+        fiscal = String(FISCAL), land_levy = p.land_levy, levy_dividend = p.land_levy_dividend, surplus_per_head = p.surplus_redistribution_share, surplus_cuts_taxes = p.surplus_tax_reduction_share,
+        loyalty_bonus = p.loyalty_bonus_rate, peer_loan_rate = p.peer_loan_rate, bank_spread = p.bank_spread, loan_rate_covers_deposits = p.loan_rate_covers_deposit_interest,
         price_bread = p.initial_prices[:bread] * p.initial_price_multiplier, price_grain = p.initial_prices[:grain] * p.initial_price_multiplier, price_wage = p.initial_prices[:wage] * p.initial_price_multiplier,
         price_rent = p.initial_prices[:rent] * p.initial_price_multiplier, price_ticket = p.initial_prices[:ticket] * p.initial_price_multiplier,
         unmet_share = p.unmet_demand_share, unsold_share = p.unsold_share, ask_floor = String(p.ask_floor), bread_ceiling = p.bread_bid_base_multiplier, planning_margin = p.planning_margin,
         greed = p.greed ? "$(round(Int, 100 * p.greed_share)) % greedy, hoarding $(p.greed_hoarding)" : ""))
 end
-path = joinpath(@__DIR__, "..", "results", "ladder2_$(N)_rungs.csv")
+path = joinpath(@__DIR__, "..", "results", "ladder2_$(N)$(FISCAL == :own ? "" : "_fiscal_$(FISCAL)")_rungs.csv")   # 22 Oct: one rungs file per package
 CSV.write(path, DataFrame(rows))
 println("wrote ", path, " (", length(rows), " rows)")

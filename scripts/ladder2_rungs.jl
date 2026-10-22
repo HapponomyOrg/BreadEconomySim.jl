@@ -13,4 +13,5 @@ N = length(ARGS) >= 4 ? parse(Int, ARGS[4]) : 512
 # test of what SuMSy does with it). Starting targets scale with the village (10 a firm per 128 villagers). The 128-villager
 # ladder is the size comparison. SETTLEMENT=clearing_all runs the old settlement for the before/after comparison.
 SETTLEMENT = Symbol(get(ENV, "SETTLEMENT", "invoicing"))
-(; BARE_DEBT, BARE_SUMSY, rungs) = ladder_definition(N, rounds, SETTLEMENT)
+FISCAL = Symbol(get(ENV, "FISCAL", "own"))                      # 22 Oct: the common fiscal package (own | taxes | parking)
+(; BARE_DEBT, BARE_SUMSY, rungs) = ladder_definition(N, rounds, SETTLEMENT; fiscal = FISCAL)

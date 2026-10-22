@@ -2,7 +2,7 @@ using BreadEconomySim, OrderedCollections
 
 # The ladder as a function of the village size, the run length and the settlement system (22 September), so that one
 # process can build several ladders (scripts/run_all.jl). ladder2_rungs.jl calls it with the command-line values.
-function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol)
+function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol; fiscal::Symbol = :own)
     # 20 Oct (evening): the base reproduces the 17 October run exactly (checked: step 8, debt, seed 1, identical in every month) —
     # this week's realistic labour market (contracts at 0.8, own-market planning, four market rounds, at least two firms, failing
     # firms with uncovered debt offered for sale) showed effects not yet understood in the 2026-10-20.0 run, so it is a cell (RB8,
@@ -303,5 +303,54 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol)
     # 12 Oct: on the SuMSy side the land levy always comes with its dividend — the reserve block layered on later steps had set
     # "surplus → cut taxes" to 1 and overridden it, so the levy was cut, land froze, and steps 10/11/B read a land runaway.
     rungs = [(n, kd, (get(ks, :land_levy, false) ? (; ks..., surplus_tax_reduction_share = 0.0, surplus_redistribution_share = 1.0) : ks)) for (n, kd, ks) in rungs]
-    return (; BARE_DEBT, BARE_SUMSY, rungs)
+    fiscal == :own || (rungs = apply_fiscal_package(rungs, fiscal))
+    return (; BARE_DEBT, BARE_SUMSY, rungs, fiscal)
+end
+
+
+# ======================================================================================================================
+# The common fiscal packages (22 October 2026, docs/talk/same_fiscal_rules_instructions_2026-10-22.md): under `fiscal = :taxes`
+# (package T) or `:parking` (package P) both villages get the same fiscal package at every rung, and differ in the money only
+# (D1: how money is created and destroyed, the guaranteed income, the fee, the account fees, deposit interest and bonds — debt
+# side only, D3/D4 —, the loan rates). Each rung keeps its institutions; its fiscal fields are overwritten on both sides.
+# ======================================================================================================================
+const FISCAL_FIELDS = (:wage_tax_rate, :capital_tax_rate, :dividend_tax_rate, :profit_tax_rate, :demurrage_tax_rate, :demurrage_free_buffer,
+                       :unemployment_fee_in_breads, :minimum_fee_in_breads, :government_employment_share, :land_levy, :land_levy_dividend,
+                       :government_reserve_in_rounds, :surplus_tax_reduction_share, :surplus_redistribution_share,
+                       :enterprise_tax, :enterprise_reserve_tax_rate, :reserve_tax_exempts_standard_reserve)
+const MONEY_FIELDS = (:monetary_system, :guaranteed_income, :demurrage_rate, :account_fee_person, :account_fee_enterprise,
+                      :deposit_interest_rate, :deposit_interest_period, :loyalty_bonus_rate, :government_bonds, :peer_lending, :peer_loan_rate,
+                      :bank_spread, :loan_rate_covers_deposit_interest,
+                      :basic_income, :income_cut_start, :income_cut_share)   # the debt village's twin of the guaranteed income (DGI8, RV8) is a money field
+has_government(kw) = get(kw, :government_employment_share, 0.0) > 0 || get(kw, :unemployment_fee_in_breads, 0.0) > 0 || get(kw, :wage_tax_rate, 0.0) > 0 || get(kw, :demurrage_tax_rate, 0.0) > 0
+has_levy(kw) = get(kw, :land_levy, false)
+has_charge(kw) = get(kw, :enterprise_tax, :none) == :reserves
+
+"""The fiscal package for a rung: `:taxes` (T) or `:parking` (P), for a rung with or without a government, with or without the
+land levy, with or without the enterprise charge (D8a: under P the charge is off; under T it is on for the debt side only — the
+model itself skips it for SuMSy producers, D8)."""
+function fiscal_package(fiscal::Symbol, government::Bool, levy::Bool, charge::Bool, system::Symbol)
+    base = (; dividend_tax_rate = 0.0, wage_tax_rate = 0.0, capital_tax_rate = 0.0, profit_tax_rate = 0.0, demurrage_tax_rate = 0.0,
+              unemployment_fee_in_breads = 0.0, minimum_fee_in_breads = 0.0, government_employment_share = 0.0,
+              land_levy = false, land_levy_dividend = false, government_reserve_in_rounds = 0, surplus_tax_reduction_share = 0.0, surplus_redistribution_share = 0.0,
+              enterprise_tax = :none)
+    government || return base                                                          # steps 0 and 1: no government, no taxes on either side
+    gov = fiscal == :taxes ? (; wage_tax_rate = 0.15, capital_tax_rate = 0.15, dividend_tax_rate = 0.30, profit_tax_rate = 0.10, demurrage_tax_rate = 0.0) :
+          fiscal == :parking ? (; wage_tax_rate = 0.0, capital_tax_rate = 0.0, dividend_tax_rate = 0.0, profit_tax_rate = 0.0, demurrage_tax_rate = 0.015, demurrage_free_buffer = 30.0) :
+          error("fiscal must be :own, :taxes or :parking, got $fiscal")
+    pkg = (; base..., gov..., unemployment_fee_in_breads = 2.0, minimum_fee_in_breads = 2.0, government_employment_share = 0.10)   # D2 default: 2 loaves on both sides
+    levy && (pkg = (; pkg..., land_levy = true, government_reserve_in_rounds = 3, surplus_tax_reduction_share = 0.0, surplus_redistribution_share = 1.0))   # D5/D6: the levy, its dividend and the reserve, one mechanism on both sides
+    charge && fiscal == :taxes && (pkg = (; pkg..., enterprise_tax = :reserves, enterprise_reserve_tax_rate = 0.02, reserve_tax_exempts_standard_reserve = true))   # D8a: under T the charge is set on both sides; the model exempts SuMSy producers (D8), SuMSy banks still pay it on retained interest — reported, not yet decided
+    return pkg
+end
+
+function apply_fiscal_package(rungs, fiscal::Symbol)
+    out = similar(rungs, 0)
+    for (name, kd, ks) in rungs
+        gov = has_government(kd) || has_government(ks); levy = has_levy(kd) || has_levy(ks); charge = has_charge(kd) || has_charge(ks)
+        kd2 = isempty(kd) ? kd : (; kd..., fiscal_package(fiscal, gov, levy, charge, :debt)...)
+        ks2 = isempty(ks) ? ks : (; ks..., fiscal_package(fiscal, gov, levy, charge, :sumsy)...)
+        push!(out, (name, kd2, ks2))
+    end
+    return out
 end

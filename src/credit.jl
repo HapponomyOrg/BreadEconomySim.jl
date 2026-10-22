@@ -1304,7 +1304,7 @@ function set_interest_rates!(model)
         base = sum(outstanding_principal(l) for l in creditor_loans(model, bank); init = 0.0) + model.credit_demand_previous_round
         base <= 0 && continue
         deposits = sum(cash(a) for a in alive_agents(model) if (a isa Person || (p.deposit_interest_to_enterprises && is_producer(a))) && bank_of(model, a) === bank; init = 0.0)
-        deposit_cost = (p.deposit_interest_rate + p.loyalty_bonus_rate) * deposits / max(p.deposit_interest_period, 1)
+        deposit_cost = p.loan_rate_covers_deposit_interest ? (p.deposit_interest_rate + p.loyalty_bonus_rate) * deposits / max(p.deposit_interest_period, 1) : 0.0   # 22 Oct (D9): a switch
         bank.interest_rate = min((bank.bid[:wage] + deposit_cost) / (p.affordability_ratio * base), p.maximum_interest_rate)
         if p.bank_rate_follows_inflation
             bank.interest_rate += clamp(trailing_inflation(model), 0.0, p.bank_rate_inflation_cap)
@@ -1489,6 +1489,7 @@ function tax_enterprises!(model)
     gov = government(model)
     for e in alive_agents(model)
         e isa Enterprise && e.kind in (:farm, :bakery, :theatre, :bank) || continue
+        p.enterprise_tax == :reserves && is_sumsy(model) && !is_bank(e) && continue   # 22 Oct (D8): under SuMSy a producer's cash already pays the fee — no second charge on the same money
         if p.enterprise_tax == :income
             base = is_bank(e) ? e.interest_received : max(e.operating_net - e.interest_paid, 0.0)
             tax = round(p.enterprise_income_tax_rate * base, digits = 4)
