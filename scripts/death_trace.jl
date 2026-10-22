@@ -6,16 +6,16 @@
 #     death_trace(step = "11 ", fiscal = :taxes, seed = 1)
 #     death_trace(step = "11 ", fiscal = :parking, seed = 2, extra = FLOOR_TWO_LOAVES)   # with a variant's settings
 #
-# Prints, for the villagers who died: how many worked the month before (and how much), how many received the benefit (and
+# Writes results/death_trace_<step>_<system>_<fiscal>_<seed>[_<label>].csv (one row per villager who died) and prints, for the villagers who died: how many worked the month before (and how much), how many received the benefit (and
 # what a meal cost), how many were in debt (and how much), their cash, whether bread was left unsold that month (it usually
 # is not: they could not pay), and the deaths by year. Runs in this process. The constants FLOOR_TWO_LOAVES, PARTIAL_BENEFIT
 # and FLOOR_AND_PARTIAL are in scripts/run_all.jl; pass any NamedTuple of settings as `extra`.
 # ======================================================================================================================
-using DataFrames, Statistics
+using DataFrames, Statistics, CSV
 include(joinpath(@__DIR__, "ladder_definition.jl"))
 const DT_B = BreadEconomySim
 
-function death_trace(; step::AbstractString = "8 ", system::AbstractString = "debt", fiscal::Symbol = :taxes, seed::Int = 1, extra = (;), rounds::Int = 120)
+function death_trace(; step::AbstractString = "8 ", system::AbstractString = "debt", fiscal::Symbol = :taxes, seed::Int = 1, extra = (;), rounds::Int = 120, label::AbstractString = "")
     def = ladder_definition(512, rounds, :invoicing; fiscal = fiscal)
     (name, kd, ks) = only(r for r in def.rungs if startswith(r[1], step))
     base, kw = system == "debt" ? (def.BARE_DEBT, kd) : (def.BARE_SUMSY, ks)
@@ -29,14 +29,16 @@ function death_trace(; step::AbstractString = "8 ", system::AbstractString = "de
     end
     d = round_data(m); n = length(dead)
     println(name, " | ", system, " | fiscal ", fiscal, " | seed ", seed, isempty(extra) ? "" : " | " * string(extra))
-    n == 0 && (println("  nobody died (", d.persons_alive[end], " alive)"); return DataFrame(dead))
+    out = joinpath(@__DIR__, "..", "results", "death_trace_$(strip(step))_$(system)_$(fiscal)_$(seed)$(isempty(label) ? "" : "_" * label).csv")   # 22 Oct: every row to a file (the REPL shows 16)
+    n == 0 && (println("  nobody died (", d.persons_alive[end], " alive)"); CSV.write(out, DataFrame(month = Int[])); return DataFrame(dead))
     recv = [x for x in dead if x.fee > 1e-6]
     println("  ", n, " died (", d.persons_alive[end], " alive). The month before dying: worked at all ", count(x -> x.worked > 0.5, dead), " (mean units among them ",
-            round(mean(x.worked for x in dead if x.worked > 0.5; init = 0.0), digits = 2), "); received the benefit ", length(recv), " (mean ", round(isempty(recv) ? 0.0 : mean(x.fee for x in recv), digits = 2),
+            (w = [x.worked for x in dead if x.worked > 0.5]; isempty(w) ? 0.0 : round(mean(w), digits = 2)), "); received the benefit ", length(recv), " (mean ", round(isempty(recv) ? 0.0 : mean(x.fee for x in recv), digits = 2),
             " against a meal of ", round(2 * mean(x.price for x in dead), digits = 2), "); in debt ", count(x -> x.debt > 1, dead), " (mean ", round(mean(x.debt for x in dead), digits = 1),
             "); cash mean ", round(mean(x.cash for x in dead), digits = 1), "; landowners ", count(x -> x.land > 0, dead), "; bread left unsold that month, mean ", round(mean(x.bread_unsold for x in dead)),
             "; months hungry before death, mean ", round(mean(x.hunger for x in dead), digits = 1))
     println("  deaths by year: ", [count(x -> (y - 1) * 12 < x.month <= y * 12, dead) for y in 1:(rounds ÷ 12)], "; at the end: bread ", round(d.price_bread[end], digits = 2), ", unemployed ", round(Int, d.unemployed[end]), ", under water ", d.negative_wealth_persons[end])
-    return DataFrame(dead)
+    df = DataFrame(dead); CSV.write(out, df); println("  written: ", out)
+    return df
 end
 nothing
