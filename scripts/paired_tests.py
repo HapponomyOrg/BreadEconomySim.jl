@@ -21,7 +21,7 @@ for step, sides in rows.items():
     for mcol in MEASURES:
         a = np.array([sides['debt'][s][mcol] for s in seeds], float); b = np.array([sides['sumsy'][s][mcol] for s in seeds], float)
         ok = ~(np.isnan(a) | np.isnan(b)); a, b = a[ok], b[ok]
-        if len(a) < 5: continue
+        if len(a) < 4: continue                                        # 22 Oct: four seeds give counts, not significance (the exact two-sided p is at least 0.125)
         diff = b - a
         if np.allclose(diff, 0): p = 1.0
         else:
@@ -29,6 +29,7 @@ for step, sides in rows.items():
             except ValueError: p = wilcoxon(b, a, alternative='two-sided').pvalue
         out.append(dict(rung=step, measure=mcol, n=len(a), debt_mean=a.mean(), sumsy_mean=b.mean(), debt_median=np.median(a), sumsy_median=np.median(b), diff_median=np.median(diff), pairs_sumsy_higher=int((diff > 0).sum()), pairs_debt_higher=int((diff < 0).sum()), p=p))
 res = pd.DataFrame(out)
+if res.empty: print('no rung has both villages with at least four common seeds in', d); sys.exit(0)
 # Holm over the headline rungs, per measure
 res['headline'] = res.rung.apply(lambda r: any(r.startswith(h.replace(' ', '_')) for h in HEADLINE))
 res['p_holm'] = np.nan
