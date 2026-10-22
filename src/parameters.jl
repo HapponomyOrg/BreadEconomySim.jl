@@ -524,6 +524,11 @@ Base.@kwdef struct SimulationParameters
     # and loyalty bonus; SuMSy: the parking fee and parking tax) or borrowed (debt: the bank's rate).
     land_pricing::Symbol = :multiple
     land_price_step::Float64 = 0.06
+    # 22 Oct (Stef): the mirror of the rule above — when land goes unsold, the price falls by a step but no further than the best
+    # offer of a buyer who wanted land and found the price too high (as it rises no further than the best unserved bid). A farm
+    # whose sound term stops below the price, or a villager below it, then sets where the price lands, not only how fast it falls.
+    # Off on the base (it moves the golden values); in the realistic set.
+    land_price_meets_offers::Bool = false
     # Landowners who sell for reasons of their own (an inheritance, a move) — the monthly probability that a landowner offers a unit
     # at the best bid (25 September). Such sales count for the valuation price; distress sales do not.
     land_life_event_rate::Float64 = 0.005

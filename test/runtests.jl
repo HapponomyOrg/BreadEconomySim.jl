@@ -1936,6 +1936,15 @@ end
     @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., cost_floor_includes_debt_service = true, own_market_planning = true))) < 1e-6
 end
 
+
+@testset "unsold land's price falls to the best offer (22 October 2026)" begin
+    p0 = (; BEH..., land_pricing = :market, instalment_purchases = true, land_price_rent_multiple = 15.0, maximum_rounds = 6)
+    a = run_simulation(SimulationParameters(; seed = 3, p0...)); b = run_simulation(SimulationParameters(; seed = 3, p0..., land_price_meets_offers = true))
+    da = round_data(a); db = round_data(b)
+    @test all(db.land_price .<= da.land_price .+ 1e-9)                              # meeting the offers never raises the price
+    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., land_pricing = :market, instalment_purchases = true, land_price_meets_offers = true, firm_land_loan_max_rounds = 240))) < 1e-6
+end
+
 @testset "cooperative forms (14 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     params(m) = B.parameters(m)

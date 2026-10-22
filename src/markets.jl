@@ -164,7 +164,7 @@ function land_market!(model)
     end
     # purchases: enterprises first, then persons
     buyers = vcat(farms, stable_shuffle(rng, [w for w in persons(model) if !hoards_cash(w)]))   # 15 Oct: cash hoarders buy no land
-    land_unmet = 0.0; land_sold = 0.0; best_unmet_bid = 0.0
+    land_unmet = 0.0; land_sold = 0.0; best_unmet_bid = 0.0; best_offer_below = 0.0   # 22 Oct: the best offer under the price
     offering = parameters(model).land_pricing == :market ? [s for s in sellers() if !(s isa Person) || price >= land_reservation(model, s)] : Agent[]
     land_supply = sum(Float64(land_to_let(s)) for s in offering; init = 0.0)
     lowest_ask = isempty(offering) ? 0.0 : minimum(s isa Person ? land_reservation(model, s) : 0.0 for s in offering)   # the least an offering seller accepts
@@ -187,13 +187,19 @@ function land_market!(model)
                 for n in pm0.instalment_rounds:pm0.firm_land_loan_max_rounds
                     price / n + max(irate, 0.0) * price <= rent_now + carry / n + 1e-9 && (firm_term = n; break)
                 end
-                firm_term == 0 && (wants = false)                                                      # no term works: it rents
+                if firm_term == 0                                                                      # no term works: it rents —
+                    n = pm0.firm_land_loan_max_rounds                                                  # and its offer is the price at which the longest term would
+                    affordable_price = (rent_now + carry / n) / (1 / n + max(irate, 0.0))              # just carry the instalment
+                    best_offer_below = max(best_offer_below, affordable_price)
+                    wants = false
+                end
             end
             bres = Inf
             if pm0.land_pricing == :market && wants
                 via = surplus >= price ? :cash : instalment ? :instalment : :loan
                 bres = land_buyer_reservation(model, b, via)
                 wants = price <= bres + 1e-9                                      # nobody pays more than the land is worth to them, by how they pay
+                wants || (best_offer_below = max(best_offer_below, bres))        # 22 Oct: an offer under the price, for the price to meet
             end
             if instalment
                 (wants && !has_arrears(model, b) && affordable(model, b, price, 0.0)) || break
@@ -244,7 +250,8 @@ function land_market!(model)
         if demand > 0 && land_unmet >= pmk.unmet_demand_share * demand - 1e-9 && land_unmet > 0 && best_unmet_bid > price
             model.land_price_current = min(price * (1 + pmk.land_price_step), best_unmet_bid)
         elseif land_supply > 0 && land_supply - land_sold >= pmk.unsold_share * land_supply - 1e-9 && land_supply - land_sold > 0 && price > lowest_ask
-            model.land_price_current = max(price * (1 - pmk.land_price_step), lowest_ask)
+            floor_ = pmk.land_price_meets_offers && best_offer_below > 0 ? max(lowest_ask, min(best_offer_below, price)) : lowest_ask   # 22 Oct: no further than the best offer
+            model.land_price_current = max(price * (1 - pmk.land_price_step), floor_)
         end
         model.land_supply_this_round = land_supply; model.land_demand_this_round = demand; model.land_sold_this_round = land_sold
     end
