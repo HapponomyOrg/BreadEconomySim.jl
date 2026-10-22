@@ -12,6 +12,7 @@
 #     run_all(contract_share = 1.0)            # the whole ladder again at another contracts setting, in its own folder
 #     run_all(variant = REALISTIC_LABOUR, variant_label = "realistic")   # the whole ladder with this week's labour market
 #     run_all(variant = REALISTIC_LABOUR_90, variant_label = "realistic90")   # the same with contract wages indexed at 0.9
+#     run_all(seeds = 4, fiscal = :taxes, rungs = ["8"], variant = FLOOR_TWO_LOAVES, variant_label = "floor2")   # the collection-floor test (and fiscal = :parking): 32 jobs
 #
 # From the command line the environment variables still work as before (JOBS, SEEDS, ROUNDS, LADDERS, RUNGS, SKIP_TESTS,
 # SUMMARY_ONLY, SHARD, CONTRACT_SHARE, WORKER_RECYCLE, HEAP_HINT, UPDATE_ECONOSIM):
@@ -105,6 +106,7 @@ const REALISTIC_LABOUR = (; contracts = true, contract_share = 0.8, refound_mini
                             price_on_expected_sales = true, cost_floor_includes_debt_service = true, floor_debt_service = :long,
                             floor_per_unit_sold = true, firm_land_loan_max_rounds = 240, land_price_meets_offers = true)   # 22 Oct: the same set as REALISTIC in scripts/pricing_strategy_test.jl (without the strategy mix)
 const REALISTIC_LABOUR_90 = (; REALISTIC_LABOUR..., contract_indexation = 0.9)   # 22 Oct (Stef): the same with wages indexed at nine tenths
+const FLOOR_TWO_LOAVES = (; collection_floor_in_breads = 2.0)   # 22 Oct (the talk chat): debt collection may not take a villager below two loaves (a meal) instead of one — does the debt village then keep everyone?
 with_extra(kw, extra) = isempty(kw) ? kw : (; kw..., extra...)
 ladder_name(N, settlement, variant = "") = (settlement == :invoicing ? "ladder2_$(N)" : "ladder2_$(N)_$(settlement)") * variant
 parts_dir(N, settlement, rounds, variant = "") = joinpath(ROOT, "results", "parts", "$(ladder_name(N, settlement, variant))_$(rounds)months_$(MODEL_VERSION)")   # the run length and the model version are part of the key
