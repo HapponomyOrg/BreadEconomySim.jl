@@ -96,11 +96,11 @@ Base.@kwdef struct SimulationParameters
     # the reserve and by selling land) or :full (instalments too, as a real firm prices a mortgage). :full inflated both villages
     # (bread 24–71, the SuMSy village losing people for the first time): a farm buying land on instalments passes the purchase
     # into its price, wages indexed to bread follow, the land's valuation rises with the rents, and the next purchase costs more.
-    # :long (22 Oct, after the .7 run): the instalments of the LONG loans only — founding and land loans, with at least
-    # `long_loan_min_rounds` instalments left — plus all interest; working credit repaid within the month is a cash flow, not a
+    # :long (22 Oct, after the .7 run): the instalments of the LONG loans only — the bank loans of the firm's founding round
+    # (startup, founding) and land loans on a term of at least `long_loan_min_rounds` — plus all interest; working credit repaid within the month is a cash flow, not a
     # cost, and it was what inflated :full (a settlement loan's whole amount fell due the next month and went into the price).
     floor_debt_service::Symbol = :interest
-    long_loan_min_rounds::Int = 12
+    long_loan_min_rounds::Int = 36   # above the 20 rounds of seller credit and working loans (.8 counted those: SuMSy bread 44)
     # 22 Oct (Stef): a farm buys land instead of renting only when it is a sound investment — the term is the shortest, up to
     # `firm_land_loan_max_rounds`, at which the instalment (principal ÷ term + interest on the price) is at most the rent plus
     # what the reserve above its target can carry per month over that term; if no term works, it rents. 0 = the old rule

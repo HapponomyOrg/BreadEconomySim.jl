@@ -12,8 +12,8 @@ debtor_loans(model, a::Agent) = [l for l in model.loans if !l.settled && l.debto
 instalment and interest. Counted in the cost floor (per unit of planned output) and in the reserve target."""
 function debt_service_due(model, a::Enterprise; interest_only::Bool = false, long_only::Bool = false)
     p = parameters(model); p.cost_floor_includes_debt_service || return 0.0
-    long(l::Loan) = length(l.debt.installments) >= p.long_loan_min_rounds                 # 22 Oct: a loan with at least this many instalments left is capital, not working credit
-    long(l::PeerLoan) = l.installment > 0 && l.outstanding / l.installment >= p.long_loan_min_rounds
+    long(l::Loan) = l.created <= a.founded + 1                                           # 22 Oct: the loans of the founding round are capital (startup, founding); later bank loans are working credit
+    long(l::PeerLoan) = l.installment > 0 && l.principal / l.installment >= p.long_loan_min_rounds   # a land loan on a long term; seller credit (20 rounds) is not
     bank = sum((interest_only || (long_only && !long(l)) ? 0.0 : next_installment(l)) + l.debt.interest_rate * outstanding_principal(l) + rest_interest(l) for l in debtor_loans(model, a); init = 0.0)
     peer = sum((interest_only || (long_only && !long(l)) ? 0.0 : min(l.installment, l.outstanding)) + l.rate * l.outstanding for l in peer_loans_of(model, a); init = 0.0)
     return Float64(bank + peer)
@@ -885,7 +885,7 @@ A cooperative is refounded as a shareholder firm unless `liquidated_coop_stays_c
 with one share at par, if their spare cash reaches the price). Returns false when no group can reach the price.
 """
 function refound!(model, e::Enterprise)
-    e.plan_share = -1.0; e.share_trend = 0; empty!(e.sales_history); empty!(e.unsold_history); e.expected_sales = 0.0; e.buffer_share = -1.0   # 16 Oct: a restarted firm plans afresh (21 Oct: and forgets its sales)
+    e.plan_share = -1.0; e.share_trend = 0; empty!(e.sales_history); empty!(e.unsold_history); e.expected_sales = 0.0; e.buffer_share = -1.0; e.founded = current_round(model)   # 16 Oct: a restarted firm plans afresh (21 Oct: and forgets its sales)
     p = parameters(model)
     book = max(book_value_net(model, e), 0.0)
     price = round(max(p.liquidation_price_share * book, total_debt(model, e) - cash(e), 0.0), digits = 4)
@@ -1237,7 +1237,8 @@ function firm_shell!(model, kind::Symbol)
     share = parameters(model).pricing_margin_share
     e = add_agent!(Enterprise, model; kind = kind, balance = Balance(), production_target = parameters(model).initial_production_target,
                    ask = OrderedDict{Symbol, Float64}(ref.ask), bid = OrderedDict{Symbol, Float64}(ref.bid),
-                   pricing = share > 0 ? (rand(stream(model, :entry)) < share ? :margin : :reserve) : :sector)   # 21 Oct: an entrant's strategy by a draw
+                   pricing = share > 0 ? (rand(stream(model, :entry)) < share ? :margin : :reserve) : :sector,   # 21 Oct: an entrant's strategy by a draw
+                   founded = current_round(model))
     push!(model.agent_list, e); push!(model.enterprise_list, e)
     return e
 end
