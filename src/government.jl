@@ -121,6 +121,7 @@ function manage_government_reserve!(model)
     target = p.government_reserve_in_rounds * expected
     model.government_reserve_target = target
     surplus = cash(gov) - target
+    model.surplus_debt_repaid_this_round = 0.0                                # 23 Oct (Stef, evening): no early repayment — debt is paid by its terms; the surplus after it builds the reserve, and taxes fall when it is met
     # -- surplus: pay out, and mark the reduction the tax channel should deliver
     reduction = 0.0
     if surplus > 1e-6
@@ -155,7 +156,8 @@ function manage_government_reserve!(model)
         end
         model.tax_policy_step = 0.0
         model.consumption_tax_scale = model.tax_scale; model.wealth_tax_scale = model.tax_scale   # :none — one scale for all five
-        model.profit_tax_scale = model.tax_scale; model.parking_tax_scale = model.tax_scale
+        model.profit_tax_scale = model.tax_scale
+        p.basic_income_target_in_breads > 0 || (model.parking_tax_scale = model.tax_scale)   # 23 Oct: unless the parking tax is the income's lever
         (p.levy_dividend_target_in_breads > 0 || p.land_levy_dividend || p.surplus_redistribution_share > 0) || (model.land_levy_scale = model.tax_scale)   # 23 Oct: the levy follows the tax scale only when it is a tax
         (p.surplus_redistribution_share > 0 || p.land_levy_dividend) && p.levy_dividend_target_in_breads <= 0 && (model.land_levy_scale = 1.0)   # 12 Oct: the levy's surplus is the dividend; 23 Oct: with the levy paid out it is not a tax lever — unless it is the dividend's lever (levy_dividend_target_in_breads), set in pay_levy_dividend!
         return nothing
@@ -181,6 +183,7 @@ function manage_government_reserve!(model)
             abs(shift) > 1e-12 && apply_income!(model, p, shift); apply_income!(model, p, r)
         else
             family == :land && (p.levy_dividend_target_in_breads > 0 || p.land_levy_dividend || p.surplus_redistribution_share > 0) && continue   # 23 Oct: the levy is the dividend's lever, not a tax lever
+            family == :parking && p.basic_income_target_in_breads > 0 && continue                 # 23 Oct: the parking tax is the income's lever
             f = scale_field[family]
             setproperty!(model, f, clamp(getproperty(model, f) * (1 + shift) * (1 + r), 0.0, p.tax_scale_maximum))
         end
@@ -252,6 +255,7 @@ function pay_unemployment_fees!(model)
     gov = government(model)
     bread = p.benefit_indexed ? expected_price(model, :bread) : p.initial_prices[:bread] * p.initial_price_multiplier   # 26 Sept
     for w in persons(model)
+        (p.basic_income_target_in_breads > 0 && p.monetary_system != :sumsy) && break   # 23 Oct (Stef): when a two-loaf income is paid to everyone, no unemployment benefit (the benefit runs before the income in the month, so the parameter decides, not a flag)
         if unemployed(w) || (p.partial_unemployment_fee && underemployed(w))
             w.employed_rounds = 0
             if w.unemployed_rounds == 0
@@ -279,6 +283,15 @@ function pay_unemployment_fees!(model)
     return nothing
 end
 
+"""The price of bread as last paid (23 October): last month's average transaction price, falling back to the expected price.
+The expected price on the ladder comes from the sellers' asks, which sit above the clearing price where stock goes unsold —
+a meal priced at the ask over-pays by up to half in a deflating village (rung B under P: 14.9 a head against 9.8)."""
+function paid_bread_price(model)
+    isempty(model.data) && return expected_price(model, :bread)
+    x = model.data[end].price_bread
+    return (x isa Number && !isnan(x) && x > 0) ? Float64(x) : expected_price(model, :bread)
+end
+
 """
     pay_basic_income!(model)
 
@@ -287,14 +300,54 @@ paid from its taxes, borrowed where they fall short.
 """
 function pay_basic_income!(model)
     p = parameters(model)
-    (p.basic_income > 0 && p.monetary_system != :sumsy) || return nothing
+    p.monetary_system != :sumsy || return nothing
+    (p.basic_income > 0 || p.basic_income_target_in_breads > 0) || return nothing
+    model.meal_income_paid_this_round = p.basic_income_target_in_breads > 0   # 23 Oct (Stef): a full meal to everyone replaces the unemployment benefit this month
     gov = government(model); paid = 0.0
     amount = round(p.basic_income * income_cut_factor(model) * model.spending_scale, digits = 4)   # 15 Oct: cut under a debt ceiling, or reversed
+    if p.basic_income_target_in_breads > 0                                      # 23 Oct (Stef): a meal net of the levy dividend, funded by the parking tax
+        ps0 = persons(model)
+        # the income is paid before this month's levy dividend (schedule order), so last month's dividend per head is the one known
+        last = isempty(model.data) ? nothing : model.data[end]
+        dividend_each = (last === nothing || isempty(ps0)) ? 0.0 : Float64(last.levy_dividend) / max(Float64(last.persons_alive), 1.0)
+        amount = round(max(p.basic_income_target_in_breads * paid_bread_price(model) - dividend_each, 0.0), digits = 4)   # at the price last paid, not the ask
+        bill = amount * length(ps0); revenue = model.demurrage_tax_this_round
+        ratio = revenue > 1e-9 ? bill / revenue : (bill > 1e-9 ? 1 + p.parking_tax_lever_step : 1.0)
+        model.parking_tax_scale = clamp(model.parking_tax_scale * clamp(ratio, 1 - p.parking_tax_lever_step, 1 + p.parking_tax_lever_step), 0.0, p.parking_tax_scale_max)
+    end
     for w in persons(model)
         promise!(model, gov, w, amount, :basic_income, 2, :none); paid += amount
     end
     model.government_outlay_this_round += paid; model.basic_income_this_round = paid
     return nothing
+end
+
+"""Repay public debt from `amount` of the government's cash (23 October, the talk chat's handoff §1, D1): bank loans and peer
+loans first (early repayment), then bonds bought back at face value, the holder paid and the bond settled. Returns what was repaid."""
+function repay_public_debt!(model, gov, amount::Float64)
+    repaid = 0.0; left = amount
+    for l in debtor_loans(model, gov)
+        left > 1e-6 || break
+        r = repay_extra!(model, l, left); repaid += r; left -= r
+    end
+    for l in peer_loans_of(model, gov)
+        left > 1e-6 || break
+        amt = round(min(l.outstanding, left, cash(gov)), digits = 4); amt > 1e-6 || continue
+        before = l.outstanding
+        transfer!(model, gov, model[l.lender_id], amt, :peer_loan_repayment); l.outstanding = round(before - amt, digits = 4)
+        l.installment = round(l.installment * l.outstanding / before, digits = 4); l.outstanding <= 1e-6 && (l.settled = true)
+        repaid += amt; left -= amt
+    end
+    for b in model.bonds
+        left > 1e-6 || break
+        (b.settled || b.principal > left + 1e-6 || b.principal > cash(gov) + 1e-6) && continue   # whole bonds only, at face value
+        holder = model[b.holder_id]; holder.alive || continue
+        transfer!(model, gov, holder, b.principal, :bond_buyback); b.settled = true
+        repaid += b.principal; left -= b.principal
+    end
+    repaid > 1e-6 && log_event!(model, :surplus_debt_repaid; amount = repaid)
+    model.surplus_debt_repaid_total += repaid
+    return repaid
 end
 
 """
@@ -307,18 +360,19 @@ function pay_levy_dividend!(model)
     p.land_levy_dividend || return nothing
     ps = persons(model); isempty(ps) && return nothing
     gov = government(model)
-    each = floor(model.land_levy_this_round / length(ps) * 1e4) / 1e4
+    budget = model.land_levy_this_round - model.levy_dividend_this_round        # the month's levy, out in full, whatever the budget (Stef, 23 Oct)
+    each = floor(budget / length(ps) * 1e4) / 1e4
     each > 0 || return nothing
     paid = 0.0
     for w in ps
         amount = round(min(each, cash(gov)), digits = 4); amount > 0 || break
         transfer!(model, gov, w, amount, :levy_dividend); paid += amount
     end
-    model.levy_dividend_this_round = paid; model.government_outlay_this_round += paid
-    if p.levy_dividend_target_in_breads > 0                                  # 23 Oct (Stef): the levy as the lever that keeps the guaranteed income at a meal
+    model.levy_dividend_this_round += paid; model.government_outlay_this_round += paid
+    if p.levy_dividend_target_in_breads > 0 && !(p.basic_income_target_in_breads > 0 && !is_sumsy(model))   # 23 Oct (Stef): the levy as the lever that keeps the guaranteed income at a meal — unless the basic income is the instrument (the debt village under P), when the levy stays at its base rate
         income = is_sumsy(model) ? p.guaranteed_income : p.basic_income
-        target_each = max(p.levy_dividend_target_in_breads * expected_price(model, :bread) - income, 0.0)
-        actual_each = paid / length(ps)
+        target_each = max(p.levy_dividend_target_in_breads * paid_bread_price(model) - income, 0.0)   # at the price last paid, not the ask
+        actual_each = model.levy_dividend_this_round / length(ps)
         ratio = actual_each > 1e-9 ? target_each / actual_each : (target_each > 1e-9 ? 1 + p.levy_scale_step : 1.0)
         model.land_levy_scale = clamp(model.land_levy_scale * clamp(ratio, 1 - p.levy_scale_step, 1 + p.levy_scale_step), 0.0, p.levy_scale_max)
     end

@@ -301,6 +301,23 @@ Base.@kwdef struct SimulationParameters
     government_expense_window::Int = 12
     surplus_redistribution_share::Float64 = 0.0
     surplus_tax_reduction_share::Float64 = 0.0
+    # 23 Oct (the talk chat's handoff §1): what a government does with cash above its reserve, as one named setting.
+    #   :legacy          — the shares above as the rung sets them (the per-money ladder of 2026-10-20.4)
+    #   :per_head        — the 2026-10-22.13 packages: the surplus paid out per head, taxes never lowered, no repayment first
+    #   :debt_levy_taxcut — Stef's rule (23 Oct, evening): each month, pay the benefit and the public wages; pay the land levy out
+    #                      to everyone; service the debt by its terms (no early repayment — a government cannot buy its bonds back;
+    #                      bonds change hands on a bond market, not built); the surplus goes into the reserve; when the reserve
+    #                      is met, every tax but the levy comes down (the tax_scale channel). The levy's scale is the dividend's
+    #                      lever (levy_dividend_target_in_breads), never a tax lever.
+    # The fiscal packages set the shares and the dividend from this; `apply_fiscal_package` is the place.
+    surplus_rule::Symbol = :legacy
+    # 23 Oct (Stef): for a fair comparison with the SuMSy village's two-loaf income, the debt village under the parking package
+    # pays everyone a basic income that brings income + levy dividend to `basic_income_target_in_breads` loaves at the going
+    # price, and the parking tax scale is the lever that funds it: it moves ±`parking_tax_lever_step` a month toward the scale
+    # whose revenue would cover the income bill, within [0, `parking_tax_scale_max`]; what it cannot cover is borrowed. 0 = off.
+    basic_income_target_in_breads::Float64 = 0.0
+    parking_tax_lever_step::Float64 = 0.1
+    parking_tax_scale_max::Float64 = 20.0
     # Fiscal policy (20 September 2026): taxes that move in both directions, incrementally.
     # The shortfall a round is what spending exceeds revenue by (trailing means over `government_expense_window`) plus
     # the gap between the reserve and its target spread over `government_reserve_in_rounds` rounds. The policy aims to

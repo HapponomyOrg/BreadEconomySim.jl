@@ -2,7 +2,7 @@ using BreadEconomySim, OrderedCollections
 
 # The ladder as a function of the village size, the run length and the settlement system (22 September), so that one
 # process can build several ladders (scripts/run_all.jl). ladder2_rungs.jl calls it with the command-line values.
-function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol; fiscal::Symbol = :own)
+function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol; fiscal::Symbol = :own, surplus_rule::Symbol = :debt_levy_taxcut)
     # 20 Oct (evening): the base reproduces the 17 October run exactly (checked: step 8, debt, seed 1, identical in every month) —
     # this week's realistic labour market (contracts at 0.8, own-market planning, four market rounds, at least two firms, failing
     # firms with uncovered debt offered for sale) showed effects not yet understood in the 2026-10-20.0 run, so it is a cell (RB8,
@@ -92,6 +92,7 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol; fiscal::Symb
         # no hunger and the most evenly spread money — under the realistic price rules (they are behaviour, not policy): the
         # co-op village of side rung 9 with rung 10's prices and rung 11's public reserve. Run on both sides for the mirror.
         ("B best SuMSy village: co-ops + reserve", (; V8_DEBT..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE...), (; V8_SUMSY..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE...)),
+        ("BG best village, with gold", (; V8_DEBT..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE..., gold_grams_per_villager = 100.0), (; V8_SUMSY..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE..., gold_grams_per_villager = 100.0)),   # 23 Oct (the talk chat): rung B with the gold holders of R8, for the inequality slide
         ("SB1 best SuMSy + greedy quarter", (; V8_DEBT..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE..., GREEDY_Q...), (; V8_SUMSY..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE..., GREEDY_Q...)),
         ("SB2 best SuMSy + everyone greedy", (; V8_DEBT..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE..., GREEDY_A...), (; V8_SUMSY..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE..., GREEDY_A...)),
         # Full money stock (23 September): SuMSy villages started at their equilibrium money stock, set against the same steps
@@ -304,8 +305,8 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol; fiscal::Symb
     # 12 Oct: on the SuMSy side the land levy always comes with its dividend — the reserve block layered on later steps had set
     # "surplus → cut taxes" to 1 and overridden it, so the levy was cut, land froze, and steps 10/11/B read a land runaway.
     rungs = [(n, kd, (get(ks, :land_levy, false) ? (; ks..., surplus_tax_reduction_share = 0.0, surplus_redistribution_share = 1.0) : ks)) for (n, kd, ks) in rungs]
-    fiscal == :own || (rungs = apply_fiscal_package(rungs, fiscal))
-    return (; BARE_DEBT, BARE_SUMSY, rungs, fiscal)
+    fiscal == :own || (rungs = apply_fiscal_package(rungs, fiscal; surplus_rule))
+    return (; BARE_DEBT, BARE_SUMSY, rungs, fiscal, surplus_rule)
 end
 
 
@@ -315,14 +316,14 @@ end
 # (D1: how money is created and destroyed, the guaranteed income, the fee, the account fees, deposit interest and bonds — debt
 # side only, D3/D4 —, the loan rates). Each rung keeps its institutions; its fiscal fields are overwritten on both sides.
 # ======================================================================================================================
-const FISCAL_FIELDS = (:wage_tax_rate, :capital_tax_rate, :dividend_tax_rate, :profit_tax_rate, :demurrage_tax_rate, :demurrage_free_buffer,
+const FISCAL_FIELDS = (:surplus_rule, :levy_dividend_target_in_breads, :basic_income_target_in_breads, :wage_tax_rate, :capital_tax_rate, :dividend_tax_rate, :profit_tax_rate, :demurrage_tax_rate, :demurrage_free_buffer,
                        :unemployment_fee_in_breads, :minimum_fee_in_breads, :government_employment_share, :land_levy, :land_levy_dividend,
                        :government_reserve_in_rounds, :surplus_tax_reduction_share, :surplus_redistribution_share,
                        :enterprise_tax, :enterprise_reserve_tax_rate, :reserve_tax_exempts_standard_reserve)
 const MONEY_FIELDS = (:monetary_system, :guaranteed_income, :demurrage_rate, :account_fee_person, :account_fee_enterprise,
                       :deposit_interest_rate, :deposit_interest_period, :loyalty_bonus_rate, :government_bonds, :peer_lending, :peer_loan_rate,
                       :bank_spread, :loan_rate_covers_deposit_interest,
-                      :basic_income, :income_cut_start, :income_cut_share)   # the debt village's twin of the guaranteed income (DGI8, RV8) is a money field
+                      :basic_income, :income_cut_start, :income_cut_share)   # the debt village's twin of the guaranteed income (DGI8, RV8) is a money field; basic_income_target_in_breads is in FISCAL_FIELDS and set on both sides (it acts only in debt money)
 has_government(kw) = get(kw, :government_employment_share, 0.0) > 0 || get(kw, :unemployment_fee_in_breads, 0.0) > 0 || get(kw, :wage_tax_rate, 0.0) > 0 || get(kw, :demurrage_tax_rate, 0.0) > 0
 has_levy(kw) = get(kw, :land_levy, false)
 has_charge(kw) = get(kw, :enterprise_tax, :none) == :reserves
@@ -330,7 +331,7 @@ has_charge(kw) = get(kw, :enterprise_tax, :none) == :reserves
 """The fiscal package for a rung: `:taxes` (T) or `:parking` (P), for a rung with or without a government, with or without the
 land levy, with or without the enterprise charge (D8a: under P the charge is off; under T it is on for the debt side only — the
 model itself skips it for SuMSy producers, D8)."""
-function fiscal_package(fiscal::Symbol, government::Bool, levy::Bool, charge::Bool, system::Symbol)
+function fiscal_package(fiscal::Symbol, government::Bool, levy::Bool, charge::Bool, system::Symbol; surplus_rule::Symbol = :debt_levy_taxcut)
     base = (; dividend_tax_rate = 0.0, wage_tax_rate = 0.0, capital_tax_rate = 0.0, profit_tax_rate = 0.0, demurrage_tax_rate = 0.0,
               unemployment_fee_in_breads = 0.0, minimum_fee_in_breads = 0.0, government_employment_share = 0.0,
               land_levy = false, land_levy_dividend = false, government_reserve_in_rounds = 0, surplus_tax_reduction_share = 0.0, surplus_redistribution_share = 0.0,
@@ -339,23 +340,30 @@ function fiscal_package(fiscal::Symbol, government::Bool, levy::Bool, charge::Bo
     gov = fiscal == :taxes ? (; wage_tax_rate = 0.15, capital_tax_rate = 0.15, dividend_tax_rate = 0.30, profit_tax_rate = 0.10, demurrage_tax_rate = 0.0) :
           fiscal == :parking ? (; wage_tax_rate = 0.0, capital_tax_rate = 0.0, dividend_tax_rate = 0.0, profit_tax_rate = 0.0, demurrage_tax_rate = 0.015, demurrage_free_buffer = 30.0) :
           error("fiscal must be :own, :taxes or :parking, got $fiscal")
-    # 23 Oct (Stef): the other taxes build a reserve of `government_reserve_in_rounds` months and are lowered when it is full
-    # (surplus_tax_reduction_share = 1: the surplus above the target cuts the tax scale — all taxes under T, the parking tax under
-    # P); nothing from them is paid out per head. The land levy is paid out to everyone equally, every month, whatever the budget
-    # (land_levy_dividend), and is never scaled.
-    pkg = (; base..., gov..., unemployment_fee_in_breads = 2.0, minimum_fee_in_breads = 2.0, government_employment_share = 0.10,   # D2 default: 2 loaves on both sides
-             government_reserve_in_rounds = 3, surplus_tax_reduction_share = 1.0, surplus_redistribution_share = 0.0)
-    levy && (pkg = (; pkg..., land_levy = true, land_levy_dividend = true, levy_dividend_target_in_breads = 2.0))   # D5: the levy and its dividend on both sides; 23 Oct: the levy scaled so that income + dividend = a meal
+    # 23 Oct (the talk chat's handoff §1): the surplus rule as one setting. :per_head = the 2026-10-22.13 packages (from the
+    # levy step: a 3-month reserve, the levy into the budget, the surplus paid out per head, taxes never lowered; no reserve
+    # before). :debt_levy_taxcut = Stef's rule from the levy step (D3: steps 2–7 as they were): repay public debt first, the
+    # month's levy paid out per head within the surplus, every tax but the levy lowered with what is left; the levy's scale is
+    # the dividend's lever (levy_dividend_target_in_breads = 2: income + dividend = a meal).
+    pkg = (; base..., gov..., unemployment_fee_in_breads = 2.0, minimum_fee_in_breads = 2.0, government_employment_share = 0.10, surplus_rule = surplus_rule)   # D2 default: 2 loaves on both sides
+    if levy
+        pkg = surplus_rule == :per_head ?
+              (; pkg..., land_levy = true, land_levy_dividend = false, levy_dividend_target_in_breads = 0.0, government_reserve_in_rounds = 3, surplus_tax_reduction_share = 0.0, surplus_redistribution_share = 1.0) :
+              (; pkg..., land_levy = true, land_levy_dividend = true, levy_dividend_target_in_breads = 2.0, government_reserve_in_rounds = 3, surplus_tax_reduction_share = 1.0, surplus_redistribution_share = 0.0)
+        # 23 Oct (Stef): under the parking package the debt village pays everyone a basic income that brings income + levy
+        # dividend to a meal, funded by the parking tax scaled up as needed — the fair twin of the SuMSy village's income
+        surplus_rule != :per_head && fiscal == :parking && (pkg = (; pkg..., basic_income_target_in_breads = 2.0))
+    end
     charge && fiscal == :taxes && (pkg = (; pkg..., enterprise_tax = :reserves, enterprise_reserve_tax_rate = 0.02, reserve_tax_exempts_standard_reserve = true))   # D8a: under T the charge is set on both sides; the model exempts SuMSy producers (D8), SuMSy banks still pay it on retained interest — reported, not yet decided
     return pkg
 end
 
-function apply_fiscal_package(rungs, fiscal::Symbol)
+function apply_fiscal_package(rungs, fiscal::Symbol; surplus_rule::Symbol = :debt_levy_taxcut)
     out = similar(rungs, 0)
     for (name, kd, ks) in rungs
         gov = has_government(kd) || has_government(ks); levy = has_levy(kd) || has_levy(ks); charge = has_charge(kd) || has_charge(ks)
-        kd2 = isempty(kd) ? kd : (; kd..., fiscal_package(fiscal, gov, levy, charge, :debt)...)
-        ks2 = isempty(ks) ? ks : (; ks..., fiscal_package(fiscal, gov, levy, charge, :sumsy)...)
+        kd2 = isempty(kd) ? kd : (; kd..., fiscal_package(fiscal, gov, levy, charge, :debt; surplus_rule)...)
+        ks2 = isempty(ks) ? ks : (; ks..., fiscal_package(fiscal, gov, levy, charge, :sumsy; surplus_rule)...)
         push!(out, (name, kd2, ks2))
     end
     return out
