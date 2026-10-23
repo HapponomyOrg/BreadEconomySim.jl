@@ -16,6 +16,7 @@
 #     run_all(seeds = 4, fiscal = :taxes, rungs = ["11"], variant = PARTIAL_BENEFIT, variant_label = "partial")   # the step-11 test: floor2, partial, both — each with fiscal = :taxes and :parking: 48 jobs
 #     run_all(seeds = 4, fiscal = :taxes, rungs = ["11"], variant = FLOOR_AND_PARTIAL, variant_label = "floor2_partial")
 #     run_all(seeds = 4, fiscal = :taxes, rungs = ["B "], variant = BANK_MARGIN, variant_label = "bankmargin")   # 23 Oct: the best village with banks on a real-world net margin (and fiscal = :parking)
+#     run_all(seeds = 4, fiscal = :taxes, rungs = ["2", "8"], variant = RATE_CAP_04, variant_label = "cap04")   # 23 Oct: the rate cap at 0.4 % a month, steps 2 and 8 (and fiscal = :parking): 32 jobs
 #
 # From the command line the environment variables still work as before (JOBS, SEEDS, ROUNDS, LADDERS, RUNGS, SKIP_TESTS,
 # SUMMARY_ONLY, SHARD, CONTRACT_SHARE, WORKER_RECYCLE, HEAP_HINT, UPDATE_ECONOSIM):
@@ -114,6 +115,7 @@ const PARTIAL_BENEFIT = (; partial_unemployment_fee = true)      # 22 Oct (the t
 const FLOOR_AND_PARTIAL = (; FLOOR_TWO_LOAVES..., PARTIAL_BENEFIT...)
 const BANK_MARGIN = (; bank_target_net_margin = 0.2967)   # 23 Oct (Stef): banks on the real-world net margin (Banks, Regional: 29.67 %) — the loan rate (debt money)
 const BANK_MARGIN_BOTH = (; BANK_MARGIN..., bank_margin_on_spread = true)   # and the SuMSy banks' spread on peer loans too
+const RATE_CAP_04 = (; maximum_interest_rate = 0.004)   # 23 Oct (the talk chat): the loan rate capped at a realistic 0.4 % a month (the base's cap, 1.5 %, binds in every run)
 with_extra(kw, extra) = isempty(kw) ? kw : (; kw..., extra...)
 ladder_name(N, settlement, variant = "") = (settlement == :invoicing ? "ladder2_$(N)" : "ladder2_$(N)_$(settlement)") * variant
 parts_dir(N, settlement, rounds, variant = "") = joinpath(ROOT, "results", "parts", "$(ladder_name(N, settlement, variant))_$(rounds)months_$(MODEL_VERSION)")   # the run length and the model version are part of the key
