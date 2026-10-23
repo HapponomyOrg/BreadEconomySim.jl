@@ -1291,6 +1291,21 @@ end
 
 # ---- rate setting (spec v2 §4) ------------------------------------------------
 
+"""A bank's target net margin grossed up for the profit tax (23 October); 0 when none is set."""
+function bank_margin(model)
+    p = parameters(model)
+    p.bank_target_net_margin > 0 || return 0.0
+    tax = p.profit_tax_rate > 0 ? min(p.profit_tax_rate * model.profit_tax_scale, 0.95) : 0.0
+    return min(p.bank_target_net_margin / (1 - tax), 0.95)
+end
+
+"""The spread a SuMSy bank takes on a peer loan (23 October): as set, or divided by (1 − the margin) when `bank_margin_on_spread`."""
+function effective_bank_spread(model)
+    p = parameters(model)
+    (p.bank_margin_on_spread && bank_margin(model) > 0) || return p.bank_spread
+    return p.bank_spread / (1 - bank_margin(model))
+end
+
 """
     set_interest_rates!(model)
 
@@ -1305,7 +1320,8 @@ function set_interest_rates!(model)
         base <= 0 && continue
         deposits = sum(cash(a) for a in alive_agents(model) if (a isa Person || (p.deposit_interest_to_enterprises && is_producer(a))) && bank_of(model, a) === bank; init = 0.0)
         deposit_cost = p.loan_rate_covers_deposit_interest ? (p.deposit_interest_rate + p.loyalty_bonus_rate) * deposits / max(p.deposit_interest_period, 1) : 0.0   # 22 Oct (D9): a switch
-        bank.interest_rate = min((bank.bid[:wage] + deposit_cost) / (p.affordability_ratio * base), p.maximum_interest_rate)
+        margin = bank_margin(model)                                   # 23 Oct: the net margin grossed up for the profit tax
+        bank.interest_rate = min((bank.bid[:wage] + deposit_cost) / ((1 - margin) * p.affordability_ratio * base), p.maximum_interest_rate)
         if p.bank_rate_follows_inflation
             bank.interest_rate += clamp(trailing_inflation(model), 0.0, p.bank_rate_inflation_cap)
         end

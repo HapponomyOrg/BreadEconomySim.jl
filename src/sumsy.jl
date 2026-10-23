@@ -178,8 +178,9 @@ function request_peer_loan!(model, borrower::Agent, amount::Float64, purpose::Sy
     filter!(a -> avail[a.id] >= 0.01, lenders)
     sort!(lenders; by = a -> -avail[a.id])
     disc = (borrower isa Person && borrower.buffer_lender) ? p.buffer_lender_spread_discount : 0.0
-    rate_l = p.peer_loan_rate - p.bank_spread
-    rate_b = p.peer_loan_rate - disc * p.bank_spread
+    spread = effective_bank_spread(model)                              # 23 Oct: the bank's target margin on the spread, if set
+    rate_l = p.peer_loan_rate - spread
+    rate_b = p.peer_loan_rate - disc * spread
     funded = 0.0
     for l in lenders
         s = round(min(lendable(model, l), amount - funded), digits = 4)

@@ -15,6 +15,7 @@
 #     run_all(seeds = 4, fiscal = :taxes, rungs = ["8"], variant = FLOOR_TWO_LOAVES, variant_label = "floor2")   # the collection-floor test (and fiscal = :parking): 32 jobs
 #     run_all(seeds = 4, fiscal = :taxes, rungs = ["11"], variant = PARTIAL_BENEFIT, variant_label = "partial")   # the step-11 test: floor2, partial, both — each with fiscal = :taxes and :parking: 48 jobs
 #     run_all(seeds = 4, fiscal = :taxes, rungs = ["11"], variant = FLOOR_AND_PARTIAL, variant_label = "floor2_partial")
+#     run_all(seeds = 4, fiscal = :taxes, rungs = ["B "], variant = BANK_MARGIN, variant_label = "bankmargin")   # 23 Oct: the best village with banks on a real-world net margin (and fiscal = :parking)
 #
 # From the command line the environment variables still work as before (JOBS, SEEDS, ROUNDS, LADDERS, RUNGS, SKIP_TESTS,
 # SUMMARY_ONLY, SHARD, CONTRACT_SHARE, WORKER_RECYCLE, HEAP_HINT, UPDATE_ECONOSIM):
@@ -47,7 +48,7 @@ using Dates, Pkg, Distributed
 
 const ROOT = normpath(joinpath(@__DIR__, ".."))
 
-const MODEL_VERSION = "2026-10-22.13"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
+const MODEL_VERSION = "2026-10-23.1"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
 
 # ---- packages (once per session) ---------------------------------------------------------------------------------------
 const PACKAGES_READY = Ref(false)
@@ -111,6 +112,8 @@ const REALISTIC_LABOUR_90 = (; REALISTIC_LABOUR..., contract_indexation = 0.9)  
 const FLOOR_TWO_LOAVES = (; collection_floor_in_breads = 2.0)   # 22 Oct (the talk chat): debt collection may not take a villager below two loaves (a meal) instead of one — does the debt village then keep everyone?
 const PARTIAL_BENEFIT = (; partial_unemployment_fee = true)      # 22 Oct (the talk chat): the benefit pro rata for a villager with a little work, instead of stopping at the first hour
 const FLOOR_AND_PARTIAL = (; FLOOR_TWO_LOAVES..., PARTIAL_BENEFIT...)
+const BANK_MARGIN = (; bank_target_net_margin = 0.2967)   # 23 Oct (Stef): banks on the real-world net margin (Banks, Regional: 29.67 %) — the loan rate (debt money)
+const BANK_MARGIN_BOTH = (; BANK_MARGIN..., bank_margin_on_spread = true)   # and the SuMSy banks' spread on peer loans too
 with_extra(kw, extra) = isempty(kw) ? kw : (; kw..., extra...)
 ladder_name(N, settlement, variant = "") = (settlement == :invoicing ? "ladder2_$(N)" : "ladder2_$(N)_$(settlement)") * variant
 parts_dir(N, settlement, rounds, variant = "") = joinpath(ROOT, "results", "parts", "$(ladder_name(N, settlement, variant))_$(rounds)months_$(MODEL_VERSION)")   # the run length and the model version are part of the key

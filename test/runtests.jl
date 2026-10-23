@@ -1976,6 +1976,21 @@ end
     end
 end
 
+
+@testset "banks on a target net margin (23 October 2026)" begin
+    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., maximum_rounds = 4))
+    m1 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., bank_target_net_margin = 0.3, maximum_rounds = 4))
+    for m in (m0, m1); for _ in 1:3; B.econo_step!(m, 1); end; end
+    r0 = [b.interest_rate for b in B.enterprises(m0, :bank)]; r1 = [b.interest_rate for b in B.enterprises(m1, :bank)]
+    @test all(r1 .>= r0) && any(r1 .> r0)                                       # the margin raises the loan rate
+    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., bank_target_net_margin = 0.3))) < 1e-6
+    ms = create_bread_economy(SimulationParameters(; seed = 1, BEH..., SUM..., bank_target_net_margin = 0.3, maximum_rounds = 2))
+    @test B.effective_bank_spread(ms) == B.parameters(ms).bank_spread                               # the spread as set unless asked
+    ms2 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., SUM..., bank_target_net_margin = 0.3, bank_margin_on_spread = true, maximum_rounds = 2))
+    @test B.effective_bank_spread(ms2) ≈ B.parameters(ms2).bank_spread / 0.7                          # grossed up (no profit tax in SUM)
+    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., SUM..., bank_target_net_margin = 0.3, bank_margin_on_spread = true))) < 1e-6
+end
+
 @testset "cooperative forms (14 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     params(m) = B.parameters(m)

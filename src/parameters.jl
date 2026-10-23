@@ -220,6 +220,15 @@ Base.@kwdef struct SimulationParameters
     # Enterprise taxation (12 September 2026)
     # 22 Oct (D9, Stef): whether the banks' loan rate covers the deposit interest they promise (on, as built) — a money setting
     loan_rate_covers_deposit_interest::Bool = true
+    # 23 Oct (Stef): banks on a real-world target — the loan rate is set so that the bank's NET profit (after the profit tax) is
+    # this share of its interest revenue, on top of covering its staff and the deposit interest: rate = costs ÷ ((1 − m ÷ (1 − τ))
+    # × affordability × base). 0 = as built (the rate covers costs; no margin). The reference from docs/data/sector_margin_targets.csv:
+    # Banks (Regional) 29.67 % net. The retained profit is the `p` of Stef's 2021 paper — the test of whether the best debt village
+    # stays stable when its banks accumulate as real ones do.
+    bank_target_net_margin::Float64 = 0.0
+    # 23 Oct (Stef): whether the margin also applies to a SuMSy bank's spread on peer loans (its revenue there): the spread is
+    # divided by (1 − the grossed-up margin), the lender receiving less. false = the spread as set (the default, as built).
+    bank_margin_on_spread::Bool = false
     enterprise_tax::Symbol = :none                    # :none | :income (on net operating cash flow minus interest; banks on interest received) | :reserves (on cash held at end of round)
     enterprise_income_tax_rate::Float64 = 0.10
     enterprise_reserve_tax_rate::Float64 = 0.10
