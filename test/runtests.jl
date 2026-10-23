@@ -1991,6 +1991,41 @@ end
     @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., SUM..., bank_target_net_margin = 0.3, bank_margin_on_spread = true))) < 1e-6
 end
 
+
+@testset "the banks' rate on the going wage, and as an ask (23 October 2026)" begin
+    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., maximum_rounds = 6))
+    m1 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., bank_rate_cost_from_going_wage = true, maximum_rounds = 6))
+    for m in (m0, m1); for _ in 1:5; B.econo_step!(m, 1); end; end
+    r0 = maximum(b.interest_rate for b in B.enterprises(m0, :bank)); r1 = maximum(b.interest_rate for b in B.enterprises(m1, :bank))
+    @test r1 <= r0                                                               # the going wage never asks more than the bid did
+    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., bank_rate_cost_from_going_wage = true))) < 1e-6
+    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., bank_rate_cost_from_going_wage = true, bank_rate_market = true))) < 1e-6
+    m2 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., bank_rate_cost_from_going_wage = true, bank_rate_market = true, maximum_rounds = 6))
+    for _ in 1:5; B.econo_step!(m2, 1); end
+    @test all(b.interest_rate <= B.parameters(m2).maximum_interest_rate for b in B.enterprises(m2, :bank))
+end
+
+
+@testset "bank staff scale with the loan book (23 October 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., bank_rate_cost_from_going_wage = true, bank_loans_per_labour_unit = 2, bank_staff_max_units = 5.0, maximum_rounds = 8))
+    for _ in 1:6; B.econo_step!(m, 1); end
+    for b in B.enterprises(m, :bank)
+        n = count(l -> !l.settled, B.creditor_loans(m, b))
+        @test 1.0 <= b.staff_target <= 5.0 && (n == 0 || b.staff_target > 1.0)      # set when the rates are set, before this month's loans: grows with the book, capped
+    end
+    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., bank_rate_cost_from_going_wage = true, bank_loans_per_labour_unit = 12))) < 1e-6
+end
+
+
+@testset "the levy scaled to a guaranteed meal (23 October 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., land_levy = true, land_levy_dividend = true, levy_dividend_target_in_breads = 2.0, number_of_landowners = 4, maximum_rounds = 8))
+    scales = Float64[]
+    for _ in 1:6; B.econo_step!(m, 1); push!(scales, m.land_levy_scale); end
+    @test all(0 .<= scales .<= B.parameters(m).levy_scale_max)
+    @test all(abs(log(scales[i+1] / scales[i])) <= log(1.1) + 1e-9 for i in 1:length(scales)-1 if scales[i] > 0)   # at most a step a month
+    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., land_levy = true, land_levy_dividend = true, levy_dividend_target_in_breads = 2.0))) < 1e-6
+end
+
 @testset "cooperative forms (14 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     params(m) = B.parameters(m)

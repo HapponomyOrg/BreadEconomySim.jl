@@ -340,6 +340,7 @@ function record_and_adapt!(model)
     absorb_surplus!(model)
     update_expected_prices!(model)
     model.credit_demand_previous_round = model.credit_demand_this_round
+    model.credit_unaffordable_this_round = 0; model.credit_refused_room_this_round = 0   # 23 Oct: reset after the rates are set
     check_termination!(model)
     return nothing
 end

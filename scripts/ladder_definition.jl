@@ -14,7 +14,7 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol; fiscal::Symb
     # checks that the base holds every rule. The week's additions: contracts at 0.8 with notice and loyalty (18–19 Oct, Stef),
     # at least two firms of each kind (19 Oct), own-market planning with the village plan as the emergency rule, and up to
     # four market rounds a month (19 Oct).
-    RULES = (; ask_floor = :cost, collection_floor_in_breads = 2.0,   # 22 Oct (Stef): debt collection may not take a villager below a meal (two loaves) — at one loaf it caused most of the debt village's deaths (steps 8 and 11)
+    RULES = (; ask_floor = :cost, collection_floor_in_breads = 2.0, bank_rate_cost_from_going_wage = true, bank_loans_per_labour_unit = 12,   # 23 Oct: the banks' rate on the going wage, not on the surplus-absorbing bid (it sat at the cap)   # 22 Oct (Stef): debt collection may not take a villager below a meal (two loaves) — at one loaf it caused most of the debt village's deaths (steps 8 and 11)
                bread_bid_base_multiplier = 1.2, ticket_max_in_breads = 2.0, employer_wage_margin = 0.20, number_of_persons = N, number_of_landowners = N ÷ 4, land_per_person = 1.5, initial_production_target = 10 * N ÷ 128, shares_per_person = 10, shareholder_count = 4, number_of_farms = 4, number_of_bakeries = 4, shows_per_round = 1, theatre_seat_margin = 0.25, unmet_demand_share = 0.05, unsold_share = 0.05, wage_threshold = true, wage_cut_maximum = 0.005, wage_floor_months = 1, joint_labour_market = true, contracts = false, contract_share = 0.8, refound_minimum = 1, uncovered_debt_sale = false, employer_loyalty = true, notice_months = 3, minimum_labour_offer = 0.5, volunteer_share = 1.0, spoilage_acceptance = 0.5, greedy_pricing = true, distress_pricing = true, distress_cost_cutting = true, plan_greedy_on_purchases = true, plan_within_capacity = true, own_market_planning = false, firms_plan_on_sales = true, market_rounds = 1, food_emergency_share = 0.9, employer_loss_tolerance = 0.10, owner_guarantee = true, interest_from_equity = true, bank_capital_ratio = 0.08, founding_equity = true, founders = :distinct, settlement = SETTLEMENT,   # 23 Sept: founders capitalise their firms
            # 22 September: :invoicing = the settlement design (cash at the counter, wages at month end, invoices between firms, clearing among banks)
              initial_interest_rate = 0.005, maximum_interest_rate = 0.015,   # a month: 6 % a year to start, at most about 20 %; the rate itself covers the banks' costs (one staff unit per bank: staff scaled with customers bankrupted the banks at 512, 22 Sept)
@@ -59,7 +59,7 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol; fiscal::Symb
     level(fee) = 30 + 5 / (fee + 0.01)                              # a villager's settled money: cushion + guaranteed income ÷ (fee + parking tax)
     REALISTIC = (; contracts = true, contract_share = 0.8, refound_minimum = 2, uncovered_debt_sale = true, own_market_planning = true, firms_plan_on_sales = false, market_rounds = 1)   # 20 Oct (rounds off: they ratchet prices down)
     DEMTAX15 = (; wage_tax_rate = 0.0, capital_tax_rate = 0.0, dividend_tax_rate = 0.0, demurrage_tax_rate = 0.015, demurrage_free_buffer = 30.0)   # 14 Oct: a demurrage tax instead of income tax, on debt money
-    PRODUCTIVE = (; breads_per_grain = 4, customers_per_labour_unit = 1.0, initial_prices = OrderedDict(:bread => 3.0, :grain => 5.2, :rent => 0.75, :wage => 3.92, :ticket => 5.0),
+    PRODUCTIVE = (; breads_per_grain = 4, customers_per_labour_unit = 2.0,   # 23 Oct (Stef): at least two customers per unit of labour (was 1.0 — one unit per customer); the base has 2.5 initial_prices = OrderedDict(:bread => 3.0, :grain => 5.2, :rent => 0.75, :wage => 3.92, :ticket => 5.0),
                   shows_per_round = 2, standard_of_living_tickets = 2, refound_minimum = 4)   # 15 Oct: prices free (Stef: the productive village is for full employment; fixed prices are the test, V8-P)
     PRICES   = (;)   # 25 Sept: the realistic price rules are base rules from step 0 (see RULES); the old step 10 is gone
     RESERVE  = (; government_reserve_in_rounds = 3, surplus_tax_reduction_share = 1.0)                                # rung 11: a public reserve, the surplus returned as a tax cut
@@ -339,8 +339,13 @@ function fiscal_package(fiscal::Symbol, government::Bool, levy::Bool, charge::Bo
     gov = fiscal == :taxes ? (; wage_tax_rate = 0.15, capital_tax_rate = 0.15, dividend_tax_rate = 0.30, profit_tax_rate = 0.10, demurrage_tax_rate = 0.0) :
           fiscal == :parking ? (; wage_tax_rate = 0.0, capital_tax_rate = 0.0, dividend_tax_rate = 0.0, profit_tax_rate = 0.0, demurrage_tax_rate = 0.015, demurrage_free_buffer = 30.0) :
           error("fiscal must be :own, :taxes or :parking, got $fiscal")
-    pkg = (; base..., gov..., unemployment_fee_in_breads = 2.0, minimum_fee_in_breads = 2.0, government_employment_share = 0.10)   # D2 default: 2 loaves on both sides
-    levy && (pkg = (; pkg..., land_levy = true, government_reserve_in_rounds = 3, surplus_tax_reduction_share = 0.0, surplus_redistribution_share = 1.0))   # D5/D6: the levy, its dividend and the reserve, one mechanism on both sides
+    # 23 Oct (Stef): the other taxes build a reserve of `government_reserve_in_rounds` months and are lowered when it is full
+    # (surplus_tax_reduction_share = 1: the surplus above the target cuts the tax scale — all taxes under T, the parking tax under
+    # P); nothing from them is paid out per head. The land levy is paid out to everyone equally, every month, whatever the budget
+    # (land_levy_dividend), and is never scaled.
+    pkg = (; base..., gov..., unemployment_fee_in_breads = 2.0, minimum_fee_in_breads = 2.0, government_employment_share = 0.10,   # D2 default: 2 loaves on both sides
+             government_reserve_in_rounds = 3, surplus_tax_reduction_share = 1.0, surplus_redistribution_share = 0.0)
+    levy && (pkg = (; pkg..., land_levy = true, land_levy_dividend = true, levy_dividend_target_in_breads = 2.0))   # D5: the levy and its dividend on both sides; 23 Oct: the levy scaled so that income + dividend = a meal
     charge && fiscal == :taxes && (pkg = (; pkg..., enterprise_tax = :reserves, enterprise_reserve_tax_rate = 0.02, reserve_tax_exempts_standard_reserve = true))   # D8a: under T the charge is set on both sides; the model exempts SuMSy producers (D8), SuMSy banks still pay it on retained interest — reported, not yet decided
     return pkg
 end

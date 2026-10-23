@@ -77,7 +77,7 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
     props[:cumulative_trade_arrears] = 0.0
     props[:expected_prices] = OrderedDict{Symbol, Float64}(k => v * parameters.initial_price_multiplier for (k, v) in parameters.initial_prices)
     props[:transactions] = OrderedDict{Symbol, Vector{Tuple{Float64, Float64}}}(g => Tuple{Float64, Float64}[] for g in GOODS)
-    props[:credit_demand_this_round] = 0.0
+    props[:credit_demand_this_round] = 0.0; props[:credit_unaffordable_this_round] = 0; props[:credit_refused_room_this_round] = 0   # 23 Oct: the market signals for the rate
     props[:credit_demand_previous_round] = 0.0
     props[:cumulative_interest_paid] = 0.0
     props[:cumulative_write_offs] = 0.0

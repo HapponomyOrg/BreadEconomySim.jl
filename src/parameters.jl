@@ -220,6 +220,17 @@ Base.@kwdef struct SimulationParameters
     # Enterprise taxation (12 September 2026)
     # 22 Oct (D9, Stef): whether the banks' loan rate covers the deposit interest they promise (on, as built) — a money setting
     loan_rate_covers_deposit_interest::Bool = true
+    # 23 Oct (traced): the rate rule's cost term was the bank's labour bid, which the surplus rule (absorb_surplus!) raises to
+    # thousands a month so that retained interest goes to the staff — so the rule asked 15–25 % a month and the cap held the rate
+    # at 1.5 %. With this on, the cost term is the going wage × `bank_staff_units` plus the deposit interest: the rate the loan
+    # book must carry, 0.2–0.3 % a month at step 8. Off = as built (for the golden values); on in the ladder's base.
+    bank_rate_cost_from_going_wage::Bool = false
+    bank_staff_units::Float64 = 1.0
+    # 23 Oct (Stef): the rate as a seller's ask — up a step when borrowers were refused for lack of lending room, down a step
+    # when borrowers were refused as unable to afford the rate (demand the bank could serve cheaper) or when the room went
+    # unused, never below the cost-plus rate, never above the cap. Needs bank_rate_cost_from_going_wage. Off = the rule alone.
+    bank_rate_market::Bool = false
+    bank_rate_step::Float64 = 0.06
     # 23 Oct (Stef): banks on a real-world target — the loan rate is set so that the bank's NET profit (after the profit tax) is
     # this share of its interest revenue, on top of covering its staff and the deposit interest: rate = costs ÷ ((1 − m ÷ (1 − τ))
     # × affordability × base). 0 = as built (the rate covers costs; no margin). The reference from docs/data/sector_margin_targets.csv:
@@ -256,6 +267,13 @@ Base.@kwdef struct SimulationParameters
     income_cut_start::Int = 0
     income_cut_share::Float64 = 0.5
     land_levy_dividend::Bool = false
+    # 23 Oct (Stef): the levy scales so that everyone's guaranteed income — the SuMSy income (or the debt village's basic income)
+    # plus the levy dividend — stays at `levy_dividend_target_in_breads` loaves at the going bread price. Each month, after the
+    # dividend is paid, `land_levy_scale` moves toward the scale that would have paid the shortfall, by at most
+    # `levy_scale_step` (10 %), within [0, `levy_scale_max`]. 0 = off (the levy at its own rate). Needs land_levy_dividend.
+    levy_dividend_target_in_breads::Float64 = 0.0
+    levy_scale_step::Float64 = 0.1
+    levy_scale_max::Float64 = 20.0
     # Public land (18 October, Stef — close to Gesell's Freiland): all land is the government's; farms rent the plots they work,
     # bakeries and theatres pay for the ground they stand on, every villager for the ground they live on — ground rents set in
     # loaves, scaled with the tax levers (`tax_scale`), paid to the government as tax. Nobody owns land, so no land market, no land
@@ -529,6 +547,13 @@ Base.@kwdef struct SimulationParameters
     # Bank staff (22 September): 0 = one unit of labour per bank, as before. k > 0 = one unit per k villagers the bank serves, so a
     # bank's wage bill grows with its customers and the cost-recovery lending rate does not fall just because the village is larger.
     bank_customers_per_labour_unit::Int = 0
+    # 23 Oct (Stef): bank staff scale with the loans issued — on top of the base staff, one unit of labour per
+    # `bank_loans_per_labour_unit` loans outstanding, recomputed each month and capped at `bank_staff_max_units`. A unit is a
+    # quarter of a person-month (capacity 4), so 12 loans a unit is one full-time employee per ~50 loans, the order of a retail
+    # bank; at step 8 a bank carries 40–100 loans → 1 + 3–8 units, two banks ≈ 2–4 people of a village of 512 — some
+    # unemployment is left where there was any. The rate rule carries the staff cost (bank_rate_cost_from_going_wage). 0 = off.
+    bank_loans_per_labour_unit::Int = 0
+    bank_staff_max_units::Float64 = 12.0
     # The liquidation test (23 September, closest to Belgian insolvency law: persistent non-payment *and* shaken credit):
     #   :cash_flow — overdue obligations (invoices and loan instalments, each at least `liquidation_overdue_rounds` behind) reach
     #                `liquidation_arrears_share` of the firm's monthly turnover, *and* a loan to pay them is refused;
