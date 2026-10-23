@@ -55,7 +55,74 @@ Review notes (facts and wording; the talk chat decides what to do with them):
 **Caveats to state once:** the income (5) and the cushion (30) are fixed in money, so a deflating village makes them worth more every year and an inflating one less — part of SuMSy's record at the later steps is that drift; the villages do not grow; one step of the ladder is one configuration, not a calibration.
 
 
-## 4b. The same fiscal rules on both sides — the numbers for the side-by-side slides (22 Oct, four seeds, version 2026-10-22.12)
+## 4c. THE TALK'S NUMBERS — the full ladder on the same fiscal rules, with the two-loaf floor (23 Oct, four seeds, version 2026-10-22.13; the folders `…_fiscal_taxes_…22.13` and `…_fiscal_parking_…22.13`, 876 runs each)
+
+The base now has a collection floor of one meal (two loaves) in both villages. **These supersede §4b for every side-by-side figure.** Alive of 512 / public debt after ten years / poorest tenth (meals) / wealth Gini; the worst run in brackets.
+
+**Package T (income taxes 15/15/30/10 %, benefit 2 loaves, public jobs 10 %):**
+
+| step | debt village | SuMSy village |
+|---|---|---|
+| 0 bare bones (no government, any package) | 141 (124) / 0 / 8.3 / 0.53 | 452 (448) / 0 / 9.2 / 0.72 |
+| 2 government | 511 (510) / 196k / 1.1 / 0.74 | 512 / 0 / 16.0 / 0.74 |
+| 5 bonds | 509 (505) / 169k / 6.0 / 0.72 | 512 / 0 / 3.8 / 0.75 |
+| 8 shares (+ levy) | 509 (508) / 130k / 0.8 / 0.76 | 512 / 0 / 18.3 / 0.55 |
+| 11 VAT | 502 (492) / 30k / −5.8 / 0.83 | 512 / 0 / 28.0 / 0.44 |
+| B co-ops + reserve | 509 (504) / 132k / 4.1 / 0.68 | 512 / 0 / 26.8 / 0.42 |
+| V8 productive (free prices) | 510 (507) / 17k / −4.0 / 0.70 | 512 / 0 / 70.6 / 0.21 |
+| N8 market entry | 510 (509) / 118k / 0.4 / 0.71 | 512 / 0 / 48.1 / 0.26 |
+| S3 everyone greedy | 499 (493) / 186k / 1.4 / 0.69 | 512 / 0 / 23.6 / 0.42 |
+| DGI8 basic income in debt money | 512 / **335k** / 20.5 / 0.69 | — |
+| A8 austerity from year 5 | **397** (392) / 121k / 0.3 / 0.73 | — |
+| D8-60 debt ceiling 60 % | **322** (308) / 79k / 0.1 / 0.73 | — |
+| EU8 basic income under the ceiling | 476 (469) / 148k / −0.3 / 0.81 | — |
+| PL8 public land with rents | 472 (459) / 25k / −6.2 / — | 512 / 0 / 3.7 / 0.27 |
+
+**Package P (a 1.5 % tax on balances above a cushion of 30 instead of income taxes):**
+
+| step | debt village | SuMSy village |
+|---|---|---|
+| 2 | 510 (510) / 98k / 1.2 / 0.75 | 512 / 0 / 18.3 / 0.74 |
+| 5 | 504 (492) / 116k / 1.2 / 0.76 | 512 / 0 / 3.9 / 0.75 |
+| 8 | 508 (505) / 27k / 0.6 / 0.73 | 512 / 0 / 16.5 / 0.53 |
+| 11 | 496 (495) / 0.7k / −2.8 / 0.78 | 512 / 0 / 18.5 / 0.42 |
+| B | 507 (504) / 23k / 0.1 / 0.73 | 512 / 0 / 27.4 / 0.31 |
+| V8 | 494 (486) / 20k / −0.8 / 0.65 | 512 / 0 / 30.7 / 0.26 |
+| N8 | 508 (506) / 19k / 0.4 / 0.74 | 512 / 0 / 31.3 / 0.13 |
+| S3 | 509 (505) / 96k / 1.9 / 0.75 | 512 / 0 / 28.1 / 0.19 |
+| DGI8 / A8 / D8-60 / EU8 | 512 / 397k / 33 · 431 / 111k / −0.3 · 357 / 90k / −0.5 · 487 / 190k / 1.0 | — |
+
+**What the talk may now say, on identical rules:**
+1. **With the floor at a meal and a government, both villages feed almost everyone**: the debt village 494–511, the SuMSy village 512 in every seed at every step. What kills in the debt village are its own fiscal rules — austerity (397), a debt ceiling (322), the ceiling even with a basic income (476) — and public land with rents (472). The deaths of §4b (390 at step 11) were the collection rule's: a floor below subsistence, now gone from the base.
+2. **The debt village borrows every year; the SuMSy government never does after its start-up loan.** Under T 118–196k by year ten at every step but 11 (30k) and V8 (17k); under P far less, because the levy charges the cost of holding money (§4b). A basic income in debt money keeps everyone (DGI8) at 335–397k. SuMSy: 0 at every step, everyone alive.
+3. **The poorest tenth:** under a meal, or in debt, in the debt village at every step (0.1–6 meals; negative at 11, V8, PL8); 16–71 meals in the SuMSy village — **except step 5 (bonds), where the SuMSy poorest hold 3.8–3.9, less than the debt village's 6.0 under T**; say "at every step but one" or leave step 5 out.
+4. **Inequality:** equal at steps 2 and 5 (0.72–0.76 both); from step 8 the SuMSy village's wealth Gini is 0.53–0.55 against 0.73–0.76, and where the village is productive, has co-ops or market entry, 0.13–0.31 against 0.65–0.74. The SuMSy **cash** Gini is the higher one (0.45–0.60 against 0.32–0.33 at step 8); show both. Gold makes both about 0.9.
+5. **Prices fall in both villages** (the debt village 1–12 % a year, SuMSy 4–16 %); the fixed-income caveat of §4 stands.
+
+**Why SuMSy's cash Gini is the higher one at step 8 (0.45 against 0.32), and why its poorest tenth hold only 3.8 meals at step 5 — both are about where the money sits (23 Oct, from the `.13` part files, package T):**
+
+Where the SuMSy village's 130,000 is at month 120:
+
+| holder | step 2 | step 5 | step 8 |
+|---|---|---|---|
+| villagers | 91,000 | **25,800** | 92,400 |
+| the theatres | 0 (none yet) | **54,000** (two theatres) | 23,000 (four) |
+| the government | 22,700 | **33,400** | 700 |
+| banks, farms, bakeries | 16,600 | 16,800 | 13,200 |
+
+- **Step 8, the cash Gini.** SuMSy villagers hold 92,400 of their village's money, the richest tenth 103 meals each and the poorest 3.4; the debt village's villagers hold 15,800 of 52,000, the richest tenth 10 meals each and the poorest 1.2. From step 5 on the debt village's savers keep their wealth in government bonds and later in shares, so cash is thin for everyone there and its Gini is the Gini of a scarce thing. SuMSy has no bonds and a 2 % fee, so its rich keep a good part of their wealth as money. The cash Gini says "SuMSy's rich hold their wealth in a form the debt village's rich don't"; the wealth Gini, which counts the bonds and shares, is the fair comparison. Show both, with this sentence ready.
+- **Step 5, the poorest tenth.** Steps 4–7 have firms with no owners (`ownership = :none`): a theatre's profit has nobody to go to, so its cash climbs until the 2 % fee on it equals the inflow — about 27,000 each for two theatres selling every seat. And under the packages the government pays its surplus out per head only from the levy step (D6), so before step 8 it accumulates: 22,700 at step 2, 33,400 at step 5. The poorest at step 5 therefore live on the income of 5 alone, about four meals; at step 8 the share market returns the theatres' money and the surplus is paid out, and they hold 18. The debt village's money at step 5 is also mostly out of its villagers' hands (banks 27,700, bakeries 14,300), but they hold bonds, which count in their wealth — hence 6.0.
+- **For the talk:** step 5 is a point about design rather than an exception to hide — an income alone does not keep the poorest above a meal when money can pool, and here it pools in ownerless firms and an unpaid surplus; the dividend and the shares are what fix it. **For the ladder:** the government's hoard before step 8 is a package choice (surplus per head from the levy step), not a property of either money; paying it from step 2 is one line in `fiscal_package`. The ownerless firms' hoarding is real behaviour and stays — co-ops (B) and shareholders (8) are the village's answers to it.
+
+**The loan rate, and what the public debt is made of — settled by the cap test (23 Oct, four seeds, steps 2 and 8, both packages):** capping the banks' rate at 0.4 % a month changes the debt village's public debt by nothing: step 2 under T 198k against 196k, step 8 163k against 130k (higher, since cheaper credit lets the government and the firms borrow more); under P 99k and 27k against 98k and 27k. Survival, the poorest tenth and the Gini are unchanged too. The reason: **the government does not borrow at the banks' rate.** It borrows at a policy rate of 0.5 % a month (`government_rate`, about 6 % a year), and through bonds at 0.25–0.4 %. The banks' 1.5 % a month is what firms and households pay, and it IS the ladder's cap: the rate rule's cost term is the bank's labour bid, which tracks the bank's cash (thousands a month) rather than its one employee's wage (about 4), so the rule asks for 15–25 % a month and the cap holds it at 1.5 % (traced 23 Oct, step 8, month 36). The fix (the going wage as the cost) gives 0.2–0.3 % a month and is Monday's first model change — docs/future_work/banks_on_real_world_economics_2026-10-23.md. My earlier reading — "a third to a half of the debt is interest at 18 %" — assumed the government paid the banks' rate; it does not. **So the public debt is the primary deficit:** the benefit and the public wages the taxes do not cover (at step 2: 236k spent, about 106k collected, over ten years), plus about 6 % a year on what that leaves. The "living on debt" slide stands on the deficit, which is the stronger ground, and the Belgian parallel is about the rate the deficit is financed at, which here is a policy rate near Belgium's. If asked about the 18 %: that is what the village's firms and households pay their banks, and it is high because the rate rule divides one employee's wage and the deposit interest by a small loan book — docs/future_work/banks_on_real_world_economics_2026-10-23.md.
+
+**The SuMSy start-up loan (the talk chat):** the roadmap's step 10 says the SuMSy village starts below its own equilibrium money stock, so the one loan repaid in two years is partly a starting condition; "while the money builds up" is the honest phrase, and if asked: a village starting at its own steady state would most likely not need it.
+
+**Banks on the real-world net margin (23 Oct, step B, four seeds, `bankmargin` folders; Banks (Regional) 29.67 % after tax on the loan rate, and on the SuMSy banks' spread if run with `BANK_MARGIN_BOTH`):** no measurable effect within ten years — **and the test was empty**: with the default settings the banks already keep 83–89 % of their interest revenue in the debt village (the loan rate sits at its 1.5 %-a-month cap; a bank has one employee) and about 97 % of their account fees in the SuMSy village, so a 29.67 % target was below what they already made. Future work: docs/future_work/banks_on_real_world_economics_2026-10-23.md (costs that scale with customers and loans, calibrated to the margin data). Debt village: 510 alive against 509 (T), 505 against 507 (P); public debt 134k against 132k (T), 32k against 23k (P); wealth Gini 0.68–0.69 either way; poorest tenth 4.8 against 4.1 (T), 1.8 against 0.1 (P). SuMSy: 512, 0, 0.31–0.42 either way. The banks' interest revenue in this village is small (the loan rate is about 1.5 % a month — 18 % a year — in every run, from the rate rule with a small loan book), so a 30 % margin retains about 2,000 a year — the `p` of the 2021 paper is there but too small, at this scale and horizon, to move anything. Not a slide; a Q&A line at most: "real bank margins change nothing in ten years here; the paper's instability is a long-run ratio effect".
+
+Paired tests: to be rerun on these folders (four seeds: counts, not significance). The realistic set on this base: running (`:taxes` first); the `.12` realistic folders are one-loaf-floor data.
+
+## 4b. The same fiscal rules on both sides — the numbers of 22 Oct (four seeds, version 2026-10-22.12, floor at ONE loaf) — superseded by §4c for every side-by-side figure; kept for the record and the death traces
 
 Four folders: package T (income taxes 15/15/30/10 %, benefit 2 loaves, public jobs 10 %) and package P (a 1.5 % tax on balances above a cushion of 30 instead of income taxes), each with the base labour market and with the realistic set. From step 8 both villages carry the land levy, its dividend and a 3-month reserve, surplus paid per head. Four seeds; the worst run in brackets. **These are the numbers to put beside each other.** Step 0 (no government) is the same under any package: debt 149 (144), SuMSy 453 (450).
 

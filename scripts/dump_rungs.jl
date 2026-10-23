@@ -25,7 +25,7 @@ for (name, kd, ks) in rungs, (system, base, kw) in (("debt", BARE_DEBT, kd), ("s
         parking_fee = p.monetary_system == :sumsy ? p.demurrage_rate : 0.0, parking_tax = p.demurrage_tax_rate,   # 22 Oct (§3.6): the parking tax for both moneys (DD8, DDGL8 … tax debt money too)
         account_fee_person = p.account_fee_person, account_fee_enterprise = p.account_fee_enterprise,
         charge_on_balances = p.enterprise_tax == :none ? 0.0 : (p.enterprise_tax == :reserves && p.monetary_system == :sumsy ? 0.0 : p.enterprise_reserve_tax_rate),   # 0 for SuMSy producers (D8: the model exempts them; banks still pay it)
-        fiscal = String(FISCAL), land_levy = p.land_levy, levy_dividend = p.land_levy_dividend, surplus_per_head = p.surplus_redistribution_share, surplus_cuts_taxes = p.surplus_tax_reduction_share,
+        fiscal = String(FISCAL), surplus_rule = String(p.surplus_rule), land_levy = p.land_levy, levy_dividend = p.land_levy_dividend, surplus_per_head = p.surplus_redistribution_share, surplus_cuts_taxes = p.surplus_tax_reduction_share,
         loyalty_bonus = p.loyalty_bonus_rate, peer_loan_rate = p.peer_loan_rate, bank_spread = p.bank_spread, loan_rate_covers_deposits = p.loan_rate_covers_deposit_interest,
         price_bread = p.initial_prices[:bread] * p.initial_price_multiplier, price_grain = p.initial_prices[:grain] * p.initial_price_multiplier, price_wage = p.initial_prices[:wage] * p.initial_price_multiplier,
         price_rent = p.initial_prices[:rent] * p.initial_price_multiplier, price_ticket = p.initial_prices[:ticket] * p.initial_price_multiplier,

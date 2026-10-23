@@ -137,6 +137,7 @@ function request_loan!(model, borrower::Agent, amount::Float64, purpose::Symbol)
             owed = sum(total_due(l) for l in debtor_loans(model, borrower); init = 0.0) + amount
             if owed <= p.receivables_advance_rate * receivables(model, borrower) + 1e-9
                 bank = some_bank(model, borrower)
+                bank !== nothing && p.monetary_system != :sumsy && amount > lending_room(model, bank) + 1e-9 && (model.credit_refused_room_this_round += 1)   # 23 Oct: refused for room
                 (bank === nothing || p.monetary_system == :sumsy || amount > lending_room(model, bank) + 1e-9) || (make_loan!(model, bank, borrower, amount, purpose); return true)
             end
         end
@@ -178,6 +179,7 @@ function request_loan!(model, borrower::Agent, amount::Float64, purpose::Symbol)
     end
     if reason !== nothing
         model.cumulative_credit_refusals += 1
+        reason == :unaffordable && (model.credit_unaffordable_this_round += 1)   # 23 Oct: demand the bank could serve at a lower rate
         log_event!(model, :credit_refused; actor = borrower.id, agent_kind = kind_of(borrower), amount = amount, purpose = purpose, reason = reason)
         return false
     end
@@ -1306,6 +1308,17 @@ function effective_bank_spread(model)
     return p.bank_spread / (1 - bank_margin(model))
 end
 
+"""Bank staff with the loan book (23 October, Stef): the base staff plus one unit per `bank_loans_per_labour_unit` loans, capped."""
+function scale_bank_staff!(model)
+    p = parameters(model); p.bank_loans_per_labour_unit > 0 || return nothing
+    for bank in enterprises(model, :bank)
+        base = max(1.0, p.bank_customers_per_labour_unit > 0 ? p.number_of_persons / (max(length(enterprises(model, :bank)), 1) * p.bank_customers_per_labour_unit) : 1.0)
+        n = count(l -> !l.settled, creditor_loans(model, bank))
+        bank.staff_target = min(base + n / p.bank_loans_per_labour_unit, p.bank_staff_max_units)
+    end
+    return nothing
+end
+
 """
     set_interest_rates!(model)
 
@@ -1315,13 +1328,26 @@ with projected demand = last round's credit demand. Unchanged when the base is z
 function set_interest_rates!(model)
     p = parameters(model)
     current_round(model) == 1 && return nothing
+    scale_bank_staff!(model)                                             # 23 Oct: the staff the rate must carry
     for bank in enterprises(model, :bank)
         base = sum(outstanding_principal(l) for l in creditor_loans(model, bank); init = 0.0) + model.credit_demand_previous_round
         base <= 0 && continue
         deposits = sum(cash(a) for a in alive_agents(model) if (a isa Person || (p.deposit_interest_to_enterprises && is_producer(a))) && bank_of(model, a) === bank; init = 0.0)
         deposit_cost = p.loan_rate_covers_deposit_interest ? (p.deposit_interest_rate + p.loyalty_bonus_rate) * deposits / max(p.deposit_interest_period, 1) : 0.0   # 22 Oct (D9): a switch
         margin = bank_margin(model)                                   # 23 Oct: the net margin grossed up for the profit tax
-        bank.interest_rate = min((bank.bid[:wage] + deposit_cost) / ((1 - margin) * p.affordability_ratio * base), p.maximum_interest_rate)
+        staff_cost = p.bank_rate_cost_from_going_wage ? max(bank.staff_target, p.bank_staff_units) * expected_price(model, :wage) : bank.bid[:wage]   # 23 Oct: the going wage for the staff the bank employs, not the surplus-absorbing bid
+        floor_rate = min((staff_cost + deposit_cost) / ((1 - margin) * p.affordability_ratio * base), p.maximum_interest_rate)
+        if p.bank_rate_market && p.bank_rate_cost_from_going_wage          # 23 Oct (Stef): the rate as an ask
+            r = bank.interest_rate > 0 ? bank.interest_rate : floor_rate
+            if model.credit_refused_room_this_round > 0
+                r *= 1 + p.bank_rate_step
+            elseif model.credit_unaffordable_this_round > 0 || model.credit_demand_this_round < lending_room(model, bank) * 0.5
+                r *= 1 - p.bank_rate_step
+            end
+            bank.interest_rate = clamp(r, floor_rate, p.maximum_interest_rate)
+        else
+            bank.interest_rate = floor_rate
+        end
         if p.bank_rate_follows_inflation
             bank.interest_rate += clamp(trailing_inflation(model), 0.0, p.bank_rate_inflation_cap)
         end

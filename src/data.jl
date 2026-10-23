@@ -143,7 +143,7 @@ function record!(model)
         gini_wealth_attributed = (let pool = sum(book_value(model, e) for e in model.enterprise_list if e.alive && is_producer(e) && isempty(e.shares) && isempty(e.members); init = 0.0)
             isempty(ps) ? NaN : gini([mw(w) + pool / length(ps) for w in ps]) end),
         intervention = model.intervention, intervention_months = model.intervention_months,
-        basic_income = model.basic_income_this_round, levy_dividend = model.levy_dividend_this_round, ground_rent = model.ground_rent_this_round,
+        basic_income = model.basic_income_this_round, levy_dividend = model.levy_dividend_this_round, levy_paid_out = model.levy_dividend_this_round, levy_paid_out_per_head = model.levy_dividend_this_round / max(length(ps), 1), surplus_debt_repaid = model.surplus_debt_repaid_this_round, surplus_debt_repaid_total = model.surplus_debt_repaid_total, ground_rent = model.ground_rent_this_round,
         premium_loaves = model.premium_loaves_this_round, premium_revenue = model.premium_revenue_this_round, premium_labour = model.premium_labour_this_round,
         gold_price = model.gold_price, gold_valuation = model.gold_valuation, gold_sold = model.gold_sold_this_round,
         gold_holders = count(w -> w.gold >= 1.0, ps), gold_value_in_meals = sum(gold_value(model, w) for w in ps; init = 0.0) / max(meal_price(model), 1e-9), gold_top10_share = (let g = sort([w.gold for w in ps]; rev = true), t = sum(g; init = 0.0); t > 0 ? sum(g[1:max(1, length(g) ÷ 10)]) / t : NaN end),
@@ -340,6 +340,7 @@ function record_and_adapt!(model)
     absorb_surplus!(model)
     update_expected_prices!(model)
     model.credit_demand_previous_round = model.credit_demand_this_round
+    model.credit_unaffordable_this_round = 0; model.credit_refused_room_this_round = 0   # 23 Oct: reset after the rates are set
     check_termination!(model)
     return nothing
 end

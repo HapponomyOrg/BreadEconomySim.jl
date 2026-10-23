@@ -16,6 +16,8 @@
 #     run_all(seeds = 4, fiscal = :taxes, rungs = ["11"], variant = PARTIAL_BENEFIT, variant_label = "partial")   # the step-11 test: floor2, partial, both — each with fiscal = :taxes and :parking: 48 jobs
 #     run_all(seeds = 4, fiscal = :taxes, rungs = ["11"], variant = FLOOR_AND_PARTIAL, variant_label = "floor2_partial")
 #     run_all(seeds = 4, fiscal = :taxes, rungs = ["B "], variant = BANK_MARGIN, variant_label = "bankmargin")   # 23 Oct: the best village with banks on a real-world net margin (and fiscal = :parking)
+#     run_all(seeds = 4, fiscal = :taxes, rungs = ["2", "8"], variant = RATE_CAP_04, variant_label = "cap04")   # 23 Oct: the rate cap at 0.4 % a month, steps 2 and 8 (and fiscal = :parking): 32 jobs
+#     run_all(seeds = 4, fiscal = :taxes, rungs = ["1 "], variant = OWN_PLANNING, variant_label = "ownplan")   # 23 Oct (Stef): rung 1 with own-market planning (no government: the package is empty there, so fiscal = :taxes or :own alike)
 #
 # From the command line the environment variables still work as before (JOBS, SEEDS, ROUNDS, LADDERS, RUNGS, SKIP_TESTS,
 # SUMMARY_ONLY, SHARD, CONTRACT_SHARE, WORKER_RECYCLE, HEAP_HINT, UPDATE_ECONOSIM):
@@ -33,6 +35,7 @@
 #   shard           "k/n": take every n-th job starting at the k-th, to split a run over n machines
 #   contract_share  nothing (the ladder as defined) or a number: every step again at that contracts setting, own folder
 #   variant         a NamedTuple of settings added to every step (e.g. REALISTIC_LABOUR), with variant_label naming its folder
+#   surplus_rule    :debt_levy_taxcut (default: repay debt, levy per head, lower taxes) or :per_head (the 2026-10-22.13 packages); with a package only
 #   fiscal          :own (the ladder as it is: each money its own package), :taxes (package T on both sides) or :parking (package P
 #                   on both sides) — docs/talk/same_fiscal_rules_instructions_2026-10-22.md; part of the folder name (…_fiscal_taxes_…)
 #   worker_recycle  jobs per worker before the workers are replaced (a model process retains memory across runs) (20)
@@ -48,7 +51,7 @@ using Dates, Pkg, Distributed
 
 const ROOT = normpath(joinpath(@__DIR__, ".."))
 
-const MODEL_VERSION = "2026-10-23.1"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
+const MODEL_VERSION = "2026-10-23.8"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
 
 # ---- packages (once per session) ---------------------------------------------------------------------------------------
 const PACKAGES_READY = Ref(false)
@@ -99,7 +102,7 @@ function run_tests!(; skip::Bool = false)
 end
 
 # ---- names and places ---------------------------------------------------------------------------------------------------
-variant_name(contract_share, variant = nothing, label = "variant", fiscal = :own) = (contract_share !== nothing ? "_contracts$(round(Int, 100 * contract_share))" : variant === nothing ? "" : "_" * label) * (fiscal == :own ? "" : "_fiscal_$fiscal")   # 22 Oct: the package in the name
+variant_name(contract_share, variant = nothing, label = "variant", fiscal = :own, surplus_rule = :debt_levy_taxcut) = (contract_share !== nothing ? "_contracts$(round(Int, 100 * contract_share))" : variant === nothing ? "" : "_" * label) * (fiscal == :own ? "" : "_fiscal_$fiscal") * (fiscal != :own && surplus_rule == :per_head ? "_perhead" : "")   # 22 Oct: the package in the name; 23 Oct: the old surplus rule marked
 variant_extra(contract_share, variant = nothing) = contract_share !== nothing ? (; contract_share = Float64(contract_share)) : variant === nothing ? (;) : variant
 # 20 Oct: this week's realistic labour market as a variant of the whole ladder — run_all(variant = REALISTIC_LABOUR, variant_label = "realistic")
 # runs every step with it, into its own folder (…_realistic_…). Market rounds stay at one: with four, the lowered asks pushed
@@ -114,6 +117,9 @@ const PARTIAL_BENEFIT = (; partial_unemployment_fee = true)      # 22 Oct (the t
 const FLOOR_AND_PARTIAL = (; FLOOR_TWO_LOAVES..., PARTIAL_BENEFIT...)
 const BANK_MARGIN = (; bank_target_net_margin = 0.2967)   # 23 Oct (Stef): banks on the real-world net margin (Banks, Regional: 29.67 %) — the loan rate (debt money)
 const BANK_MARGIN_BOTH = (; BANK_MARGIN..., bank_margin_on_spread = true)   # and the SuMSy banks' spread on peer loans too
+const BANK_RATE_MARKET = (; bank_rate_market = true)   # 23 Oct (Stef): the rate as an ask, floored at cost-plus
+const OWN_PLANNING = (; own_market_planning = true, firms_plan_on_sales = false, market_rounds = 1)   # 23 Oct (Stef): own-market planning alone (three-month average, net of stock, turned-away counted; prices against expected sales need price_on_expected_sales too)
+const RATE_CAP_04 = (; maximum_interest_rate = 0.004)   # 23 Oct (the talk chat): the loan rate capped at a realistic 0.4 % a month (the base's cap, 1.5 %, binds in every run)
 with_extra(kw, extra) = isempty(kw) ? kw : (; kw..., extra...)
 ladder_name(N, settlement, variant = "") = (settlement == :invoicing ? "ladder2_$(N)" : "ladder2_$(N)_$(settlement)") * variant
 parts_dir(N, settlement, rounds, variant = "") = joinpath(ROOT, "results", "parts", "$(ladder_name(N, settlement, variant))_$(rounds)months_$(MODEL_VERSION)")   # the run length and the model version are part of the key
@@ -125,8 +131,8 @@ safe(s) = replace(s, r"[^A-Za-z0-9]+" => "_")
 const WORKER_SETUP = quote
     using BreadEconomySim, DataFrames, CSV
     include(joinpath($ROOT, "scripts", "ladder_definition.jl"))
-    isdefined(Main, :LADDER_CACHE) || (const LADDER_CACHE = Dict{Tuple{Int, Int, Symbol, Symbol}, Any}())   # set up once per process
-    ladder(N, rounds, settlement, fiscal = :own) = get!(() -> ladder_definition(N, rounds, settlement; fiscal = fiscal), LADDER_CACHE, (N, rounds, settlement, fiscal))
+    isdefined(Main, :LADDER_CACHE) || (const LADDER_CACHE = Dict{Tuple{Int, Int, Symbol, Symbol, Symbol}, Any}())   # set up once per process
+    ladder(N, rounds, settlement, fiscal = :own, surplus_rule = :debt_levy_taxcut) = get!(() -> ladder_definition(N, rounds, settlement; fiscal = fiscal, surplus_rule = surplus_rule), LADDER_CACHE, (N, rounds, settlement, fiscal, surplus_rule))
 
     """One run: build the rung's parameters, simulate, save the rounds to the job's own file (written under a temporary
     name and renamed, so a half-written file is never taken for a finished run)."""
@@ -135,7 +141,7 @@ const WORKER_SETUP = quote
         # so progress is visible while the batch is running, not only at the end
         say(line) = (println("[", lpad(job.index, 4), "/", job.total, "] ", line); flush(stdout))
         isfile(job.file) && (say("skipped (already done): $(job.rung) | $(job.system) seed $(job.seed)"); return "skipped")
-        def = ladder(job.N, job.rounds, job.settlement, get(job, :fiscal, :own))
+        def = ladder(job.N, job.rounds, job.settlement, get(job, :fiscal, :own), get(job, :surplus_rule, :debt_levy_taxcut))
         i = only(k for (k, r) in enumerate(def.rungs) if r[1] == job.rung); (_, kd, ks) = def.rungs[i]
         kd = isempty(kd) ? kd : (; kd..., job.extra...); ks = isempty(ks) ? ks : (; ks..., job.extra...)   # 18 Oct: the contracts variant travels inside the job (workers do not see the main process's globals)
         base, kw = job.system == "debt" ? (def.BARE_DEBT, kd) : (def.BARE_SUMSY, ks)
@@ -261,6 +267,7 @@ function summarise(rounds::DataFrame, N::Int)
         :owes_nothing => count => :runs_debt_repaid,   # 15 Oct: runs that owe nothing at the end (a run that never borrowed counted as unpaid before)
          :debt_repaid_month => (x -> all(ismissing, x) ? missing : mean(skipmissing(x))) => :public_debt_repaid_month,
         :fiscal => first => :fiscal,                                 # 22 Oct: the package (own | taxes | parking)
+        :levy_paid_out_per_head => last => :levy_paid_out_per_head, :tax_scale => last => :tax_scale_end, :surplus_debt_repaid_total => last => :surplus_debt_repaid_total,   # 23 Oct (§1.3): at month 120
         :gini_cash_persons => m => :gini_cash,
         :gini_net_wealth_persons => (x -> (v = collect(skipmissing(x)); (isempty(v) || any(g -> !(0 <= g <= 1), v)) ? missing : mean(v))) => :gini_wealth,   # not defined when net wealth goes negative
         :gini_total_wealth_persons => (x -> (v = collect(skipmissing(x)); (isempty(v) || any(g -> !(0 <= g <= 1), v)) ? missing : mean(v))) => :gini_total_wealth,   # 20 Oct: gold included (review 5)
@@ -286,27 +293,27 @@ Returns how many runs this call did and how many failed, how many were already d
 """
 function run_all(; jobs::Int = max(Sys.CPU_THREADS - 1, 1), seeds::Int = 10, rounds::Int = 120,
                    ladders = [(512, :invoicing)], rungs = String[], skip_tests::Bool = false, summary_only::Bool = false,
-                   shard::AbstractString = "", contract_share = nothing, variant = nothing, variant_label::AbstractString = "variant", fiscal::Symbol = :own,
+                   shard::AbstractString = "", contract_share = nothing, variant = nothing, variant_label::AbstractString = "variant", fiscal::Symbol = :own, surplus_rule::Symbol = :debt_levy_taxcut,
                    worker_recycle::Int = 20, heap_hint::AbstractString = "4G",
                    update_econosim::Bool = false)
     start_time = now()
     update_econosim && prepare_packages!(; update_econosim = true)
     run_tests!(; skip = skip_tests || summary_only)
     fiscal in (:own, :taxes, :parking) || error("fiscal must be :own, :taxes or :parking")
-    extra = variant_extra(contract_share, variant); variant = variant_name(contract_share, variant, String(variant_label), fiscal)
+    extra = variant_extra(contract_share, variant); variant = variant_name(contract_share, variant, String(variant_label), fiscal, surplus_rule)
     rungs = String.(rungs)
 
     # the jobs
     jobs_list = NamedTuple[]
     for (N, settlement) in ladders
-        def = ladder(N, rounds, settlement, fiscal)
+        def = ladder(N, rounds, settlement, fiscal, surplus_rule)
         for (name, kd, ks) in def.rungs
             (isempty(rungs) || any(p -> startswith(name, p), rungs)) || continue
             for system in ("debt", "sumsy"), seed in 1:seeds
                 kw = system == "debt" ? kd : ks
                 (isempty(kw) && !occursin(r"^[0-9]", name)) && continue   # a side with no settings of its own is not run (main steps excepted)
                 file = joinpath(parts_dir(N, settlement, rounds, variant), "$(safe(name))__$(system)__$(seed).csv")
-                push!(jobs_list, (; N, settlement, rounds, rung = name, system, seed, extra, fiscal, file, index = length(jobs_list) + 1, total = 0))
+                push!(jobs_list, (; N, settlement, rounds, rung = name, system, seed, extra, fiscal, surplus_rule, file, index = length(jobs_list) + 1, total = 0))
             end
         end
     end
@@ -314,7 +321,7 @@ function run_all(; jobs::Int = max(Sys.CPU_THREADS - 1, 1), seeds::Int = 10, rou
     # mirror cells: a configuration identical to an earlier cell's is the same village — its finished files are copied, relabelled
     let seen = Dict{String, Any}(), copied = 0
         for j in jobs_list
-            def = ladder(j.N, j.rounds, j.settlement, j.fiscal)
+            def = ladder(j.N, j.rounds, j.settlement, j.fiscal, j.surplus_rule)
             (_, kd, ks) = only(r for r in def.rungs if r[1] == j.rung)
             kw = with_extra(j.system == "debt" ? kd : ks, extra)
             key = string(j.N, "|", j.settlement, "|", j.rounds, "|", j.system, "|", j.seed, "|", repr(kw))
@@ -373,7 +380,7 @@ function run_all(; jobs::Int = max(Sys.CPU_THREADS - 1, 1), seeds::Int = 10, rou
         isdir(dir) || continue
         # 14 Oct: only the files of steps on the current ladder — a renamed or removed step leaves orphans in the folder (Y8-loyal,
         # a duplicated S3-W block), which must not reach the summary
-        name_of = Dict(safe(r[1]) => r[1] for r in ladder(N, rounds, settlement, fiscal).rungs)
+        name_of = Dict(safe(r[1]) => r[1] for r in ladder(N, rounds, settlement, fiscal, surplus_rule).rungs)
         current = Set(keys(name_of))
         stepof(f) = first(rsplit(basename(f), "__"; limit = 3))        # 16 Oct: from the right — a name ending in ')' or '%' leaves '___' in the file name
         files = filter(f -> endswith(f, ".csv") && stepof(f) in current, readdir(dir; join = true))
