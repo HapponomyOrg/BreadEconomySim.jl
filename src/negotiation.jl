@@ -574,6 +574,13 @@ function plan_targets!(model)
             end
         end
     end
+    if p.price_on_expected_sales && !p.own_market_planning                      # 24 Oct (Stef): the realistic price rule on the base ladder too —
+        for e in model.enterprise_list                                           # under share planning a firm's expected sales are its share of the village's need: its target without the planning margin
+            (e.alive && is_producer(e)) || continue
+            per = e.kind == :bakery ? Float64(p.breads_per_grain) : e.kind == :farm ? 1.0 : p.customers_per_labour_unit
+            e.expected_sales = e.production_target * per / (1 + p.planning_margin)
+        end
+    end
     return nothing
 end
 

@@ -2030,6 +2030,28 @@ end
     include("comment_tail_check.jl")
 end
 
+
+@testset "a bakery bakes to its target, not to its hands (24 October 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., bakeries_bake_to_target = true, maximum_rounds = 4))
+    for _ in 1:3; B.econo_step!(m, 1); end
+    b = first(B.enterprises(m, :bakery)); p = B.parameters(m)
+    push!(b.grain, B.StockItem(1000.0, 0)); b.production_target = 3; b.hired_labour = 50.0            # plenty of grain and hands, a target of 3
+    before = B.bread_units(b); B.bake!(m)
+    @test B.bread_units(b) - before <= 3 * p.breads_per_grain + 1e-9                                    # at most the target's worth
+    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., bakeries_bake_to_target = true))) < 1e-6
+end
+
+
+@testset "the expected-sales price rule under share planning (24 October 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., planning_margin = 0.1, price_on_expected_sales = true, maximum_rounds = 4))
+    for _ in 1:3; B.econo_step!(m, 1); end
+    p = B.parameters(m)
+    for b in B.enterprises(m, :bakery)
+        @test b.expected_sales ≈ b.production_target * p.breads_per_grain / 1.1                    # the share of the need, without the margin
+    end
+    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., planning_margin = 0.1, price_on_expected_sales = true))) < 1e-6
+end
+
 @testset "cooperative forms (14 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     params(m) = B.parameters(m)

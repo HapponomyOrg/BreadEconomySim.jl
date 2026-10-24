@@ -621,6 +621,7 @@ function bake!(model)
     for b in enterprises(model, :bakery)
         labour = floor(effective_labour(model, b) + b.volunteer_labour + 1e-9)   # 15 Oct: volunteers where allowed; 17 Oct: experience
         grain = min(labour, floor(grain_units(b) + 1e-9))
+        parameters(model).bakeries_bake_to_target && (grain = min(grain, ceil(b.production_target)))   # 24 Oct (Stef): output follows the expected output, not the hands
         bread = parameters(model).breads_per_grain * grain
         if bread > 0
             take_stock!(b.grain, grain); push!(b.bread, StockItem(bread, 0))

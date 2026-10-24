@@ -194,6 +194,10 @@ Base.@kwdef struct SimulationParameters
     debt_dies_with_bank::Bool = false
     # Behavioural rules (viability study, 12 September 2026) — all off reproduces spec v2
     demand_based_targets::Bool = false          # producers plan output for the living population instead of the ±1 ratchet
+    # 24 Oct (Stef): a bakery bakes to its production target, not to its hands — with contracted hands above the target it pays
+    # them and buys less grain, instead of baking what the hands allow from the grain in store. Farms already harvest to their
+    # target (land, labour and target); theatres sell seats. false = as built (bread = hands × grain in store).
+    bakeries_bake_to_target::Bool = false
     planning_margin::Float64 = 0.0              # extra share of demand planned for (0.0 = plan exactly the population's meals)
     # 14 October (the greedy village's bakeries): plan greedy demand on last month's greedy purchases, not on the greedy villagers'
     # cash; and never target more grain than the ovens can bake — `bakery_capacity_share` of the village's labour, spread over the
