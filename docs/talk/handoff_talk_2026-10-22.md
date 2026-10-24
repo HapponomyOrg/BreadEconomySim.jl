@@ -72,7 +72,18 @@ run_all(seeds = 4, fiscal = :taxes,   rungs = ["0 ", "SB2", "B-nodiv"])     # 8 
 run_all(seeds = 4, fiscal = :parking, rungs = ["SB2", "B-nodiv"])           # 8 + 8 jobs
 run_all(summary_only = true, fiscal = :taxes); run_all(summary_only = true, fiscal = :parking)
 ```
-Folders `…_fiscal_<pkg>_120months_2026-10-24.4`. The summaries carry alive (mean, worst), public debt at month 120, `public_debt_peak`, the tax scale at the end, the cash and wealth of the poorest tenth, the three Ginis; "still climbing in the last two years" is read from the part files (month 96 against 120).
+**The run is in (24 Oct, 16:00, version 2026-10-24.4, four seeds). The answer to §2: keeping the land tax as revenue does NOT balance the debt village's books — under T its debt is higher without the dividend than with it.**
+
+| rung B-nodiv (land tax kept as revenue; the benefit on) | alive (worst) | public debt m120 (peak) | climbing in the last two years? | tax scale | unemployed | poorest tenth: cash / wealth | Gini cash / wealth / with gold |
+|---|---|---|---|---|---|---|---|
+| T, debt | 509.5 (506) | **170k** (170k) | yes: 138k → 158k → 175k (months 96/108/120, seed 1; all four seeds alike) | 1.0 | 128 | 1.1 / 9.1 | 0.30 / 0.61 / 0.61 |
+| T, SuMSy | 512 | 0 (peak 1.6k, the start-up loan) | no | 0.05 | 0 | 2.6 / 18.9 | 0.63 / 0.74 / 0.74 |
+| P, debt | 505.75 (501) | 21k (22k) | no: flat at 16–25k | 1.0 | 96 | 0.8 / 2.3 | 0.39 / 0.71 / 0.71 |
+| P, SuMSy | 512 | 0 (peak 1.7k) | no | 0.05 | 0 | 2.8 / 21.4 | 0.68 / 0.74 / 0.74 |
+
+For comparison, rung B *with* the dividend (§4d): T debt 75k, 512 alive, poorest 4.1; P debt 154k with the meal. **Reading:** under T the dividend was reducing the debt, not causing it — without it the villagers have less to spend, unemployment rises from about 20 to 128, the benefit bill rises, and the debt climbs faster (to 170k, still rising). The claim "the debt village borrows without end" stands with the land tax kept as revenue, and stands stronger. Under P the books nearly balance without the dividend (21k, flat), at the price of 96 unemployed, a poorest tenth at two meals of wealth and under a meal of cash, and six dead — the balanced budget of the productive village again, by another route. The SuMSy village under either package: everyone alive, taxes cut to 5 %, the poorest tenth at 19–21 meals.
+
+**Step 0 on `.4`** (T; no government, so the package is empty): debt 167 (worst 155), SuMSy 451.5 (448) — the bank changes of `.8` lift the bare debt village from 141 (§4c) to 167; SuMSy unchanged. **SB2 on `.4`** (greedy ask fixed): T — debt 511.75 / 166k / poorest 5.1, SuMSy 512 / 0 / poorest 5.2 (bread 5.7; the greedy SuMSy poorest are as poor as the debt village's under T); P — debt 512 / 175k / 48.2 (the meal), SuMSy 512 / 0 / 26.2. One slide, one version: these three cells on `.4`; B and BG on `.8` (unchanged by `.0`–`.4`, see §4).
 
 ## 4d. The 2026-10-23.8 runs (24 Oct, four seeds): the new fiscal rule, the meal under P, the bank and theatre changes — READ BEFORE MIXING WITH §4c
 
