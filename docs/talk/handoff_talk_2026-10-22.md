@@ -76,9 +76,20 @@ What changed against §4c and why it matters for the slides:
 - **Under P the debt village pays the meal and borrows for it**: 142–178k in ten years, its poorest tenth at 22–38 meals; SuMSy pays it from the levy with taxes at 5 % and no debt. That is the fair comparison Stef asked for and the cleanest `.8` result: the same meal for everyone, one money borrowing 150k for it, the other not.
 - SuMSy's cash Gini is still the higher one (0.38–0.49 against 0.12–0.19).
 
-**Realistic set (contracts 0.8, own-market planning, the :long floor, land rules):** T — B debt 511 / 75k / 3.0; BG debt 487 (worst 424); SuMSy 512 everywhere, B poorest 35.8; **SB2 SuMSy inflates 6 % a year (bread 19.6) and its government borrows 73k**. P — B debt 486 (worst 409) / 110k; SuMSy 512; **SB2 SuMSy bread 16.5, +10.6 % a year, 41k of public debt**. The realistic set with everyone greedy is not stable and the SuMSy village borrows there for the first time; the realistic numbers stay "work in progress".
+**Realistic set (contracts 0.8, own-market planning, the :long floor, land rules)** *(the SB2 SuMSy inflation and public debt quoted in this paragraph were largely an artefact of the greedy ask — see the correction at the end of this section)*: T — B debt 511 / 75k / 3.0; BG debt 487 (worst 424); SuMSy 512 everywhere, B poorest 35.8; **SB2 SuMSy inflates 6 % a year (bread 19.6) and its government borrows 73k**. P — B debt 486 (worst 409) / 110k; SuMSy 512; **SB2 SuMSy bread 16.5, +10.6 % a year, 41k of public debt**. The realistic set with everyone greedy is not stable and the SuMSy village borrows there for the first time; the realistic numbers stay "work in progress".
 
 **Rung 1 with own-market planning** (no government): debt 187 (base: about 140), SuMSy 475 (base 452); SuMSy inflates 3 % a year there and its poorest hold 3.3 meals. Own planning helps survival a little at the bare steps.
+
+**Correction (24 Oct, version 2026-10-24.0, four seeds; the greedy village is no longer a way to break SuMSy):** the inflation in the greedy SuMSy village (SB2, realistic set) came mostly from the greedy firms' ask, which was set from the *expected* price — and the expected price comes from the asks, so with wages indexed to bread every sell-out ratcheted from a higher base. With the ask set from the price last paid instead:
+
+| SB2 greedy SuMSy, realistic, mean of 4 seeds | bread y3 / y5 / y10 | wage y10 | worst seed's bread y10 | unemployed y10 | SuMSy public debt | poorest tenth |
+|---|---|---|---|---|---|---|
+| T, old ask (.8) | 4.7 / 6.9 / **21.0** | 16.9 | 71 | 35 | 73k | 29.5 |
+| T, **new ask (.0)** | 4.4 / 4.3 / **3.9** | 3.1 | 4.3 | 0 | **0** | 36.9 |
+| P, old ask (.8) | 5.6 / 6.7 / **18.0** | 14.2 | 40 | 36 | 41k | 8.5 |
+| P, **new ask (.0)** | 4.4 / 4.9 / **6.2** | 4.8 | 7.4 | 0 | **0** | 15.6 |
+
+All 512 alive in every seed. Under T the village now deflates like the base (bread −22 % over ten years); under P there is a residual drift of about 5 % a year from year 3 on (bread 4.4 → 6.2, wage 3.4 → 4.8), far from the spiral and unexplained: it coincides with the levy lever raising the levy as the price rises (the meal target, two loaves, rises with the price; levy scale 0.06 → 0.31 over years 5–10), which would make the guaranteed meal a price-indexed transfer. Not yet tested; the test is `strategy`-style: SB2 realistic under P with `levy_dividend_target_in_breads = 0`. **For the talk: the greedy inflation is not evidence that SuMSy breaks.** What strains the SuMSy village remains the five items of the earlier list (no government, fixed income while prices move, money pooling where the fee cannot reach, indexed contracts' unemployment, and the surplus rule). Also unsettled: the realistic SB2 *debt* village moved a lot with the same single change (T: public debt 49k → 122k, unemployed 17.5 → 90, bread 2.2 → 6.4; P: debt 87k → 46k) — four seeds, treat its realistic numbers as unsettled. In all variants the village runs on **two bakeries from year 2–3** (the contraction trap, open since 21 October).
 
 ## 4c. THE TALK'S NUMBERS — the full ladder on the same fiscal rules, with the two-loaf floor (23 Oct, four seeds, version 2026-10-22.13; the folders `…_fiscal_taxes_…22.13` and `…_fiscal_parking_…22.13`, 876 runs each)
 
