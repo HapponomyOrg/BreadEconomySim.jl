@@ -158,7 +158,7 @@ function manage_government_reserve!(model)
         model.consumption_tax_scale = model.tax_scale; model.wealth_tax_scale = model.tax_scale   # :none — one scale for all five
         model.profit_tax_scale = model.tax_scale
         p.basic_income_target_in_breads > 0 || (model.parking_tax_scale = model.tax_scale)   # 23 Oct: unless the parking tax is the income's lever
-        (p.levy_dividend_target_in_breads > 0 || p.land_levy_dividend || p.surplus_redistribution_share > 0) || (model.land_levy_scale = model.tax_scale)   # 23 Oct: the levy follows the tax scale only when it is a tax
+        (p.levy_dividend_target_in_breads > 0 || p.land_levy_dividend || p.surplus_redistribution_share > 0) || (model.land_levy_scale = max(model.tax_scale, p.levy_scale_floor))   # 23 Oct: the levy follows the tax scale only when it is a tax
         (p.surplus_redistribution_share > 0 || p.land_levy_dividend) && p.levy_dividend_target_in_breads <= 0 && (model.land_levy_scale = 1.0)   # 12 Oct: the levy's surplus is the dividend; 23 Oct: with the levy paid out it is not a tax lever — unless it is the dividend's lever (levy_dividend_target_in_breads), set in pay_levy_dividend!
         return nothing
     end
@@ -185,7 +185,7 @@ function manage_government_reserve!(model)
             family == :land && (p.levy_dividend_target_in_breads > 0 || p.land_levy_dividend || p.surplus_redistribution_share > 0) && continue   # 23 Oct: the levy is the dividend's lever, not a tax lever
             family == :parking && p.basic_income_target_in_breads > 0 && continue                 # 23 Oct: the parking tax is the income's lever
             f = scale_field[family]
-            setproperty!(model, f, clamp(getproperty(model, f) * (1 + shift) * (1 + r), 0.0, p.tax_scale_maximum))
+            setproperty!(model, f, clamp(getproperty(model, f) * (1 + shift) * (1 + r), family == :land ? p.levy_scale_floor : 0.0, max(p.tax_scale_maximum, family == :land ? p.levy_scale_floor : 0.0)))   # 24 Oct: the levy never below its floor
         end
     end
     (p.surplus_redistribution_share > 0 || p.land_levy_dividend) && p.levy_dividend_target_in_breads <= 0 && (model.land_levy_scale = 1.0)   # 12 Oct: with the dividend the levy is not a tax lever (23 Oct: unless it is the dividend's lever)
@@ -374,7 +374,7 @@ function pay_levy_dividend!(model)
         target_each = max(p.levy_dividend_target_in_breads * paid_bread_price(model) - income, 0.0)   # at the price last paid, not the ask
         actual_each = model.levy_dividend_this_round / length(ps)
         ratio = actual_each > 1e-9 ? target_each / actual_each : (target_each > 1e-9 ? 1 + p.levy_scale_step : 1.0)
-        model.land_levy_scale = clamp(model.land_levy_scale * clamp(ratio, 1 - p.levy_scale_step, 1 + p.levy_scale_step), 0.0, p.levy_scale_max)
+        model.land_levy_scale = clamp(model.land_levy_scale * clamp(ratio, 1 - p.levy_scale_step, 1 + p.levy_scale_step), p.levy_scale_floor, max(p.levy_scale_max, p.levy_scale_floor))   # 24 Oct: never below the floor
     end
     return nothing
 end

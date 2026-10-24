@@ -2052,6 +2052,15 @@ end
     @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., planning_margin = 0.1, price_on_expected_sales = true))) < 1e-6
 end
 
+
+@testset "the land tax never below its base rate (24 October 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., land_levy = true, land_levy_dividend = true, levy_dividend_target_in_breads = 0.5, levy_scale_floor = 1.0, number_of_landowners = 4, maximum_rounds = 10))
+    scales = Float64[]
+    for _ in 1:8; B.econo_step!(m, 1); push!(scales, m.land_levy_scale); end
+    @test all(scales .>= 1.0 - 1e-12)                                       # a low target would cut it; the floor holds it at the base rate
+    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., land_levy = true, land_levy_dividend = true, levy_dividend_target_in_breads = 2.0, levy_scale_floor = 1.0))) < 1e-6
+end
+
 @testset "cooperative forms (14 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     params(m) = B.parameters(m)

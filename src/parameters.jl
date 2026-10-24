@@ -198,6 +198,14 @@ Base.@kwdef struct SimulationParameters
     # them and buys less grain, instead of baking what the hands allow from the grain in store. Farms already harvest to their
     # target (land, labour and target); theatres sell seats. false = as built (bread = hands × grain in store).
     bakeries_bake_to_target::Bool = false
+    # 24 Oct (Stef): under own-market planning a firm that sold out plans at least a step above its target, and one that turned
+    # customers away at least what it sold plus its share of them, with its buffer — applied after the buffer (the 22 Oct
+    # expected-sales rescale cancelled the sold-out step). On in the ladder's base; false = as before (golden values).
+    respond_to_turned_away::Bool = false
+    # 24 Oct (traced, step 2 realistic seed 3): the floor per unit sold passes on at most the spoilage of the firm's planned buffer.
+    # Without the cap a refounded farm whose first grain did not sell had its floor doubled (lost share 51–99 % → the 50 % cap), sold
+    # nothing at that price, spoiled more, and kept the village on half its grain for three months. On in the ladder's base.
+    lost_share_capped_at_buffer::Bool = false
     planning_margin::Float64 = 0.0              # extra share of demand planned for (0.0 = plan exactly the population's meals)
     # 14 October (the greedy village's bakeries): plan greedy demand on last month's greedy purchases, not on the greedy villagers'
     # cash; and never target more grain than the ovens can bake — `bakery_capacity_share` of the village's labour, spread over the
@@ -278,6 +286,9 @@ Base.@kwdef struct SimulationParameters
     levy_dividend_target_in_breads::Float64 = 0.0
     levy_scale_step::Float64 = 0.1
     levy_scale_max::Float64 = 20.0
+    # 24 Oct (Stef): the land tax never falls below its base rate — the lever and the tax cuts may raise its scale, never take it
+    # under `levy_scale_floor`. 1.0 in the ladder's base; 0.0 = as before (the lever could cut it to nothing).
+    levy_scale_floor::Float64 = 0.0
     # Public land (18 October, Stef — close to Gesell's Freiland): all land is the government's; farms rent the plots they work,
     # bakeries and theatres pay for the ground they stand on, every villager for the ground they live on — ground rents set in
     # loaves, scaled with the tax levers (`tax_scale`), paid to the government as tax. Nobody owns land, so no land market, no land

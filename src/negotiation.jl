@@ -8,8 +8,13 @@ history yet."""
 function expected_sales_factor(model, seller)
     p = parameters(model)
     (p.floor_per_unit_sold && seller isa Enterprise && !isempty(seller.unsold_history)) || return 1.0
-    u = min(sum(seller.unsold_history) / length(seller.unsold_history), p.expected_unsold_cap)
-    return max(1 - u, 1 - p.expected_unsold_cap)
+    cap = p.expected_unsold_cap
+    if p.lost_share_capped_at_buffer                                         # 24 Oct (traced): only the spoilage of the stock it planned to carry —
+        planned = seller.buffer_share >= 0 ? seller.buffer_share : p.planning_margin   # stock that spoiled because nobody would pay its price must not
+        cap = min(cap, planned)                                              # raise the price further (it doubled a refounded farm's floor and starved the village)
+    end
+    u = min(sum(seller.unsold_history) / length(seller.unsold_history), cap)
+    return max(1 - u, 1 - cap)
 end
 
 """Each firm's unsold share of what it offered this month, kept for `plan_window` months (22 October)."""
@@ -430,6 +435,13 @@ function own_plan!(model, e::Enterprise, good::Symbol, per_unit::Float64, cap::I
         end
         e.expected_sales = base_expected
         expected = base_expected * (1 + e.buffer_share)
+    end
+    # 25 Oct (Stef: a firm that turns customers away should always produce more). Applied after the buffer: the rescale of 22 Oct
+    # (÷ (1 + margin)) cancelled the sold-out step under the expected-sales rule. The expected sales the price rule reads are unchanged.
+    sold_out = r.sold >= r.offered * (1 - p.unsold_share) - 1e-9
+    p.respond_to_turned_away && sold_out && (expected = max(expected, e.production_target * per_unit * (1 + p.plan_step)))   # sold out: a step above the target
+    if p.respond_to_turned_away && turned_away > 1e-9                                                          # customers turned away: at least what was wanted
+        expected = max(expected, (r.sold + turned_away) * (1 + (p.price_on_expected_sales ? max(e.buffer_share, 0.0) : p.planning_margin)))
     end
     if p.grow_only_with_reserve && cash(e) < reserve_target(model, e)       # 22 Oct: no expansion until the reserve is met
         expected = min(expected, e.production_target * per_unit)

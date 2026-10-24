@@ -22,7 +22,7 @@ function money_return_rate(model)
 end
 
 """The monthly levy on land value: the cost of holding money plus the margin, when `land_levy` is on."""
-land_levy_rate(model) = parameters(model).land_levy ? (max(-money_return_rate(model), 0.0) + parameters(model).land_levy_margin) * model.land_levy_scale : 0.0   # scaled by the fiscal policy like any tax
+land_levy_rate(model) = parameters(model).land_levy ? (max(-money_return_rate(model), 0.0) + parameters(model).land_levy_margin) * max(model.land_levy_scale, parameters(model).levy_scale_floor) : 0.0   # scaled by the fiscal policy like any tax
 
 """
 Land's worth to someone whose alternative for the money earns `alternative` a month: holding land yields the rent less the levy,
