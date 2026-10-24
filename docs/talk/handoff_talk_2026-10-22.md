@@ -56,6 +56,31 @@ Review notes (facts and wording; the talk chat decides what to do with them):
 
 
 
+## 4g. The 2026-10-24.7 runs (24 Oct, evening; Stef's talk_run.jl list) — what they confirm and what they overturn
+
+On `.7`: base B, BG, SB2, V8 under both packages; realistic B, BG, SB2 under both; V8 with its old theatres (1.0) under T; rung 1 with own planning. **Not in it:** the realistic steps 0, 2, 8, 11, V8 and B-nodiv.
+
+**Confirmed — the realistic set is stable across .4 → .7:** realistic B, BG and SB2 under T are identical to `.4` to the last decimal (the `.6` bake-to-target rule never binds there; `.7`'s price rule was already in the realistic set). Under P two cells move: B SuMSy (bread 3.72 → 3.38) and **SB2 debt village (public debt 46k → 74k, poorest −0.9 → 6.6, unemployed 36 → 8.5)**. So the §4f realistic numbers stand for B, BG and SB2 under T; under P use `.7` for SB2.
+
+**Overturned — the greedy village does not equalise the poorest.** The talk chat's slide point ("the greedy SuMSy village's poorest end as poor as the debt village's", 5.2 against 5.1) came from base SB2 on `.4`. It does not hold on the realistic set (SuMSy 36.9 meals against 0.7 under T; 15.6 against 6.6 under P) and no longer on the base either once the expected-sales price rule is in (`.7`: SuMSy 65.1 against 4.3 under T). **Withdraw it from the slide.** The greedy village remains a stress test SuMSy passes: everyone alive, no debt, the poorest well above the debt village's.
+
+**V8 with its prices restored (base `.7`):** both villages still deflate about 8 % a year (bread 3.0 → 1.1), so the deflation is real on the base too, if far slower than the void run's 27 %; the debt village borrows 72k under T (42k with the old theatre ratio, 54k under P) with 160–180 unemployed; the SuMSy village keeps everyone, 0 unemployed, poorest 37–39 meals. **The `.13` V8 ("holds its debt at 17k, its poorest pay for it") does not survive the newer rules**: on the current version V8 borrows. If the talk keeps a V8 slide it is either `.13` (labelled as the older rules) or the current one with the message "even the productive village borrows". The realistic V8 is still unknown (the `.4` run is void).
+
+**Rung 1 with own planning (`.7`, T):** debt 189 (worst 173), SuMSy 481 (451); the SuMSy village inflates 3.4 % a year there (poorest 3.8 meals) — own planning helps survival at the bare step and costs SuMSy price stability.
+
+**Base `.7` against `.8`, for the record:** less deflation in the SuMSy village (B: −8.0 → −4.6 % a year, as the expected-sales rule should do), its poorest tenth lower (B: 42 → 31 meals; under P 39 → 29), the debt village's B unchanged (75–76k). SB2 moves a lot (debt 160k → 78k under T) but mixes two changes (the `.0` greedy ask and the `.7` price rule).
+
+**Still to run for a realistic talk on one version** (`.9` = `.7` in results): realistic V8 (both packages, 16 jobs) — needed; and, for one label throughout, realistic 0, 2, 8, 11 and B-nodiv (72 jobs; the `.4` values are probably unchanged under T, as B/BG/SB2 show, but not proven).
+```julia
+include("scripts/run_all.jl")
+run_all(seeds = 4, fiscal = :taxes,   rungs = ["V8 "], variant = REALISTIC_LABOUR, variant_label = "realistic")
+run_all(seeds = 4, fiscal = :parking, rungs = ["V8 "], variant = REALISTIC_LABOUR, variant_label = "realistic")
+# optional, one version throughout:
+run_all(seeds = 4, fiscal = :taxes,   rungs = ["0 ", "2 ", "8 ", "11 ", "B-nodiv"], variant = REALISTIC_LABOUR, variant_label = "realistic")
+run_all(seeds = 4, fiscal = :parking, rungs = ["2 ", "8 ", "11 ", "B-nodiv"],       variant = REALISTIC_LABOUR, variant_label = "realistic")
+```
+(`variant_label` without a `variant` is ignored by design, so the base calls of talk_run.jl wrote to the plain `fiscal_<pkg>` folders.)
+
 ## 4f. The realistic set on the current base (24 Oct, version 2026-10-24.4, four seeds, both packages) — and the levy-at-base-rate run
 
 **Realistic = the base of `.4` plus contracts for four fifths of the hands, own-market planning, the :long floor and the land rules. Alive / public debt / poorest tenth (wealth) / wealth Gini:**
