@@ -92,6 +92,7 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol; fiscal::Symb
         # no hunger and the most evenly spread money — under the realistic price rules (they are behaviour, not policy): the
         # co-op village of side rung 9 with rung 10's prices and rung 11's public reserve. Run on both sides for the mirror.
         ("B best SuMSy village: co-ops + reserve", (; V8_DEBT..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE...), (; V8_SUMSY..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE...)),
+        ("B-nodiv best village, the land tax kept as revenue", (; V8_DEBT..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE...), (; V8_SUMSY..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE...)),   # 24 Oct (the talk chat): rung B with the levy as ordinary revenue — no dividend, no meal; the benefit on both sides (apply_fiscal_package sets it)
         ("BG best village, with gold", (; V8_DEBT..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE..., gold_grams_per_villager = 100.0), (; V8_SUMSY..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE..., gold_grams_per_villager = 100.0)),   # 23 Oct (the talk chat): rung B with the gold holders of R8, for the inequality slide
         ("SB1 best SuMSy + greedy quarter", (; V8_DEBT..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE..., GREEDY_Q...), (; V8_SUMSY..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE..., GREEDY_Q...)),
         ("SB2 best SuMSy + everyone greedy", (; V8_DEBT..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE..., GREEDY_A...), (; V8_SUMSY..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE..., GREEDY_A...)),
@@ -364,6 +365,11 @@ function apply_fiscal_package(rungs, fiscal::Symbol; surplus_rule::Symbol = :deb
         gov = has_government(kd) || has_government(ks); levy = has_levy(kd) || has_levy(ks); charge = has_charge(kd) || has_charge(ks)
         kd2 = isempty(kd) ? kd : (; kd..., fiscal_package(fiscal, gov, levy, charge, :debt; surplus_rule)...)
         ks2 = isempty(ks) ? ks : (; ks..., fiscal_package(fiscal, gov, levy, charge, :sumsy; surplus_rule)...)
+        if startswith(name, "B-nodiv")                                        # 24 Oct (the talk chat §2): the land tax as ordinary revenue on both sides —
+            nodiv = (; land_levy = true, land_levy_dividend = false, levy_dividend_target_in_breads = 0.0,   # no dividend, no levy lever,
+                       basic_income_target_in_breads = 0.0, unemployment_fee_in_breads = 2.0, minimum_fee_in_breads = 2.0)   # no meal under P, the benefit back on at two loaves
+            kd2 = isempty(kd2) ? kd2 : (; kd2..., nodiv...); ks2 = isempty(ks2) ? ks2 : (; ks2..., nodiv...)
+        end
         push!(out, (name, kd2, ks2))
     end
     return out

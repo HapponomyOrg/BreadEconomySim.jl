@@ -56,6 +56,24 @@ Review notes (facts and wording; the talk chat decides what to do with them):
 
 
 
+## 4e. Answers to the talk chat's fix handoff of 24 Oct (docs/talk/handoff_code_talk_fix_2026-10-24.md)
+
+**§1, the land tax paid out whatever the budget:** confirmed, that is what `.8` and later do; nothing changed.
+
+**§2, rung B with the land tax kept as revenue — built as rung `B-nodiv`** ("best village, the land tax kept as revenue"), both packages, both villages: the levy is collected and stays in the budget (no dividend, so it is scaled with the other taxes when the reserve is full), the levy lever is off, and under P the meal is off and the unemployment benefit is back on at two loaves on both sides, as asked. Under T only the dividend changes. The identity test covers it (0 differences outside the money under both packages). The call and the report format are below; the numbers go here when the run is in.
+
+**§3, the meal under P — one correction to the talk chat's description:** the meal is not "paid as the land-tax dividend scaled to two loaves" on both sides. On the **SuMSy** side it is: the levy's scale is the lever that keeps income (5) + levy dividend at two loaves at the price last paid. On the **debt** side the levy stays at its base rate and a **basic income** brings income + dividend to two loaves, funded by the **parking tax**, whose scale is the lever (up to twenty times; what it cannot cover is borrowed). No unemployment benefit beside it on either side. The talk's spending line for P should read: "a meal for everyone — from the land tax in the SuMSy village, from the parking tax and borrowing in the debt village; no separate benefit". The debt village borrows 142–178k for it over ten years (§4d).
+
+**§4, one version for the slides:** the `.0` change (the greedy ask on the price last paid) acts wherever greedy firms sell out — SB2 is affected, B and BG are not (no greedy firms there). The `.1`–`.3` changes are speed only and proven identical (§ regression). So B and BG on `.8` stand; **SB2 must be rerun** on the current version, and so must step 0 (the bank changes of `.8` act there). 
+
+```julia
+include("scripts/run_all.jl")
+run_all(seeds = 4, fiscal = :taxes,   rungs = ["0 ", "SB2", "B-nodiv"])     # 8 + 8 + 8 jobs
+run_all(seeds = 4, fiscal = :parking, rungs = ["SB2", "B-nodiv"])           # 8 + 8 jobs
+run_all(summary_only = true, fiscal = :taxes); run_all(summary_only = true, fiscal = :parking)
+```
+Folders `…_fiscal_<pkg>_120months_2026-10-24.4`. The summaries carry alive (mean, worst), public debt at month 120, `public_debt_peak`, the tax scale at the end, the cash and wealth of the poorest tenth, the three Ginis; "still climbing in the last two years" is read from the part files (month 96 against 120).
+
 ## 4d. The 2026-10-23.8 runs (24 Oct, four seeds): the new fiscal rule, the meal under P, the bank and theatre changes — READ BEFORE MIXING WITH §4c
 
 Six folders on `.8`: B, BG, SB2 and V8 under both packages (base labour market), B/BG/SB2 under both with the realistic set, rung 1 with own-market planning, and V8 with its old theatre ratio (`V8_full`). **These are on different rules from §4c** (the levy paid out per head and never scaled as a tax, taxes cut to 5 % once the 3-month reserve is full, the meal under P funded by the parking tax with no unemployment benefit beside it, the banks' rate on the going wage with staff scaling with loans, theatres at two customers per unit) **and they move the SuMSy inequality numbers a lot**. Do not put a `.8` number beside a `.13` number on one slide.
