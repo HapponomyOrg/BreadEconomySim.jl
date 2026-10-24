@@ -50,6 +50,16 @@ function debt_service_per_unit(model, seller, goods_per_unit::Float64)
     return due / volume
 end
 
+"""The price of a good as last paid (24 October): last month's average transaction price from the data row, falling back to
+the expected price when there is no row or no trade yet."""
+function last_paid_price(model, g::Symbol)
+    isempty(model.data) && return expected_price(model, g)
+    col = g == :bread ? :price_bread : g == :grain ? :price_grain : g == :ticket ? :price_ticket : g == :wage ? :price_wage : nothing
+    col === nothing && return expected_price(model, g)
+    x = getproperty(model.data[end], col)
+    return (x isa Number && !isnan(x) && x > 0) ? Float64(x) : expected_price(model, g)
+end
+
 """The factor a sector's floor is raised by when it prices on a target margin (21 October): 1 + the net margin grossed up for
 the profit tax, so that the margin left after tax is the target."""
 function margin_factor(model, kind::Symbol, firm_pricing::Symbol = :sector)
@@ -304,7 +314,8 @@ function adapt_prices!(model)
                 r.idle_rounds = 0
                 (!p.ask_increase_only_on_unmet_demand || demand_unmet(model, a, g)) && (a.ask[g] *= 1 + p.ask_increase_after_sellout)
                 if p.greedy_pricing && a isa Enterprise && g != :wage && greedy_firm(model, a)       # 13 Oct: a greedy firm takes what the market allows
-                    a.ask[g] = max(a.ask[g], expected_price(model, g) * p.bread_bid_base_multiplier)
+                    ceiling_base = p.greedy_ask_on_paid_price ? last_paid_price(model, g) : expected_price(model, g)   # 24 Oct: on the price paid, not the asks
+                    a.ask[g] = max(a.ask[g], ceiling_base * p.bread_bid_base_multiplier)
                 end
             elseif r.sold > 1e-9
                 r.idle_rounds = 0

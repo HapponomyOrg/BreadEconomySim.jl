@@ -55,6 +55,31 @@ Review notes (facts and wording; the talk chat decides what to do with them):
 **Caveats to state once:** the income (5) and the cushion (30) are fixed in money, so a deflating village makes them worth more every year and an inflating one less — part of SuMSy's record at the later steps is that drift; the villages do not grow; one step of the ladder is one configuration, not a calibration.
 
 
+
+## 4d. The 2026-10-23.8 runs (24 Oct, four seeds): the new fiscal rule, the meal under P, the bank and theatre changes — READ BEFORE MIXING WITH §4c
+
+Six folders on `.8`: B, BG, SB2 and V8 under both packages (base labour market), B/BG/SB2 under both with the realistic set, rung 1 with own-market planning, and V8 with its old theatre ratio (`V8_full`). **These are on different rules from §4c** (the levy paid out per head and never scaled as a tax, taxes cut to 5 % once the 3-month reserve is full, the meal under P funded by the parking tax with no unemployment benefit beside it, the banks' rate on the going wage with staff scaling with loans, theatres at two customers per unit) **and they move the SuMSy inequality numbers a lot**. Do not put a `.8` number beside a `.13` number on one slide.
+
+**Base labour market — alive / public debt / poorest tenth / wealth Gini:**
+
+| rung | T, debt | T, SuMSy | P, debt | P, SuMSy |
+|---|---|---|---|---|
+| B co-ops + reserve | 512 / 75k / 4.1 / 0.49 | 512 / 0 / 42.0 / **0.71** | 512 / 154k / 32.7 / 0.54 | 512 / 0 / 38.9 / 0.73 |
+| BG with gold (everything) | 511 / 73k / 3.8 / 0.53 | 512 / 0 / 32.2 / 0.90 | 512 / 142k / 22.3 / 0.78 | 512 / 0 / 35.0 / 0.90 |
+| SB2 everyone greedy | 512 / 160k / 4.0 / 0.44 | 512 / 0 / 5.7 / 0.27 | 512 / 178k / 37.9 / 0.37 | 512 / 0 / 19.7 / 0.44 |
+| V8 productive (theatres at 2.0) | 512 / **87k** / 0.5 / 0.80 | 512 / 0 / 180 / 0.64 | 512 / 53k / 37.2 / 0.36 | 512 / 0 / 125 / 0.66 |
+| V8 with its old theatres (1.0), T only | 511 / 52k / 0.9 / 0.70 | 512 / 0 / 151 / 0.70 | — | — |
+
+What changed against §4c and why it matters for the slides:
+- **SuMSy's wealth Gini at B went from 0.42 (§4c) to 0.71.** Under the old rule the whole surplus was paid per head every month; under the new one only the levy is paid out and the surplus cuts taxes to 5 % — the poorest tenth are richer (42 meals against 27) but the middle gets less, and the Gini rises to the debt village's level (0.49–0.54 debt, 0.71–0.73 SuMSy). **The inequality slide's SuMSy advantage is a property of the per-head surplus, not of the money alone.** Say it that way or keep the slide on `.13` throughout.
+- **V8 no longer holds its debt** (87k under T; 52k with its old theatres): with the levy paid out instead of into the budget the balanced-budget village borrows. The "cost of keeping the debt under wraps" slide is a `.13` story; on `.8` the story is that V8's surplus went to the villagers.
+- **Under P the debt village pays the meal and borrows for it**: 142–178k in ten years, its poorest tenth at 22–38 meals; SuMSy pays it from the levy with taxes at 5 % and no debt. That is the fair comparison Stef asked for and the cleanest `.8` result: the same meal for everyone, one money borrowing 150k for it, the other not.
+- SuMSy's cash Gini is still the higher one (0.38–0.49 against 0.12–0.19).
+
+**Realistic set (contracts 0.8, own-market planning, the :long floor, land rules):** T — B debt 511 / 75k / 3.0; BG debt 487 (worst 424); SuMSy 512 everywhere, B poorest 35.8; **SB2 SuMSy inflates 6 % a year (bread 19.6) and its government borrows 73k**. P — B debt 486 (worst 409) / 110k; SuMSy 512; **SB2 SuMSy bread 16.5, +10.6 % a year, 41k of public debt**. The realistic set with everyone greedy is not stable and the SuMSy village borrows there for the first time; the realistic numbers stay "work in progress".
+
+**Rung 1 with own-market planning** (no government): debt 187 (base: about 140), SuMSy 475 (base 452); SuMSy inflates 3 % a year there and its poorest hold 3.3 meals. Own planning helps survival a little at the bare steps.
+
 ## 4c. THE TALK'S NUMBERS — the full ladder on the same fiscal rules, with the two-loaf floor (23 Oct, four seeds, version 2026-10-22.13; the folders `…_fiscal_taxes_…22.13` and `…_fiscal_parking_…22.13`, 876 runs each)
 
 The base now has a collection floor of one meal (two loaves) in both villages. **These supersede §4b for every side-by-side figure.** Alive of 512 / public debt after ten years / poorest tenth (meals) / wealth Gini; the worst run in brackets.

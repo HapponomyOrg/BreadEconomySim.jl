@@ -520,6 +520,11 @@ Base.@kwdef struct SimulationParameters
     # Greedy firms (13 October, Stef): a firm whose owners are greedy (by share; without owners, a greedy village) prices as high
     # as the market allows — on a sell-out it sets its ask to what buyers will pay (the overpay ceiling), not a step up.
     greedy_pricing::Bool = false
+    # 24 Oct (traced): the greedy ask on a sell-out was the EXPECTED price × the overpay multiplier, and the expected price comes
+    # from the asks — with wages indexed to bread each sell-out ratcheted from a higher base (the realistic greedy SuMSy village:
+    # bread 5 → 16–20 in years 6–10). With this on, the ceiling is the price LAST PAID × the multiplier (last month's average
+    # transaction price), which cannot feed on the asks. false = as built.
+    greedy_ask_on_paid_price::Bool = false
     # Distress pricing (13 October, Stef): a firm whose overdue obligations have reached `distress_share` of the winding-up
     # threshold abandons the step limit and sets its price to what would clear them within `distress_months`, cost plus the
     # arrears per unit it expects to sell — the last thing a firm does before it fails.
