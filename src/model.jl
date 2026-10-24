@@ -71,7 +71,7 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
     props[:single_stream] = StableRNG(stream_seed(parameters.seed, :single))    # random_streams = false: one stream for everything
     props[:parameters] = parameters
     props[:loans] = Loan[]
-    props[:next_loan_id] = 0; props[:next_peer_loan_id] = 0; props[:loans_pruned] = 0; props[:peer_loans_pruned] = 0; props[:loan_index_version] = 0; props[:loan_index] = nothing
+    props[:next_loan_id] = 0; props[:next_peer_loan_id] = 0; props[:loans_pruned] = 0; props[:peer_loans_pruned] = 0; props[:loan_index_version] = 0; props[:loan_index] = nothing; props[:share_firms_cache] = nothing
     props[:wage_contracts] = WageContract[]
     props[:promises] = Promise[]
     props[:trade_arrears] = Promise[]

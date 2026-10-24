@@ -102,13 +102,15 @@ else at the last traded price (`share_wealth`). Co-op membership stakes are left
 function measured_share_wealth(model, w::Person)
     parameters(model).shares_at_book_in_measures || return share_wealth(model, w)
     total = 0.0
-    for e in model.agent_list                                              # 24 Oct (speed): no copy of the list — the same order
-        (e.alive && e isa Enterprise && e.ownership == :shareholders) || continue
+    c = model.share_firms_cache                                              # 24 Oct (speed): the snapshot while record! runs — the same firms, order and values
+    sh = c === nothing ? (e for e in model.agent_list if e.alive && e isa Enterprise && e.ownership == :shareholders) : c.sh
+    for e in sh
         u = get(e.shares, w.id, 0.0); u > 0 || continue
-        units = sum(values(e.shares)); units > 0 || continue
-        total += u * max(book_value(model, e), 0.0) / units
+        units = c === nothing ? sum(values(e.shares)) : c.units[e.id]; units > 0 || continue
+        bv = c === nothing ? max(book_value(model, e), 0.0) : c.book[e.id]
+        total += u * bv / units
     end
-    return total + (share_wealth(model, w) - sum(e.share_price * get(e.shares, w.id, 0.0) for e in alive_agents(model) if e isa Enterprise && e.ownership == :shareholders; init = 0.0))   # the co-op part of share_wealth, unchanged
+    return total + (share_wealth(model, w) - sum(e.share_price * get(e.shares, w.id, 0.0) for e in sh; init = 0.0))   # the co-op part of share_wealth, unchanged
 end
 
 function record!(model)
@@ -330,7 +332,9 @@ function check_termination!(model)
 end
 
 function record_and_adapt!(model)
+    model.share_firms_cache = share_firms_snapshot(model)                 # 24 Oct (speed): the firms, their book values and share totals, fixed while the row is made
     record!(model)
+    model.share_firms_cache = nothing
     for e in model.enterprise_list                                     # the last three months' sales, for the liquidation test
         push!(e.turnover_history, e.revenue_this_round); length(e.turnover_history) > 3 && popfirst!(e.turnover_history)
         e.revenue_this_round = 0.0

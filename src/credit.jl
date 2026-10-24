@@ -1825,8 +1825,23 @@ function trade_units!(model, e::Enterprise, seller::Person, buyers, offer::Float
     return sold
 end
 
-share_wealth(model, w::Person) = sum(e.share_price * get(e.shares, w.id, 0.0) for e in model.agent_list if e.alive && e isa Enterprise && e.ownership == :shareholders; init = 0.0) +   # 24 Oct (speed): the agent list in its own order, no copy — the same sum
-                                 sum((parameters(model).startup_financing == :paid_in_capital ? parameters(model).membership_share_price * get(e.members, w.id, 0) : book_per_unit(model, e) * get(e.shares, w.id, 0.0)) for e in model.agent_list if e.alive && e isa Enterprise && e.ownership == :cooperative; init = 0.0)
+function share_wealth(model, w::Person)
+    c = model.share_firms_cache                                              # 24 Oct (speed): set while record! runs — the same firms in the same order
+    sh = c === nothing ? (e for e in model.agent_list if e.alive && e isa Enterprise && e.ownership == :shareholders) : c.sh
+    co = c === nothing ? (e for e in model.agent_list if e.alive && e isa Enterprise && e.ownership == :cooperative) : c.co
+    paid_in = parameters(model).startup_financing == :paid_in_capital
+    return sum(e.share_price * get(e.shares, w.id, 0.0) for e in sh; init = 0.0) +
+           sum((paid_in ? parameters(model).membership_share_price * get(e.members, w.id, 0) : (c === nothing ? book_per_unit(model, e) : c.bpu[e.id]) * get(e.shares, w.id, 0.0)) for e in co; init = 0.0)
+end
+
+"""The shareholder and cooperative firms in list order, with each firm's book value (floored at 0), book per unit and share total
+— fixed while the data row is made (24 October, speed)."""
+function share_firms_snapshot(model)
+    sh = Enterprise[e for e in model.agent_list if e.alive && e isa Enterprise && e.ownership == :shareholders]
+    co = Enterprise[e for e in model.agent_list if e.alive && e isa Enterprise && e.ownership == :cooperative]
+    return (; sh, co, book = Dict(e.id => max(book_value(model, e), 0.0) for e in sh), units = Dict(e.id => sum(values(e.shares)) for e in sh),
+              bpu = Dict(e.id => book_per_unit(model, e) for e in co))
+end
 
 
 # ---- cooperative membership (13 September 2026) --------------------------------------
