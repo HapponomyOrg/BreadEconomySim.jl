@@ -102,8 +102,8 @@ else at the last traded price (`share_wealth`). Co-op membership stakes are left
 function measured_share_wealth(model, w::Person)
     parameters(model).shares_at_book_in_measures || return share_wealth(model, w)
     total = 0.0
-    for e in alive_agents(model)
-        (e isa Enterprise && e.ownership == :shareholders) || continue
+    for e in model.agent_list                                              # 24 Oct (speed): no copy of the list — the same order
+        (e.alive && e isa Enterprise && e.ownership == :shareholders) || continue
         u = get(e.shares, w.id, 0.0); u > 0 || continue
         units = sum(values(e.shares)); units > 0 || continue
         total += u * max(book_value(model, e), 0.0) / units
@@ -116,6 +116,7 @@ function record!(model)
     battr, bpool = attributed_firm_bonds(model)                              # 20 Oct: firm-held bonds in their owners' wealth
     mw_raw(w) = net_wealth(model, w) - share_wealth(model, w) + measured_share_wealth(model, w) + get(battr, w.id, 0.0) + bpool / max(length(ps), 1)   # the measured wealth of a person (shares at book)
     mw_cache = Dict{Int, Float64}()
+    gw = Dict(g => group_wealth(model, g) for g in (:workers, :landowners, :farm, :bakery, :bank, :government))   # 24 Oct (speed): once per group — the row asked twice
     mw(w) = get!(() -> mw_raw(w), mw_cache, w.id)                            # 24 Oct (profile): the sort below called mw ~n log n times, each with five all-agent scans; the state is read-only here, so once per person is the same value
     banks = enterprises(model, :bank); gov = government(model)
     r = current_round(model)
@@ -282,12 +283,12 @@ function record!(model)
         dividends_forprofit = sum(e.dividend_history[end] for e in alive if e isa Enterprise && e.ownership == :shareholders && !isempty(e.dividend_history); init = 0.0),
         founders_cash = sum(cash(w) for w in ps if any(e -> e isa Enterprise && e.ownership == :shareholders && haskey(e.shares, w.id), alive); init = 0.0), cash_forprofit = sum(cash(e) for e in alive if e isa Enterprise && e.ownership == :shareholders; init = 0.0),
         gini_net_wealth_all = gini([net_wealth(model, a) for a in alive if !is_government(a) && !is_authority(a)]),
-        n_workers = group_wealth(model, :workers)[1], wealth_workers = group_wealth(model, :workers)[2],
-        n_landowners = group_wealth(model, :landowners)[1], wealth_landowners = group_wealth(model, :landowners)[2],
-        n_farms = group_wealth(model, :farm)[1], wealth_farms = group_wealth(model, :farm)[2],
-        n_bakeries = group_wealth(model, :bakery)[1], wealth_bakeries = group_wealth(model, :bakery)[2],
-        n_banks = group_wealth(model, :bank)[1], wealth_banks = group_wealth(model, :bank)[2],
-        wealth_government = group_wealth(model, :government)[2],
+        n_workers = gw[:workers][1], wealth_workers = gw[:workers][2],
+        n_landowners = gw[:landowners][1], wealth_landowners = gw[:landowners][2],
+        n_farms = gw[:farm][1], wealth_farms = gw[:farm][2],
+        n_bakeries = gw[:bakery][1], wealth_bakeries = gw[:bakery][2],
+        n_banks = gw[:bank][1], wealth_banks = gw[:bank][2],
+        wealth_government = gw[:government][2],
         land_price = land_price(model), land_price_traded = land_valuation_price(model),
         deaths = count(a -> a isa Person && !a.alive && a.death_round == r, agents_by_id(model)),
         closures = model.closures,

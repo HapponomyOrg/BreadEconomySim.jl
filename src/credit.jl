@@ -1761,13 +1761,15 @@ function share_market!(model)
     for e in alive_agents(model)
         (e isa Enterprise && e.ownership == :shareholders) || continue
         buyers = stable_shuffle(rng, [w for w in persons(model) if !hoards_cash(w) && cash(w) - buffer_target(model, w) > 0])
-        sort!(buyers; by = w -> (w.greed == :greedy ? 0 : 1, -valuation(model, w, e)))
+        vcache = Dict{Int, Float64}()                                         # 24 Oct (speed): a person's valuation of e cannot change within the
+        val(w) = get!(() -> valuation(model, w, e), vcache, w.id)             # month's share market (trades move money and shares between persons only)
+        sort!(buyers; by = w -> (w.greed == :greedy ? 0 : 1, -val(w)))
         # --- distress sellers (unchanged): a tenth of the holding at a falling ask ---
         for (hid, units) in collect(e.shares)
             seller = model[hid]
             (seller isa Person && seller.alive && cash(seller) < meal_price(model) && units >= 1) || continue
-            seller.share_ask <= 0 && (seller.share_ask = max(valuation(model, seller, e), 0.01))
-            sold = trade_units!(model, e, seller, buyers, min(units, 10.0), seller.share_ask, cash_yield; distress = true)
+            seller.share_ask <= 0 && (seller.share_ask = max(val(seller), 0.01))
+            sold = trade_units!(model, e, seller, buyers, min(units, 10.0), seller.share_ask, cash_yield; distress = true, val = val)
             seller.share_ask = sold > 0 ? seller.share_ask : max(seller.share_ask * (1 - p.share_step), 0.01)
         end
         # --- founders: voluntary sales down to the control floor ---
@@ -1775,11 +1777,11 @@ function share_market!(model)
         for fid in stable_shuffle(rng, e.founder_ids)
             f = model[fid]; (f isa Person && f.alive && get(e.shares, fid, 0.0) >= 1) || continue
             room = founders_stake(e) - floor_units; room < 1 && break
-            own = valuation(model, f, e)
+            own = val(f)
             dear = [l for l in debtor_loans(model, f) if l.debt.interest_rate > f.required_yield]      # debt money: loans costing more than the shares earn
             want = !isempty(dear)                                                                   # sell to retire them
             reservation = want ? max(own * 0.9, 0.01) : own * (1 + 1e-6)                                # else only above own valuation
-            sold = trade_units!(model, e, f, buyers, min(get(e.shares, fid, 0.0), floor(room)), reservation, cash_yield)
+            sold = trade_units!(model, e, f, buyers, min(get(e.shares, fid, 0.0), floor(room)), reservation, cash_yield; val = val)
             sold > 0 && !isempty(dear) && for l in sort(dear; by = l -> -l.debt.interest_rate); repay_extra!(model, l, cash(f) - buffer_target(model, f)); end
         end
         filter!(kv -> kv.second > 1e-6, e.shares)
@@ -1790,11 +1792,11 @@ end
 """Sell up to `offer` units of `e` from `seller` to the keenest buyers above `reservation`; returns units sold."""
 deferred_rate(model) = (p = parameters(model); isnan(p.deferred_payment_rate) ? (p.monetary_system == :sumsy ? p.peer_loan_rate : 0.005) : p.deferred_payment_rate)
 
-function trade_units!(model, e::Enterprise, seller::Person, buyers, offer::Float64, reservation::Float64, cash_yield::Float64; distress::Bool = false)
+function trade_units!(model, e::Enterprise, seller::Person, buyers, offer::Float64, reservation::Float64, cash_yield::Float64; distress::Bool = false, val = w -> valuation(model, w, e))
     p = parameters(model); sold = 0.0
     for b in buyers
         b === seller && continue
-        v = valuation(model, b, e)
+        v = val(b)
         v > reservation || continue
         surplus = cash(b) - buffer_target(model, b)
         price = (v + reservation) / 2
@@ -1823,8 +1825,8 @@ function trade_units!(model, e::Enterprise, seller::Person, buyers, offer::Float
     return sold
 end
 
-share_wealth(model, w::Person) = sum(e.share_price * get(e.shares, w.id, 0.0) for e in alive_agents(model) if e isa Enterprise && e.ownership == :shareholders; init = 0.0) +
-                                 sum((parameters(model).startup_financing == :paid_in_capital ? parameters(model).membership_share_price * get(e.members, w.id, 0) : book_per_unit(model, e) * get(e.shares, w.id, 0.0)) for e in alive_agents(model) if e isa Enterprise && e.ownership == :cooperative; init = 0.0)
+share_wealth(model, w::Person) = sum(e.share_price * get(e.shares, w.id, 0.0) for e in model.agent_list if e.alive && e isa Enterprise && e.ownership == :shareholders; init = 0.0) +   # 24 Oct (speed): the agent list in its own order, no copy — the same sum
+                                 sum((parameters(model).startup_financing == :paid_in_capital ? parameters(model).membership_share_price * get(e.members, w.id, 0) : book_per_unit(model, e) * get(e.shares, w.id, 0.0)) for e in model.agent_list if e.alive && e isa Enterprise && e.ownership == :cooperative; init = 0.0)
 
 
 # ---- cooperative membership (13 September 2026) --------------------------------------
