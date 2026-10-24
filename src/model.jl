@@ -71,6 +71,7 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
     props[:single_stream] = StableRNG(stream_seed(parameters.seed, :single))    # random_streams = false: one stream for everything
     props[:parameters] = parameters
     props[:loans] = Loan[]
+    props[:next_loan_id] = 0; props[:next_peer_loan_id] = 0; props[:loans_pruned] = 0; props[:peer_loans_pruned] = 0; props[:loan_index_version] = 0; props[:loan_index] = nothing
     props[:wage_contracts] = WageContract[]
     props[:promises] = Promise[]
     props[:trade_arrears] = Promise[]
@@ -311,7 +312,7 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
                 for (k, f) in enumerate(founders)
                     bank = banks[mod(k - 1, length(banks)) + 1]
                     debt = bank_loan(bank.balance, f.balance, per_founder, parameters.startup_loan_rate, parameters.startup_loan_term, 1, 0)
-                    push!(model.loans, Loan(length(model.loans) + 1, bank.id, f.id, debt, 0, false, 0, false, 0.0))
+                    push!(model.loans, Loan(next_loan_id!(model), bank.id, f.id, debt, 0, false, 0, false, 0.0))
                     model.cumulative_money_created += per_founder
                     log_event!(model, :loan; actor = f.id, agent_kind = :person, lender = bank.id, amount = per_founder, rate = parameters.startup_loan_rate, purpose = :founding)
                 end
@@ -339,7 +340,7 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
         for e in [x for x in alive_agents(model) if is_producer(x)]
             bank = banks[mod(e.id, length(banks)) + 1]; amt = round(reserve_target(model, e), digits = 4)
             debt = bank_loan(bank.balance, e.balance, amt, parameters.startup_loan_rate, parameters.startup_loan_term, 1, 0)
-            push!(model.loans, Loan(length(model.loans) + 1, bank.id, e.id, debt, 0, false, 0, false, 0.0)); model.cumulative_money_created += amt
+            push!(model.loans, Loan(next_loan_id!(model), bank.id, e.id, debt, 0, false, 0, false, 0.0)); model.cumulative_money_created += amt
         end
     elseif parameters.initial_endowment == :norm
         endow_at_norm!(model)
@@ -376,7 +377,7 @@ function endow_at_norm!(model)
         bank = banks[mod(k - 1, length(banks)) + 1]
         amount = round(reserve_target(model, e) + share, digits = 4)
         debt = bank_loan(bank.balance, e.balance, amount, p.startup_loan_rate, p.startup_loan_term, 1, 0)
-        push!(model.loans, Loan(length(model.loans) + 1, bank.id, e.id, debt, 0, false, 0, false, 0.0))
+        push!(model.loans, Loan(next_loan_id!(model), bank.id, e.id, debt, 0, false, 0, false, 0.0))
         model.cumulative_money_created += amount
         log_event!(model, :loan; actor = e.id, agent_kind = e.kind, lender = bank.id, amount = amount, rate = p.startup_loan_rate, purpose = :startup)
     end

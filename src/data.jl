@@ -114,7 +114,9 @@ end
 function record!(model)
     ps = persons(model); alive = alive_agents(model)
     battr, bpool = attributed_firm_bonds(model)                              # 20 Oct: firm-held bonds in their owners' wealth
-    mw(w) = net_wealth(model, w) - share_wealth(model, w) + measured_share_wealth(model, w) + get(battr, w.id, 0.0) + bpool / max(length(ps), 1)   # the measured wealth of a person (shares at book)
+    mw_raw(w) = net_wealth(model, w) - share_wealth(model, w) + measured_share_wealth(model, w) + get(battr, w.id, 0.0) + bpool / max(length(ps), 1)   # the measured wealth of a person (shares at book)
+    mw_cache = Dict{Int, Float64}()
+    mw(w) = get!(() -> mw_raw(w), mw_cache, w.id)                            # 24 Oct (profile): the sort below called mw ~n log n times, each with five all-agent scans; the state is read-only here, so once per person is the same value
     banks = enterprises(model, :bank); gov = government(model)
     r = current_round(model)
     ev = @view model.events[model.event_start:end]
@@ -172,6 +174,7 @@ function record!(model)
         bank_retained_interest = sum(b.retained_interest for b in banks; init = 0.0),
         cumulative_interest_paid = model.cumulative_interest_paid,
         cumulative_write_offs = model.cumulative_write_offs,
+        loans_issued = model.next_loan_id, peer_loans_issued = model.next_peer_loan_id, loans_active = length(model.loans), peer_loans_active = length(model.peer_loans),
         cumulative_credit_refusals = model.cumulative_credit_refusals,
         money_created = model.money_created_this_round,
         money_destroyed = model.money_destroyed_this_round,
@@ -341,6 +344,7 @@ function record_and_adapt!(model)
     update_expected_prices!(model)
     model.credit_demand_previous_round = model.credit_demand_this_round
     model.credit_unaffordable_this_round = 0; model.credit_refused_room_this_round = 0   # 23 Oct: reset after the rates are set
+    prune_settled_loans!(model)                                         # 24 Oct: after the month's row — nothing the row reports is read from a settled loan
     check_termination!(model)
     return nothing
 end

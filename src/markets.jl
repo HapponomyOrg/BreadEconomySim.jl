@@ -226,7 +226,7 @@ function land_market!(model)
                 bank = bank_of(model, b)
                 irate = pm0.land_pricing == :market ? instalment_rate(model, b) : 0.0      # 24 Sept: a market rate, negative under SuMSy
                 term = b isa Enterprise ? firm_term : pm0.instalment_rounds
-                push!(model.peer_loans, PeerLoan(length(model.peer_loans) + 1, s.id, b.id, bank === nothing ? s.id : bank.id, price, price, price / term,
+                push!(model.peer_loans, PeerLoan(next_peer_loan_id!(model), s.id, b.id, bank === nothing ? s.id : bank.id, price, price, price / term,
                                                  irate, irate, pm0.default_insurance && s isa Person, current_round(model), 0, false, false, 0.0))
                 log_event!(model, :instalment_purchase; buyer = b.id, buyer_kind = kind_of(b), seller = s.id, price = price, rounds = term)
             else

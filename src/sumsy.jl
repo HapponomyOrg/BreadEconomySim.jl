@@ -187,7 +187,7 @@ function request_peer_loan!(model, borrower::Agent, amount::Float64, purpose::Sy
         s < 0.01 && continue
         book_asset!(l.balance, DEPOSIT, -s) || continue
         book_asset!(borrower.balance, DEPOSIT, s)
-        push!(model.peer_loans, PeerLoan(length(model.peer_loans) + 1, l.id, borrower.id, bank.id, s, s, s / loan_term_for(model, borrower),
+        push!(model.peer_loans, PeerLoan(next_peer_loan_id!(model), l.id, borrower.id, bank.id, s, s, s / loan_term_for(model, borrower),
                                          rate_b, rate_l, false, current_round(model), 0, false, false, 0.0))
         log_event!(model, :peer_loan; actor = borrower.id, agent_kind = kind_of(borrower), lender = l.id, lender_kind = kind_of(l), bank = bank.id, amount = s, rate = p.peer_loan_rate, purpose = purpose)
         funded += s
@@ -238,7 +238,7 @@ function service_peer_loans!(model)
                 if cover > 0
                     transfer!(model, bank, lender, cover, :insurance_payout); bank.insurance_payouts += cover
                     l.outstanding = round(l.outstanding - cover, digits = 4)
-                    push!(model.peer_loans, PeerLoan(length(model.peer_loans) + 1, bank.id, borrower.id, bank.id, cover, cover, cover / p.instalment_rounds, 0.0, 0.0, false, current_round(model), 0, false, false, 0.0))
+                    push!(model.peer_loans, PeerLoan(next_peer_loan_id!(model), bank.id, borrower.id, bank.id, cover, cover, cover / p.instalment_rounds, 0.0, 0.0, false, current_round(model), 0, false, false, 0.0))
                     log_event!(model, :insurance_payout; bank = bank.id, seller = lender.id, buyer = borrower.id, amount = cover)
                 end
             end

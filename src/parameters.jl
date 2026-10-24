@@ -520,6 +520,11 @@ Base.@kwdef struct SimulationParameters
     # Greedy firms (13 October, Stef): a firm whose owners are greedy (by share; without owners, a greedy village) prices as high
     # as the market allows — on a sell-out it sets its ask to what buyers will pay (the overpay ceiling), not a step up.
     greedy_pricing::Bool = false
+    # 24 Oct (Stef, speed): settled loans are dropped from the loan lists at the end of each month (ids stay unique; no result
+    # column reads them), and the loan accessors read a per-agent index instead of scanning every loan ever made. Both change
+    # speed only — a run with them off is identical in every column except loans_active / peer_loans_active.
+    prune_settled_loans::Bool = true
+    index_loans::Bool = true
     # 24 Oct (traced): the greedy ask on a sell-out was the EXPECTED price × the overpay multiplier, and the expected price comes
     # from the asks — with wages indexed to bread each sell-out ratcheted from a higher base (the realistic greedy SuMSy village:
     # bread 5 → 16–20 in years 6–10). With this on, the ceiling is the price LAST PAID × the multiplier (last month's average

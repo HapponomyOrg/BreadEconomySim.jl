@@ -6,7 +6,7 @@ total_due(loan::Loan) = outstanding_principal(loan) + rest_interest(loan)
 next_installment(loan::Loan) = isempty(loan.debt.installments) ? 0.0 : Float64(loan.debt.installments[end])
 next_payment(loan::Loan) = next_installment(loan) + loan.debt.interest_rate * outstanding_principal(loan) + rest_interest(loan)
 
-debtor_loans(model, a::Agent) = [l for l in model.loans if !l.settled && l.debtor_id == a.id]
+debtor_loans(model, a::Agent) = parameters(model).index_loans ? Loan[l for l in get(loan_index(model).debtor, a.id, Loan[]) if !l.settled] : [l for l in model.loans if !l.settled && l.debtor_id == a.id]
 
 """What a firm must pay its creditors next month (21 October): the bank loans' next instalment and interest, and the peer loans'
 instalment and interest. Counted in the cost floor (per unit of planned output) and in the reserve target."""
@@ -18,9 +18,9 @@ function debt_service_due(model, a::Enterprise; interest_only::Bool = false, lon
     peer = sum((interest_only || (long_only && !long(l)) ? 0.0 : min(l.installment, l.outstanding)) + l.rate * l.outstanding for l in peer_loans_of(model, a); init = 0.0)
     return Float64(bank + peer)
 end
-creditor_loans(model, a::Agent) = [l for l in model.loans if !l.settled && l.creditor_id == a.id]
-peer_loans_of(model, a::Agent) = [l for l in model.peer_loans if !l.settled && l.borrower_id == a.id]
-peer_claims_of(model, a::Agent) = [l for l in model.peer_loans if !l.settled && l.lender_id == a.id]
+creditor_loans(model, a::Agent) = parameters(model).index_loans ? Loan[l for l in get(loan_index(model).creditor, a.id, Loan[]) if !l.settled] : [l for l in model.loans if !l.settled && l.creditor_id == a.id]
+peer_loans_of(model, a::Agent) = parameters(model).index_loans ? PeerLoan[l for l in get(loan_index(model).borrower, a.id, PeerLoan[]) if !l.settled] : [l for l in model.peer_loans if !l.settled && l.borrower_id == a.id]
+peer_claims_of(model, a::Agent) = parameters(model).index_loans ? PeerLoan[l for l in get(loan_index(model).lender, a.id, PeerLoan[]) if !l.settled] : [l for l in model.peer_loans if !l.settled && l.lender_id == a.id]
 peer_next_payment(l::PeerLoan) = min(l.installment, l.outstanding) + l.rate * l.outstanding
 peer_debt_of(model, a::Agent) = sum(l.outstanding for l in peer_loans_of(model, a); init = 0.0)
 peer_claims(model, a::Agent) = sum(l.outstanding for l in peer_claims_of(model, a); init = 0.0)
@@ -200,7 +200,7 @@ end
 function make_loan!(model, lender::Enterprise, borrower::Agent, amount::Float64, purpose::Symbol; term::Int = loan_term_for(model, borrower))
     rate = borrowing_rate(model, lender, borrower)
     debt = bank_loan(lender.balance, borrower.balance, amount, rate, term, 1, current_round(model))
-    push!(model.loans, Loan(length(model.loans) + 1, lender.id, borrower.id, debt, 0, false, current_round(model), false, 0.0))
+    push!(model.loans, Loan(next_loan_id!(model), lender.id, borrower.id, debt, 0, false, current_round(model), false, 0.0))
     model.money_created_this_round += amount
     model.cumulative_money_created += amount
     log_event!(model, :loan; actor = borrower.id, agent_kind = kind_of(borrower), lender = lender.id, amount = amount, rate = rate, purpose = purpose)
@@ -349,8 +349,12 @@ what stays unpaid stays open and ages (the liquidation rule reads the age). Invo
 function settle_invoices!(model)
     isempty(model.invoices) && return nothing
     now = current_round(model)
+    due_by_payer = Dict{Int, Vector{Invoice}}()                              # 24 Oct (profile): one pass over the invoices, not one per agent; settling a payer changes only that payer's invoices
+    for iv in model.invoices
+        (iv.round_issued < now && iv.amount > 1e-6) && push!(get!(due_by_payer, iv.from_id, Invoice[]), iv)
+    end
     for from in alive_agents(model)
-        due = sort([iv for iv in model.invoices if iv.from_id == from.id && iv.round_issued < now && iv.amount > 1e-6]; by = iv -> iv.round_issued)
+        due = sort(get(due_by_payer, from.id, Invoice[]); by = iv -> iv.round_issued)
         isempty(due) && continue
         available = fund_from_cash!(model, from, sum(iv.amount for iv in due))
         for iv in due
@@ -1389,7 +1393,7 @@ function pass_to_owners!(model, dead::Enterprise, bank::Agent, principal::Float6
         debt = bank_loan(bank.balance, w.balance, amount, rate, p.founding_loan_term, 1, current_round(model))
         book_asset!(w.balance, DEPOSIT, -amount; skip_check = true)                  # the deposit the loan booked is cancelled:
         book_liability!(bank.balance, DEPOSIT, -amount; skip_check = true)           # the debt moves, no money is created
-        push!(model.loans, Loan(length(model.loans) + 1, bank.id, w.id, debt, 0, false, current_round(model), false, 0.0))
+        push!(model.loans, Loan(next_loan_id!(model), bank.id, w.id, debt, 0, false, current_round(model), false, 0.0))
         passed += amount
         log_event!(model, :owner_guarantee; actor = w.id, firm = dead.id, amount = amount)
     end
@@ -1492,6 +1496,7 @@ function settle_estate!(model, dead::Agent)
         left > 0 && transfer!(model, dead, heir, left, :inheritance)
         heir.land += dead.land
         for l in peer_claims_of(model, dead); l.lender_id = heir.id; end
+        model.loan_index_version += 1                                          # 24 Oct: a lender changed — the per-agent loan index is stale
         (left > 0 || dead.land > 0) && log_event!(model, :inheritance; from = dead.id, heir = heir.id, cash = left, land = dead.land)
     elseif left > 0
         book_asset!(dead.balance, DEPOSIT, -left)
@@ -1805,8 +1810,8 @@ function trade_units!(model, e::Enterprise, seller::Person, buyers, offer::Float
         total = round(q * price, digits = 4)
         if deferred
             bank = bank_of(model, b); rate = deferred_rate(model)
-            push!(model.peer_loans, PeerLoan(length(model.peer_loans) + 1, seller.id, b.id, bank.id, total, total, total / p.deferred_payment_rounds, rate, rate - p.bank_spread, false, current_round(model), 0, false, false, 0.0))
-            model.share_collateral[length(model.peer_loans)] = (e.id, q)
+            push!(model.peer_loans, PeerLoan(next_peer_loan_id!(model), seller.id, b.id, bank.id, total, total, total / p.deferred_payment_rounds, rate, rate - p.bank_spread, false, current_round(model), 0, false, false, 0.0))
+            model.share_collateral[last(model.peer_loans).id] = (e.id, q)
         else
             transfer!(model, b, seller, total, :share_purchase)
         end
@@ -1859,5 +1864,63 @@ function join_cooperatives!(model)
             end
         end
     end
+    return nothing
+end
+
+
+# ======================================================================================================================
+# 24 October 2026 — speed: unique loan ids, a per-agent loan index, and pruning of settled loans (Stef)
+# ======================================================================================================================
+
+"""Per-agent index over the loan lists (24 October): who owes and who is owed, built in list order so every accessor returns
+exactly what the full scan did. Rebuilt when a loan is created, a list is pruned or a lender changes (`loan_index_version`)."""
+mutable struct LoanIndex
+    stamp::Tuple{Int, Int, Int}
+    debtor::Dict{Int, Vector{Loan}}
+    creditor::Dict{Int, Vector{Loan}}
+    borrower::Dict{Int, Vector{PeerLoan}}
+    lender::Dict{Int, Vector{PeerLoan}}
+end
+
+function loan_index(model)
+    stamp = (length(model.loans), length(model.peer_loans), model.loan_index_version)
+    ix = model.loan_index
+    (ix !== nothing && ix.stamp == stamp) && return ix
+    ix = LoanIndex(stamp, Dict{Int, Vector{Loan}}(), Dict{Int, Vector{Loan}}(), Dict{Int, Vector{PeerLoan}}(), Dict{Int, Vector{PeerLoan}}())
+    for l in model.loans                       # settled loans included: the accessors filter, exactly as the scans did
+        push!(get!(ix.debtor, l.debtor_id, Loan[]), l); push!(get!(ix.creditor, l.creditor_id, Loan[]), l)
+    end
+    for l in model.peer_loans
+        push!(get!(ix.borrower, l.borrower_id, PeerLoan[]), l); push!(get!(ix.lender, l.lender_id, PeerLoan[]), l)
+    end
+    model.loan_index = ix
+    return ix
+end
+
+"""The next loan id: the run-long count of loans issued, never reused when settled loans are pruned. Without pruning it is
+`length(model.loans) + 1`, as before; `max` keeps it right when a test pushes a loan by hand."""
+function next_loan_id!(model)
+    id = max(model.next_loan_id, length(model.loans)) + 1
+    model.next_loan_id = id
+    return id
+end
+
+function next_peer_loan_id!(model)
+    id = max(model.next_peer_loan_id, length(model.peer_loans)) + 1
+    model.next_peer_loan_id = id
+    return id
+end
+
+"""Drop settled loans from the lists at the end of a month (24 October). Nothing the results report is read from a settled loan:
+write-offs, interest paid and money created are model counters, the events are in the log, every accessor and the one data
+column over the lists skip settled loans, and ids are never reused. `loans_issued` and `loans_active` in the data row show
+the difference. `prune_settled_loans = false` keeps everything (for the A/B check)."""
+function prune_settled_loans!(model)
+    parameters(model).prune_settled_loans || return nothing
+    n0, m0 = length(model.loans), length(model.peer_loans)
+    for l in model.peer_loans; l.settled && delete!(model.share_collateral, l.id); end
+    filter!(l -> !l.settled, model.loans); filter!(l -> !l.settled, model.peer_loans)
+    model.loans_pruned += n0 - length(model.loans); model.peer_loans_pruned += m0 - length(model.peer_loans)
+    (n0 != length(model.loans) || m0 != length(model.peer_loans)) && (model.loan_index_version += 1)
     return nothing
 end
