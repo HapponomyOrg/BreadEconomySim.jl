@@ -56,6 +56,24 @@ Review notes (facts and wording; the talk chat decides what to do with them):
 
 
 
+## 4h. Why prices fall in the greedy village — "greed without collusion" (24 Oct, night; for the talk and the Q&A)
+
+**What "greedy" means in the model.** A greedy firm that sells out sets its ask at what the market allows (the price last paid times the overpay multiplier); greedy buyers spend their cash above the buffer on extra loaves and tickets. That is all greed does on the price side. A greedy firm prices at cost like any other when it does not sell out — no margin in its floor unless the margin switch is on, and it is not in SB2.
+
+**Why that does not stop prices falling** (the rules, not a measured decomposition; the greedy village's deflation has not been traced month by month):
+1. Greed acts only on a sell-out. When a firm sells less than 90 % of what it expected, its ask falls by the same rule as everyone's.
+2. Sellers compete and nobody colludes. Buyers go to the cheapest seller first; a greedy bakery that raised its ask after a sell-out is left with unsold bread and its ask comes down again.
+3. Nobody withholds supply. Firms plan to the village's need and produce it, and bread spoils in three months, so unsold stock must be cleared.
+4. The floor follows wages, and where workers compete for jobs (the debt village: 65–90 unemployed) wages drift down.
+
+Greed's own effect, greedy village against the best village (base `.7`, income taxes): in the debt village greed slows the deflation (−1.8 % a year against −3.3 %), as the sell-out ceiling would; in the SuMSy village prices fall faster with greed (−8.0 % against −4.6 %), unexplained — SuMSy's base villages deflate at every step anyway.
+
+**How to frame it (Stef and the code chat, 24 Oct):** "ego-centred greed" fits — every greedy actor acts on its own account, and nobody coordinates: no two bakeries agree on a price, no firm holds back supply, no group of sellers acts together. That is the same individualism as the missing mutual care (§ what the model cannot show): the village has neither cooperation among neighbours nor collusion among sellers — and collusion is cooperation too, aimed at the buyers. **Do not say the firms "want to maximise the number of sales"**: they plan to the village's need, produce that, and adjust the price after the fact; they never cut a price to win a competitor's customers. Prices fall because unsold bread forces the cut; the cheaper seller gets the customers as a consequence, not as a strategy.
+
+**The sentence for the talk:** "In this village greed is individual. Each seller takes the highest price a good month allows, and nobody works with a competitor to keep prices up. Competition does the rest."
+
+**For the Q&A:** the result depends on that individualism. Two bakeries in a real village could agree on a price, or bake less than the village needs; then greed would raise prices. The model has not run that. The nearest it comes is the strategy test of 22 October: firms that priced for a margin lost their customers wherever buyers could walk away. So the claim is narrow — greed without collusion does not drive up prices here.
+
 ## 4g. The 2026-10-24.7 runs (24 Oct, evening; Stef's talk_run.jl list) — what they confirm and what they overturn
 
 On `.7`: base B, BG, SB2, V8 under both packages; realistic B, BG, SB2 under both; V8 with its old theatres (1.0) under T; rung 1 with own planning. **Not in it:** the realistic steps 0, 2, 8, 11, V8 and B-nodiv.
