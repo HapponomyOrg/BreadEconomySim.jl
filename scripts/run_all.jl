@@ -43,8 +43,8 @@
 #   update_econosim move EconoSim.jl to the latest commit on its main branch first (false)
 #
 # Each run is saved as its own file under results/parts/ the moment it finishes, so a batch can be stopped and started again
-# at any time: finished runs are skipped. Output per ladder: …_rounds.csv (split under GitHub's 100 MB limit), …_summary.csv
-# (one row per step and village, with medians and bands), …_rungs.csv (what each step contains).
+# at any time: finished runs are skipped. Output per ladder, named with the version: …_<version>_rounds.csv (split under GitHub's
+# 100 MB limit), …_<version>_summary.csv (one row per step and village, with medians and bands), …_<version>_rungs.csv (what each step contains).
 # ======================================================================================================================
 
 using Dates, Pkg, Distributed
@@ -397,11 +397,14 @@ function run_all(; jobs::Int = max(Sys.CPU_THREADS - 1, 1), seeds::Int = 10, rou
         end
         rounds_df = reduce((a, b) -> vcat(a, b; cols = :union), [labelled(f) for f in files])
         name = ladder_name(N, settlement, variant)
-        write_split(joinpath(ROOT, "results", "$(name)_rounds.csv"), rounds_df)   # under GitHub's 100 MB limit (25 Sept)
-        CSV.write(joinpath(ROOT, "results", "$(name)_summary.csv"), summarise(rounds_df, N))
-        println("wrote results/$(name)_rounds*.csv and results/$(name)_summary.csv ($(length(files)) runs)")
+        # 23 Oct (Stef): the combined files carry the version, so a run on a new version never overwrites an earlier run's
+        # summary (a 24-run call on .8 had replaced the full ladder's .13 summary, and its one rounds file had deleted the four parts)
+        vname = "$(name)_$(MODEL_VERSION)"
+        write_split(joinpath(ROOT, "results", "$(vname)_rounds.csv"), rounds_df)   # under GitHub's 100 MB limit (25 Sept)
+        CSV.write(joinpath(ROOT, "results", "$(vname)_summary.csv"), summarise(rounds_df, N))
+        println("wrote results/$(vname)_rounds*.csv and results/$(vname)_summary.csv ($(length(files)) runs)")
         if settlement == :invoicing
-            run(addenv(`$(Base.julia_cmd()) --project=$ROOT $(joinpath(ROOT, "scripts", "dump_rungs.jl")) $seeds $rounds all $N`, "SETTLEMENT" => "invoicing", "FISCAL" => String(fiscal)))   # 22 Oct: the package's rungs file
+            run(addenv(`$(Base.julia_cmd()) --project=$ROOT $(joinpath(ROOT, "scripts", "dump_rungs.jl")) $seeds $rounds all $N`, "SETTLEMENT" => "invoicing", "FISCAL" => String(fiscal), "SURPLUS_RULE" => String(surplus_rule), "VERSION_TAG" => MODEL_VERSION))   # 22 Oct: the package's rungs file; 23 Oct: with the version
         end
     end
     elapsed = Dates.value(now() - start_time) ÷ 1000

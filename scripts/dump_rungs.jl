@@ -32,6 +32,6 @@ for (name, kd, ks) in rungs, (system, base, kw) in (("debt", BARE_DEBT, kd), ("s
         unmet_share = p.unmet_demand_share, unsold_share = p.unsold_share, ask_floor = String(p.ask_floor), bread_ceiling = p.bread_bid_base_multiplier, planning_margin = p.planning_margin,
         greed = p.greed ? "$(round(Int, 100 * p.greed_share)) % greedy, hoarding $(p.greed_hoarding)" : ""))
 end
-path = joinpath(@__DIR__, "..", "results", "ladder2_$(N)$(FISCAL == :own ? "" : "_fiscal_$(FISCAL)")_rungs.csv")   # 22 Oct: one rungs file per package
+path = joinpath(@__DIR__, "..", "results", "ladder2_$(N)$(FISCAL == :own ? "" : "_fiscal_$(FISCAL)")$(haskey(ENV, "VERSION_TAG") ? "_" * ENV["VERSION_TAG"] : "")_rungs.csv")   # 22 Oct: one rungs file per package; 23 Oct: with the version
 CSV.write(path, DataFrame(rows))
 println("wrote ", path, " (", length(rows), " rows)")

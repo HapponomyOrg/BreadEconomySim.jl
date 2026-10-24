@@ -14,4 +14,5 @@ N = length(ARGS) >= 4 ? parse(Int, ARGS[4]) : 512
 # ladder is the size comparison. SETTLEMENT=clearing_all runs the old settlement for the before/after comparison.
 SETTLEMENT = Symbol(get(ENV, "SETTLEMENT", "invoicing"))
 FISCAL = Symbol(get(ENV, "FISCAL", "own"))                      # 22 Oct: the common fiscal package (own | taxes | parking)
-(; BARE_DEBT, BARE_SUMSY, rungs) = ladder_definition(N, rounds, SETTLEMENT; fiscal = FISCAL)
+SURPLUS_RULE = Symbol(get(ENV, "SURPLUS_RULE", "debt_levy_taxcut"))
+(; BARE_DEBT, BARE_SUMSY, rungs) = ladder_definition(N, rounds, SETTLEMENT; fiscal = FISCAL, surplus_rule = SURPLUS_RULE)
