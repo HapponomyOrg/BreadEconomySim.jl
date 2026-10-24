@@ -56,6 +56,54 @@ Review notes (facts and wording; the talk chat decides what to do with them):
 
 
 
+## 4i. THE TALK'S NUMBERS ON ONE VERSION — the talk run on 2026-10-24.9 (24 Oct, 22:00; 344 runs, four seeds; supersedes §4c–§4h for every figure)
+
+Five folders, all `…_120months_2026-10-24.9`: `realistic_fiscal_taxes` (88), `realistic_fiscal_parking` (80), `fiscal_taxes` (88), `fiscal_parking` (80), `realistic_levybase_fiscal_taxes` (8). Summaries `results/ladder2_512_<folder>_2026-10-24.9_summary.csv`.
+
+**The realistic set under income taxes — the talk's main table** (alive (worst seed) / public debt at month 120 / poorest tenth's wealth in meals / wealth Gini / unemployed):
+
+| step | debt village | SuMSy village |
+|---|---|---|
+| 0 bare bones (no government) | **59** (52) / 0 / −0.6 / 0.72 / 4 | 479 (380) / 0 / 28.6 / 0.72 / 39 |
+| 2 government | 489.5 (469) / **132k** / 1.0 / 0.74 / 110 | **499.2 (461)** / 0 / 28.9 / 0.74 / 16 — see below |
+| 8 shares | 510.5 (509) / 53k / 1.1 / 0.59 / 22 | 512 / 0 / 5.4 / 0.77 / 4.5 |
+| 11 VAT | 505 (503) / 21k / −2.9 / 0.67 / 16 | 512 / 0 / 9.8 / 0.76 / 2 |
+| V8 productive | 511.8 (511) / 28k / −1.7 / 0.81 / 112 | 512 / 0 / 66.7 / 0.68 / 27 |
+| B co-ops + reserve | 511.2 (509) / 75k / 3.0 / 0.54 / 48 | 512 / 0 / 35.8 / 0.73 / 4 |
+| BG with gold (Gini with gold) | 487.2 (424) / 68k / 1.8 / 0.55 (0.58) / 54 | 512 / 0 / 20.0 / 0.72 (0.90) / 18 |
+| SB2 everyone greedy | 511.8 (511) / 122k / 0.7 / 0.42 / 90 | 512 / 0 / 36.9 / 0.62 / 0 |
+| B-nodiv (land tax kept as revenue) | 494.2 (487) / 79k / 2.1 / 0.69 / 99 | 512 / 0 / 19.2 / 0.74 / 3.5 |
+
+**What the talk can say from it:**
+1. **With a government the SuMSy village keeps everyone in every seed at every step but one** — step 2, where one seed of four loses 51 people (below). The debt village loses up to 25 at most steps (BG worst seed 424).
+2. **The SuMSy government never borrows after its start-up loan** (peak about 7k at step 2, repaid). The debt village borrows 21–132k by year ten at every step with a government.
+3. **The poorest tenth:** SuMSy 5–67 meals; the debt village −2.9 to 3.0 — at or under a meal, in debt at steps 11 and V8.
+4. **Inequality on the realistic set:** SuMSy's wealth Gini is the higher one at most steps (0.62–0.77 against 0.42–0.69); only at V8 is it lower (0.68 against 0.81). **SuMSy lifts the floor; on realistic labour rules it does not flatten the distribution.** Say it that way.
+5. **The bare village:** without a government, realistic labour rules leave the debt village 59 of 512; SuMSy 479 (worst seed 380).
+
+**The step-2 deaths (traced, seed 3, the only seed that loses anyone)** *(the first reading in this paragraph — "the bakeries planned too little", "the famine is the bake-to-target rule's" — was corrected the same night by a bakery-level trace; see "Corrected" at its end)*: for three months (77–79) the village's two bakeries baked half the bread it needed (464–578 loaves against about 1,100); every loaf sold; 225–236 went hungry; 51 died in month 79. The dead had money — 116 in cash on average, about twelve meals — none was in debt, 12 owned land, 21 drew the benefit. **A famine with full pockets: the bakeries planned too little.** Under own-market planning a bakery plans on its last three months' sales plus the customers it turned away, so its plan lags a rise in demand; with only two bakeries (the contraction trap) nothing covers the gap; the village's emergency rule fired in months 74–81, too late. The likely trigger is the `.6` rule that a bakery bakes to its target rather than to its hands (Stef, 24 Oct): before it, a bakery with hands and grain baked past its plan and covered the lag — `.4` had no deaths at step 2. **For the talk:** one run in four; the rule is the same in both villages; it is a planning lag, and it is fixable (a bakery that turns customers away should bake more the next month). **Confirmed (24 Oct, 22:00, folder `realistic_handsbake_fiscal_taxes_…24.9`, 8 runs):** with bakeries baking to their hands, seed 3 keeps all 512 (its hungriest month 118 instead of 236); seeds 1, 2 and 4 are identical to the talk run, and so are all four debt-village seeds. **The famine is the bake-to-target rule's**, acting with own-market planning's lag and two bakeries. The debt village at step 2 is not touched by it: it loses 3–43 people a seed (469–509 alive) with hungry months of 258–281 in three of its four seeds, under either rule. **Corrected (24 Oct, 22:30, a month-by-month trace of the two bakeries):** baking to hands changed the path, so seed 3 never got there — but the rule is not the mechanism. In months 70–72 one bakery dominated, its target at its cap and its buffer at its 50 % maximum, leaving 300–450 loaves a month unsold and losing money; in month 73 it failed and was refounded, starting with no hands; by months 74 and 78–80 both bakeries' plans were large enough (288 units each, 2,300 loaves against a need of about 1,100), but they hired only 116–304 units of labour while 111–143 villagers were unemployed. **A hiring failure, with money in the villagers' pockets.** The trace also found a planning bug: since 22 Oct the expected-sales rule cancelled the step by which a sold-out firm plans more (bakery 9 sold out every month 70–73 and grew from 52 to 79 units). Fixed in `2026-10-24.10` (`respond_to_turned_away`, on in the base): seed 3's SuMSy village then keeps 512 — but the debt village gets worse in two of three seeds (433 and 443 alive instead of 483 and 469; bread 47 and 13 in seeds 2 and 4, an inflation the fix sets off). **So the talk stays on `.9`.** For the talk: SuMSy keeps all 512 at step 2 in three runs of four; in the fourth, two bakeries could not hire the hands their plans needed for three months, and 51 starved with money in their pockets. The hiring failure and the fix's side effect in the debt village are next week's work.
+
+**The land tax on the realistic set (Q&A) — the base-set pattern does not carry over:**
+
+| rung B, income taxes | land tax paid out | debt village: alive (worst) / debt / unemployed |
+|---|---|---|
+| realistic, the lever (levy up to its cap, paid out) | 0.82 a head | 511.2 (509) / 75k / 48 |
+| realistic, levy at its base rate, paid out | 0.68 a head | 492.2 (456) / **129k** / 52 |
+| realistic, levy kept as revenue (B-nodiv) | none | 494.2 (487) / 79k / 99 |
+| base, the lever / kept as revenue | — | 511.8 / 76k / 66 · 508.8 / 176k / 135 |
+
+On the base the more the debt village pays out, the less it borrows (176k → 76k). **On the realistic set the debt is about the same with or without the dividend (75k against 79k); without it 99 are unemployed instead of 48 and 17 more die.** So for a realistic talk the answer to "is the debt just the dividend?" is: no — keeping the land tax as revenue doesn't reduce the debt village's borrowing, and costs it jobs and lives.
+
+**Full employment in the debt village (Q&A):** on the base, every cell that pays everyone an income employs everyone — DGI8 (basic income 5) 0 unemployed at 376k of debt, DDGL8 (SuMSy's arrangement in debt money) 0 at 335k, RV8 0 at 254k. On the realistic set none does (DGI8 31 unemployed, DDGL8 38, RV8 11 — the contracts' outsiders), they cost 300–440k, and two lose people (DDGL8 497, worst 452; RV8 483, worst 395). **The debt village employs everyone only by paying everyone, on the base, at 250–380k; on realistic rules not even then.** The SuMSy village: 0–27 unemployed on the realistic set (27 at V8, 39 at step 0), 0 on the base at every step with a government.
+
+**V8 on the realistic set (valid now):** the debt village deflates 24 % a year (bread 0.20 at year ten) with 112 unemployed, its poorest tenth in debt (−1.7), 28k borrowed; the SuMSy village deflates 4 % a year, 27 unemployed, its poorest at 67 meals, no debt. On realistic rules the runaway deflation is the debt village's alone.
+
+**Under the parking package (Q&A),** realistic: the SuMSy village 511–512 everywhere (worst seeds 509–510 at steps 2 and V8), no debt; the debt village 486–512 (B worst seed 409), borrowing 4–115k — 4k at B-nodiv with its poorest tenth 8.5 meals in debt and 56 unemployed. The meal under P: SuMSy from the land tax, the debt village from the tax on idle money and borrowing (§4e).
+
+**The base labour market on `.9`, for "what the realistic rules change":** with a government the SuMSy village keeps 512 in every seed at every step, 0 unemployed; the debt village 509–512, borrowing 24–195k (step 2: 195k, 146 unemployed); the poorest tenth SuMSy 4–65 meals, debt 0.1–8.6. So the realistic rules cost the SuMSy village its full employment (0 → 2–39) and one bad run at step 2, cost the debt village jobs at the bare step and lives at BG and B under P, and turn V8's deflation into the debt village's alone.
+
+**Consistency:** the realistic B, BG, SB2, 8 and 11 under income taxes are identical to `.4`; what moved between `.4` and `.9` is step 0 and step 2 in the SuMSy village (the bake-to-target rule), V8 (the restored starting prices) and SB2 under P.
+
 ## 4h. Why prices fall in the greedy village — "greed without collusion" (24 Oct, night; for the talk and the Q&A)
 
 **What "greedy" means in the model.** A greedy firm that sells out sets its ask at what the market allows (the price last paid times the overpay multiplier); greedy buyers spend their cash above the buffer on extra loaves and tickets. That is all greed does on the price side. A greedy firm prices at cost like any other when it does not sell out — no margin in its floor unless the margin switch is on, and it is not in SB2.
