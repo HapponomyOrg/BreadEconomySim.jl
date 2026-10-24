@@ -56,6 +56,26 @@ Review notes (facts and wording; the talk chat decides what to do with them):
 
 
 
+## 4f. The realistic set on the current base (24 Oct, version 2026-10-24.4, four seeds, both packages) — and the levy-at-base-rate run
+
+**Realistic = the base of `.4` plus contracts for four fifths of the hands, own-market planning, the :long floor and the land rules. Alive / public debt / poorest tenth (wealth) / wealth Gini:**
+
+| rung | T, debt | T, SuMSy | P, debt | P, SuMSy |
+|---|---|---|---|---|
+| 0 bare bones (T only) | **59** (worst 52) / 0 / −0.6 / 0.72 | 489 (422) / 0 / 22.7 / 0.73 | — | — |
+| 2 government | 489.5 (469) / 132k / 1.1 / 0.74 | 512 / 0 / 29.3 / 0.74 | 503.75 (492) / 66k / 2.2 / 0.75 | 512 / 0 / 24.1 / 0.74 |
+| 8 shares | 510.5 / 53k / 1.1 / 0.59 | 512 / 0 / 5.5 / 0.77 | 499.75 (463) / 78k / 7.8 / 0.63 | 512 / 0 / 9.8 / 0.75 |
+| 11 VAT | 505 / 21k / −2.9 / 0.67 | 512 / 0 / 7.7 / 0.76 | 512 / 18k / −5.7 / 0.61 | 512 / 0 / 7.4 / 0.76 |
+| V8 productive | 512 / 82k / 2.5 / 0.94 | 511.75 / 0 / 142 / 0.59 | 512 / 44k / 25 / 0.52 | 511.5 / 0 / 131 / 0.52 |
+| B co-ops | 511.25 / 75k / 3.0 / 0.54 | 512 / 0 / 35.8 / 0.73 | 486.25 (409) / 110k / 12.2 / 0.53 | 512 / 0 / 19.7 / 0.73 |
+| BG with gold | 487.25 (424) / 68k / 1.8 / 0.55 | 512 / 0 / 20.0 / 0.72 | 512 / 115k / 17.8 / 0.61 | 512 / 0 / 13.4 / 0.72 |
+| SB2 greedy | 511.75 / 122k / 0.7 / 0.42 | 512 / 0 / 36.9 / 0.62 | 512 / 46k / −0.9 / 0.52 | 512 / 0 / 15.6 / 0.63 |
+| B-nodiv (levy as revenue) | 494.25 (487) / 79k / 2.1 / 0.69 | 512 / 0 / 17.4 / 0.74 | 496.75 (491) / **3.8k** / **−8.5** / 0.69 | 512 / 0 / 12.7 / 0.75 |
+
+**What holds on the realistic set, same as the base:** with a government the SuMSy village keeps all 512 at every step in every seed (V8: 511–512) and never borrows after its start-up loan; the debt village loses 0–25 at most steps (BG worst 424, B under P worst 409) and borrows 18–132k under T (V8 82k, step 11 21k), 4–115k under P; its poorest tenth are at or under a meal, in debt at steps 11 and B-nodiv under P (−5.7, −8.5), while SuMSy's hold 5–37 meals. **What is different from the base:** (1) **the bare debt village dies** (59 of 512; the base: 167); contracts and own-market planning without a government are lethal for debt money and a help for SuMSy (489 against 452). (2) **SuMSy's wealth Gini is the higher one at most steps** (0.72–0.77 against 0.42–0.69), the reverse of the base's story — only V8 (0.52–0.59 against 0.52–0.94) and SB2 favour SuMSy; its advantage on the realistic set is the poorest tenth, not the Gini. (3) ~~**The productive village (V8) is broken on the realistic set**~~ **WITHDRAWN: the V8 rows of this table ran without V8's initial prices (the comment bug); the deflation to 0.22 is the artefact. V8 realistic must be rerun on .5.** (4) Prices deflate everywhere (SuMSy 2–16 % a year, debt 1–12 %) except the debt village at step 2 under T (+1.4 %) and SB2 SuMSy under P (+1.5 %). (5) Under P with the levy kept as revenue (B-nodiv) the debt village's books balance (3.8k) with its poorest tenth 8.5 meals in debt and 56 unemployed — the balanced budget bought from the poor, again. (6) Contracts give the SuMSy village some unemployment at most steps (2–26; 40 at step 0).
+
+**The levy at its base rate, paid out, lever off (`levybase`, rung B under T, four seeds — the run Stef had not pushed):** debt village 511 alive / **142k** / poorest 11.7 (cash 1.7) / Gini 0.67, 74 unemployed; SuMSy 512 / 0 / 25.8 / **0.48**. Set beside B with the lever (levy at its cap: 75k, Gini 0.71) and B-nodiv (no payout: 170k): **the more the debt village pays out of its land tax, the less it borrows** — 170k with none, 142k at the base rate, 75k at twenty times — because the payout keeps people spending and employed (unemployed 128 → 74 → 59). And **SuMSy's wealth Gini at B depends on how much its levy pays out**: 0.42 with the whole surplus per head (§4c, .13), 0.48 with the base-rate levy paid out, 0.71 with the lever (which cuts the levy to half its base rate once income + dividend is a meal). The §4d sentence stands and sharpens: SuMSy's equality is what its fiscal rule pays out, and its money is what makes paying out affordable.
+
 ## 4e. Answers to the talk chat's fix handoff of 24 Oct (docs/talk/handoff_code_talk_fix_2026-10-24.md)
 
 **§1, the land tax paid out whatever the budget:** confirmed, that is what `.8` and later do; nothing changed.

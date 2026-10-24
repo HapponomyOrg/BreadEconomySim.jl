@@ -2026,6 +2026,10 @@ end
     @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., land_levy = true, land_levy_dividend = true, levy_dividend_target_in_breads = 2.0))) < 1e-6
 end
 
+@testset "no code after a comment (24 October 2026)" begin
+    include("comment_tail_check.jl")
+end
+
 @testset "cooperative forms (14 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     params(m) = B.parameters(m)

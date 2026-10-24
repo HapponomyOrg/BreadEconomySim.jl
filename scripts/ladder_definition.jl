@@ -59,7 +59,9 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol; fiscal::Symb
     level(fee) = 30 + 5 / (fee + 0.01)                              # a villager's settled money: cushion + guaranteed income ÷ (fee + parking tax)
     REALISTIC = (; contracts = true, contract_share = 0.8, refound_minimum = 2, uncovered_debt_sale = true, own_market_planning = true, firms_plan_on_sales = false, market_rounds = 1)   # 20 Oct (rounds off: they ratchet prices down)
     DEMTAX15 = (; wage_tax_rate = 0.0, capital_tax_rate = 0.0, dividend_tax_rate = 0.0, demurrage_tax_rate = 0.015, demurrage_free_buffer = 30.0)   # 14 Oct: a demurrage tax instead of income tax, on debt money
-    PRODUCTIVE = (; breads_per_grain = 4, customers_per_labour_unit = 2.0,   # 23 Oct (Stef): at least two customers per unit of labour (was 1.0 — one unit per customer); the base has 2.5 initial_prices = OrderedDict(:bread => 3.0, :grain => 5.2, :rent => 0.75, :wage => 3.92, :ticket => 5.0),
+    # 23 Oct (Stef): at least two customers per unit of labour (was 1.0 — one unit per customer); the base has 2.5. 24 Oct: this comment
+    # sat mid-line and swallowed the initial prices — the 18 October mistake again; every V8 run of 23–24 Oct (.8, .0, .4, base and realistic) is void.
+    PRODUCTIVE = (; breads_per_grain = 4, customers_per_labour_unit = 2.0, initial_prices = OrderedDict(:bread => 3.0, :grain => 5.2, :rent => 0.75, :wage => 3.92, :ticket => 5.0),
                   shows_per_round = 2, standard_of_living_tickets = 2, refound_minimum = 4)   # 15 Oct: prices free (Stef: the productive village is for full employment; fixed prices are the test, V8-P)
     PRICES   = (;)   # 25 Sept: the realistic price rules are base rules from step 0 (see RULES); the old step 10 is gone
     RESERVE  = (; government_reserve_in_rounds = 3, surplus_tax_reduction_share = 1.0)                                # rung 11: a public reserve, the surplus returned as a tax cut
