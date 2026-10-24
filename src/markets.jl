@@ -3,7 +3,8 @@
 land_to_let(a::Agent) = (a isa Person || is_bank(a)) ? a.land - a.land_let : 0
 
 """A landowner's reservation price for a unit: the value of the rent stream at the cost of holding cash instead."""
-function land_reservation(model, o::Person)
+land_reservation(model, o::Person) = land_reservation(model)      # 24 Oct (speed): the reservation does not depend on the owner — one value a month
+function land_reservation(model)
     p = parameters(model); rent = expected_price(model, :rent)
     p.land_pricing == :market && return land_worth(model, seller_alternative(model))   # 24 Sept: the seller's best alternative for the money
     p.monetary_system == :sumsy && p.demurrage_rate > 0 && return rent / p.demurrage_rate
@@ -165,15 +166,16 @@ function land_market!(model)
     # purchases: enterprises first, then persons
     buyers = vcat(farms, stable_shuffle(rng, [w for w in persons(model) if !hoards_cash(w)]))   # 15 Oct: cash hoarders buy no land
     land_unmet = 0.0; land_sold = 0.0; best_unmet_bid = 0.0; best_offer_below = 0.0   # 22 Oct: the best offer under the price
-    offering = parameters(model).land_pricing == :market ? [s for s in sellers() if !(s isa Person) || price >= land_reservation(model, s)] : Agent[]
+    lres = land_reservation(model)                                       # 24 Oct (speed): once a month, not once per candidate — the same value
+    offering = parameters(model).land_pricing == :market ? [s for s in sellers() if !(s isa Person) || price >= lres] : Agent[]
     land_supply = sum(Float64(land_to_let(s)) for s in offering; init = 0.0)
-    lowest_ask = isempty(offering) ? 0.0 : minimum(s isa Person ? land_reservation(model, s) : 0.0 for s in offering)   # the least an offering seller accepts
+    lowest_ask = isempty(offering) ? 0.0 : minimum(s isa Person ? lres : 0.0 for s in offering)   # the least an offering seller accepts
     for b in buyers
         while true
             # a farm wants land it will work; a person wants land only below the value of its rent stream to them
             wants = b isa Enterprise ? b.production_target > b.land : parameters(model).land_pricing == :market ? true :
-                    b.greed == :greedy ? price < land_reservation(model, b) - 1e-9 :
-                    (parameters(model).land_sales == :reservation ? price < land_reservation(model, b) - 1e-9 : true)
+                    b.greed == :greedy ? price < lres - 1e-9 :
+                    (parameters(model).land_sales == :reservation ? price < lres - 1e-9 : true)
             surplus = available_cash(b) - buffer_target(model, b)
             pm0 = parameters(model)
             # 24 Sept: seller credit (instalments) in both villages — ordinary seller credit exists in debt economies too
@@ -213,7 +215,7 @@ function land_market!(model)
             if pm.land_sales == :distress_only
                 candidates = [s for s in candidates if !(s isa Person)]                # only banks' seized land is for sale
             elseif pm.land_sales == :reservation
-                candidates = [s for s in candidates if !(s isa Person) || price >= land_reservation(model, s)]
+                candidates = [s for s in candidates if !(s isa Person) || price >= lres]
             end
             if isempty(candidates)
                 land_unmet += b isa Enterprise ? max(b.production_target - b.land, 0) : 1      # wanted, could pay, found no seller at this price
@@ -1006,7 +1008,8 @@ function greedy_capital_act!(model, w::Person, surplus::Float64)
         elseif opt == :land
             surplus >= price_land || continue
             # a villager buys only below the rent stream's value to them (a seller at exactly that value is not a seller); in practice distress sales
-            sellers = [o for o in persons(model) if o.id != w.id && land_to_let(o) > 0 && price_land < land_reservation(model, w) - 1e-9 && price_land >= land_reservation(model, o) - 1e-9]
+            lres = land_reservation(model)
+            sellers = [o for o in persons(model) if o.id != w.id && land_to_let(o) > 0 && price_land < lres - 1e-9 && price_land >= lres - 1e-9]
             isempty(sellers) && continue
             o = first(sort(sellers; by = x -> x.ask[:rent]))
             transfer!(model, w, o, price_land, :land_purchase); o.land -= 1; o.market[:rent].offered = max(o.market[:rent].offered - 1, 0); w.land += 1
