@@ -1,0 +1,37 @@
+set,cell,money,seeds,offered,accepted,idle_unwanted,unemployed,hours_a_head
+realistic,0 bare,debt,4,89,51,37,7.5,2.0
+realistic,0 bare,sumsy,4,63,53,10,40.4,2.12
+realistic,2 government,debt,4,85,65,19,101.3,2.61
+realistic,2 government,sumsy,4,67,61,6,24.1,2.43
+realistic,8 shares,debt,4,77,71,6,33.1,2.84
+realistic,8 shares,sumsy,4,73,72,1,2.6,2.9
+realistic,11 VAT,debt,4,79,68,11,58.1,2.67
+realistic,11 VAT,sumsy,4,73,73,0,1.0,2.9
+realistic,V8 productive,debt,4,76,59,17,110.2,2.35
+realistic,V8 productive,sumsy,4,63,62,1,5.0,2.47
+realistic,B co-ops,debt,4,78,69,9,51.0,2.74
+realistic,B co-ops,sumsy,4,74,73,0,2.0,2.93
+realistic,BG gold,debt,4,82,71,11,54.4,2.8
+realistic,BG gold,sumsy,4,76,74,2,7.3,2.94
+realistic,SB2 greedy,debt,4,81,68,12,67.1,2.71
+realistic,SB2 greedy,sumsy,4,76,75,2,7.1,2.99
+realistic,B-nodiv,debt,4,89,71,18,88.0,2.83
+realistic,B-nodiv,sumsy,4,74,73,1,4.0,2.9
+base,0 bare,debt,4,78,54,24,30.1,2.12
+base,0 bare,sumsy,4,57,54,3,12.8,2.14
+base,2 government,debt,4,89,63,26,145.8,2.52
+base,2 government,sumsy,4,58,58,0,0.0,2.32
+base,8 shares,debt,4,79,66,13,67.0,2.64
+base,8 shares,sumsy,4,71,71,0,0.0,2.82
+base,11 VAT,debt,4,85,65,20,86.8,2.61
+base,11 VAT,sumsy,4,70,70,0,0.0,2.81
+base,V8 productive,debt,4,79,55,24,170.5,2.2
+base,V8 productive,sumsy,4,56,56,0,0.0,2.24
+base,B co-ops,debt,4,81,66,15,61.1,2.65
+base,B co-ops,sumsy,4,72,72,0,0.0,2.86
+base,BG gold,debt,4,81,66,15,69.6,2.65
+base,BG gold,sumsy,4,72,72,0,0.0,2.87
+base,SB2 greedy,debt,4,74,64,9,61.8,2.57
+base,SB2 greedy,sumsy,4,77,77,0,0.7,3.07
+base,B-nodiv,debt,4,92,66,26,133.9,2.64
+base,B-nodiv,sumsy,4,72,72,0,0.0,2.87

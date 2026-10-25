@@ -5,9 +5,9 @@
 # version in its name (…_2026-10-24.9 with this package) and the talk's numbers all come from the same code. The last block
 # lists the folders of this version with their run counts, so you can see that nothing is missing.
 #
-#     include("scripts/talk_run.jl")                              # everything on one machine (344 runs)
-#     TALK_PART = :taxes;   include("scripts/talk_run.jl")        # machine 1: the income-tax package — the talk's tables (184 runs)
-#     TALK_PART = :parking; include("scripts/talk_run.jl")        # machine 2: the parking package — the Q&A (160 runs)
+#     include("scripts/talk_run.jl")                              # everything on one machine (408 runs)
+#     TALK_PART = :taxes;   include("scripts/talk_run.jl")        # machine 1: the income-tax package — the talk's tables (216 runs)
+#     TALK_PART = :parking; include("scripts/talk_run.jl")        # machine 2: the parking package — the Q&A (192 runs)
 #     TALK_JOBS = 15                                              # set before the include to choose the number of workers
 #
 # Executing the file from the editor (VS Code: Julia: Execute File) works too, whatever the REPL's working directory: the file
@@ -37,6 +37,8 @@ talk_employ_all    = ["DGI8", "DDGL8 ", "RV8 "]
 talk_rungs_taxes   = vcat(["0 ", "2 ", "8 ", "11 ", "V8 ", "B ", "BG", "SB2", "B-nodiv"], talk_employ_all)
 talk_rungs_parking = vcat(["2 ", "8 ", "11 ", "V8 ", "B ", "BG", "SB2", "B-nodiv"], talk_employ_all)
 realistic_levybase = merge(REALISTIC_LABOUR, (; levy_dividend_target_in_breads = 0.0))   # Q&A: the land tax at its base rate, paid out (no lever)
+# 25 Oct (the talk chat): the talk without co-ops — step 10, with gold, everyone greedy, the land tax kept as revenue (realistic only)
+talk_rungs_nocoops = ["10 ", "10G", "S3 ", "10-nodiv"]
 
 if TALK_PART in (:all, :taxes)
     # 1. the talk's main tables: the realistic labour market (contracts, own-market planning, …), income taxes        88 runs
@@ -45,6 +47,8 @@ if TALK_PART in (:all, :taxes)
     run_all(seeds = 4, jobs = TALK_JOBS, fiscal = :taxes, rungs = talk_rungs_taxes)
     # 3. Q&A: does paying out the land tax reduce the debt village's borrowing? (with B and B-nodiv above)               8 runs
     run_all(seeds = 4, jobs = TALK_JOBS, fiscal = :taxes, rungs = ["B "], variant = realistic_levybase, variant_label = "realistic_levybase")
+    # 6. the talk without co-ops (25 Oct): step 10 and its variants, realistic, income taxes                         32 runs
+    run_all(seeds = 4, jobs = TALK_JOBS, fiscal = :taxes, rungs = talk_rungs_nocoops, variant = REALISTIC_LABOUR, variant_label = "realistic")
 end
 
 if TALK_PART in (:all, :parking)
@@ -52,6 +56,8 @@ if TALK_PART in (:all, :parking)
     run_all(seeds = 4, jobs = TALK_JOBS, fiscal = :parking, rungs = talk_rungs_parking, variant = REALISTIC_LABOUR, variant_label = "realistic")
     # 5. and on the base labour market                                                                                 80 runs
     run_all(seeds = 4, jobs = TALK_JOBS, fiscal = :parking, rungs = talk_rungs_parking)
+    # 7. the talk without co-ops under the tax on idle money (Q&A)                                                   32 runs
+    run_all(seeds = 4, jobs = TALK_JOBS, fiscal = :parking, rungs = talk_rungs_nocoops, variant = REALISTIC_LABOUR, variant_label = "realistic")
 end
 
 # what this version has produced so far: one line per folder, with its run count

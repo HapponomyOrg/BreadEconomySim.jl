@@ -96,6 +96,8 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol; fiscal::Symb
         ("B best SuMSy village: co-ops + reserve", (; V8_DEBT..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE...), (; V8_SUMSY..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE...)),
         ("B-nodiv best village, the land tax kept as revenue", (; V8_DEBT..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE...), (; V8_SUMSY..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE...)),   # 24 Oct (the talk chat): rung B with the levy as ordinary revenue — no dividend, no meal; the benefit on both sides (apply_fiscal_package sets it)
         ("BG best village, with gold", (; V8_DEBT..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE..., gold_grams_per_villager = 100.0), (; V8_SUMSY..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE..., gold_grams_per_villager = 100.0)),   # 23 Oct (the talk chat): rung B with the gold holders of R8, for the inequality slide
+        ("10G step 10 with gold", (; V8_DEBT..., PRICES..., RESERVE..., gold_grams_per_villager = 100.0), (; V8_SUMSY..., PRICES..., RESERVE..., gold_grams_per_villager = 100.0)),   # 25 Oct (the talk chat): BG without the co-ops
+        ("10-nodiv step 10, the land tax kept as revenue", (; V8_DEBT..., PRICES..., RESERVE...), (; V8_SUMSY..., PRICES..., RESERVE...)),   # 25 Oct (the talk chat): B-nodiv without the co-ops; the levy kept as revenue is set by name in apply_fiscal_package
         ("SB1 best SuMSy + greedy quarter", (; V8_DEBT..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE..., GREEDY_Q...), (; V8_SUMSY..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE..., GREEDY_Q...)),
         ("SB2 best SuMSy + everyone greedy", (; V8_DEBT..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE..., GREEDY_A...), (; V8_SUMSY..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE..., GREEDY_A...)),
         # Full money stock (23 September): SuMSy villages started at their equilibrium money stock, set against the same steps
@@ -367,7 +369,7 @@ function apply_fiscal_package(rungs, fiscal::Symbol; surplus_rule::Symbol = :deb
         gov = has_government(kd) || has_government(ks); levy = has_levy(kd) || has_levy(ks); charge = has_charge(kd) || has_charge(ks)
         kd2 = isempty(kd) ? kd : (; kd..., fiscal_package(fiscal, gov, levy, charge, :debt; surplus_rule)...)
         ks2 = isempty(ks) ? ks : (; ks..., fiscal_package(fiscal, gov, levy, charge, :sumsy; surplus_rule)...)
-        if startswith(name, "B-nodiv")                                        # 24 Oct (the talk chat §2): the land tax as ordinary revenue on both sides —
+        if startswith(name, "B-nodiv") || startswith(name, "10-nodiv")                                        # 24 Oct (the talk chat §2): the land tax as ordinary revenue on both sides —
             nodiv = (; land_levy = true, land_levy_dividend = false, levy_dividend_target_in_breads = 0.0,   # no dividend, no levy lever,
                        basic_income_target_in_breads = 0.0, unemployment_fee_in_breads = 2.0, minimum_fee_in_breads = 2.0)   # no meal under P, the benefit back on at two loaves
             kd2 = isempty(kd2) ? kd2 : (; kd2..., nodiv...); ks2 = isempty(ks2) ? ks2 : (; ks2..., nodiv...)
