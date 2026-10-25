@@ -106,6 +106,93 @@ On the base the more the debt village pays out, the less it borrows (176k → 76
 
 **The debt village's price runs at step 2, realistic (traced 24 Oct, late night; for the Q&A — the talk stays on `.9`).** Two mechanisms. (1) A ratchet in the price rule (mine, 22 Oct): a firm raised its price 6 % on any sell-out with one customer turned away but cut it only when sales fell 10 % short; with fixed demand that pushed bread up about 3 % a month. Fixed in `.13` (`price_rise_band`: prices now rise only when demand exceeds expectation by the same 10 %); the worst seed's bread at year ten fell from 39 to 16. (2) **What remains is the money's own loop, and it may be the finding:** in seed 2, from year 5 to year 10, the public debt and the money in circulation both grew ×3.5 (56k → 198k; 60k → 206k), the benefit bill ×9.6, and bread ×6. The government borrows to pay a benefit set at two loaves at the going price; under debt money the borrowing creates money; output cannot grow, so the money goes into prices; dearer bread makes the benefit dearer and the next deficit larger. It is not the wage contracts: indexation at 0.8 leaves it unchanged (15.6 and 20.4 against 15.9 and 21.3), and without contracts one seed calms and the other collapses (188 alive). It cannot happen in the SuMSy village, whose government does not borrow. It shows in two of four seeds; seeds 1 and 4 stay stable. **For the Q&A:** "In two of four realistic runs, a government that borrowed to keep everyone fed also created the money that drove up the price of the bread it was buying." What a real economy has that the model lacks is a central bank that raises rates as prices rise — the government here borrows at a fixed 0.5 % a month whatever the inflation.
 
+**Correction on unemployment (24 Oct, midnight) — the two zeros are NOT the same kind.** I told the reviewer on 23 Oct that every villager offers all their labour on the base ladder; that was wrong (I had read only the non-working branch of `labour_supply`). The ladder uses need-based labour supply (`offer_full_capacity = false`): a villager offers the hours that cover a meal, a top-up of the savings cushion and the standard-of-living tickets, *less* their other income — land rent, the benefit, **the guaranteed income and the dividend** — with a floor of a minimum offer and their share of the work the village needs; when the village is short of bread or hands, everyone offers everything. So the SuMSy villager, whose income covers part of the meal, offers fewer hours. **Capacity used, tenth year, seed 1 (capacity = 4 units a head, 2,048 for 512):**
+
+| cell | debt: offered / sold, % of capacity | SuMSy: offered / sold, % of capacity |
+|---|---|---|
+| base step 2 | 89 / 63 | 58 / 58 |
+| base step 8 | 80 / 66 | 71 / 71 |
+| base B | 81 / 66 | 72 / 72 |
+| base V8 | 75 / 55 | 56 / 56 |
+| realistic step 2 | 85 / 65 | 75 / 61 |
+| realistic B | 80 / 68 | 73 / 73 |
+| realistic V8 | 73 / 62 | 64 / 61 |
+
+Both villages use about the same share of their hands — 55–73 % — and produce what is needed (2.0–2.1 loaves a head). The difference is on the offer side: the debt villager offers 75–89 % and cannot sell a fifth to a third of it; the SuMSy villager offers less because the income pays part of the meal, and sells nearly all of it. Land: a plot yields one unit of grain a month, so the farms work about 520–570 of the 768 plots (68–74 %; V8, which needs half the grain, about 270, 35 %). **The villages run at about two-thirds of their labour capacity and are demand-limited.** For the slide and the Q&A: "59 looked for work and found none, against none" is true as a count, but the SuMSy villagers were looking for fewer hours — say "in the SuMSy village everyone who looked for work found the hours they looked for; they looked for fewer, because their income already pays part of their bread." The reviewer's caution of 23 Oct was right.
+**Checked the same night — nobody stays out of the labour market in the talk's cells.** Steps 0, 2, 8, V8, B, SB2 and DGI8, base and realistic, both moneys, seed 1, months 12, 24 and 36: **no villager offers zero hours; nobody is non-working by design** (that exists only in rung Q8, 5 % not working, which is not in the talk); **the smallest offer is 2.0–2.9 of 4 units** — the floor is each villager's share of the work the village needs. The median offer is 3–4 units in the debt village and 2.3–3.0 in the SuMSy village (realistic V8: 4). So "unemployed" counts the same population in both villages — everyone — and the two counts are comparable as counts; what differs is the hours each villager looks for. The line for the Q&A: "everyone looks for work in both villages; in the debt village 59 found none, in the SuMSy village everyone found the hours they looked for — fewer hours, because the income pays part of their bread."
+
+## 4k. THE TALK'S NUMBERS — the talk run on 2026-10-24.13 (25 Oct, morning; 344 runs, four seeds; SUPERSEDES §4i and §4j for every figure)
+
+Folders `…_120months_2026-10-24.13`: `realistic_fiscal_taxes` (88), `realistic_fiscal_parking` (80), `fiscal_taxes` (88), `fiscal_parking` (80), `realistic_levybase_fiscal_taxes` (8). What changed since `.9`: the floor-per-unit-sold trap capped (the step-2 famine), a sold-out firm plans more, the land tax never below its base rate, prices rise only on a real excess of demand.
+
+**Main table — realistic set, income taxes** (alive (worst seed) / public debt at month 120 / poorest tenth's wealth in meals / wealth Gini / unemployed at month 120):
+
+| step | debt village | SuMSy village |
+|---|---|---|
+| 0 bare bones (no government) | **59** (52) / 0 / −1.5 / 0.73 / 6.5 | 481 (390) / 0 / 10.0 / 0.73 / 43.5 |
+| 2 government | 499 (492) / **109k** / 0.9 / 0.74 / 91.5 | **512** / 0 / 24.6 / 0.73 / 19.2 |
+| 8 shares | 511 (510) / 55k / −1.2 / 0.61 / 57.5 | 512 / 0 / 31.1 / **0.26** / 0.8 |
+| 11 VAT | 503 (492) / 24k / −6.6 / 0.65 / 94.5 | 512 / 0 / 54.4 / 0.28 / 31.5 |
+| V8 productive | 512 / 26k / −0.9 / 0.80 / 90 | 512 / 0 / 54.6 / 0.17 / 0.5 |
+| B co-ops + reserve | 510.5 (507) / 49k / 2.8 / 0.45 / 44.5 | 512 / 0 / 28.5 / 0.28 / 20.0 |
+| BG with gold | 510 (504) / 47k / 4.3 / 0.43 / 80 | 512 / 0 / 30.9 / 0.26 / 11.2 |
+| SB2 everyone greedy | 511.8 (511) / 90k / 0.3 / 0.47 / 48.5 | 512 / 0 / 30.1 / 0.33 / 0.0 |
+| B-nodiv (land tax kept as revenue) | 480 (452) / 84k / 3.4 / 0.70 / 69.8 | 512 / 0 / 20.3 / 0.50 / 6.2 |
+
+**What the talk can say:**
+1. **With a government the SuMSy village keeps all 512, in every seed, at every step.** The debt village loses up to 32 (B-nodiv; worst seed 452).
+2. **The SuMSy government borrows once, 4–7k at the start, repaid by month 22, and never again.** The debt village is still borrowing at month 120 in every cell: 24k–109k.
+3. **The poorest tenth: 20–55 meals in the SuMSy village with a government; −6.6 to 4.3 in the debt village** — in debt at steps 8, 11 and V8.
+4. **Inequality: from step 8 the SuMSy village's wealth Gini is 0.17–0.33 against 0.43–0.80; at step 2, before the land tax, they are equal (0.73 / 0.74).** The difference is the land tax paid out to everyone, at no less than its base rate. The rule is the same in both villages; in the debt village it raises little, because the land tax follows the cost of holding money. Kept as revenue (B-nodiv) the SuMSy Gini is 0.50 against 0.70. *(The `.9` sentence "SuMSy lifts the floor but doesn't flatten the distribution" is withdrawn: on `.9` the lever had cut SuMSy's land tax to half its base rate.)*
+5. **The bare village:** the debt village keeps 59 of 512, SuMSy 481.
+
+**Work wanted and work done** (realistic, tenth year, mean of four seeds, share of capacity — `docs/talk/work_capacity_2026-10-24.13.csv`):
+
+| step | debt: offered / accepted / looked for, not found | SuMSy: offered / accepted / looked for, not found |
+|---|---|---|
+| 2 government | 84 / 67 / 17 % | 65 / 61 / 4 % |
+| 8 shares | 80 / 74 / 6 % | 76 / 74 / 2 % |
+| 11 VAT | 80 / 69 / 11 % | 78 / 75 / 3 % |
+| B co-ops | 79 / 70 / 9 % | 77 / 74 / 3 % |
+| SB2 greedy | 79 / 71 / 8 % | 75 / 73 / 1 % |
+| B-nodiv | 89 / 72 / 17 % | 76 / 74 / 1 % |
+
+Both villages do about the same work (2.4–3.0 units a head a month, debt 2.0–3.0). The SuMSy villager looks for a little less and gets nearly all of it; in the debt village 6–17 % of capacity is work looked for and not found. The slide line of §4j stands. (Unemployed in this table is the tenth-year mean; the main table's is month 120.)
+
+**Do not quote (unstable, for next week):** prices in V8 realistic — the debt village deflates 25 % a year (bread 0.17), the SuMSy village *inflates* 8 % a year (bread 4.8); the debt village's step 2 realistic inflates 6.8 % a year (bread 11.3: the borrowing loop of §4h-bis); SuMSy step 0 +2 %. Elsewhere prices fall 3–11 % a year in both villages.
+
+**Q&A, the parking package (realistic):** SuMSy 512 everywhere, no debt, poorest 4–32 meals; the debt village 467–512 — **step 11 loses 45 on average (worst seed 365)**, a loss `.9` did not have, untraced; B-nodiv 485 (476) with 3k of debt, its poorest tenth 10 meals in debt and 112 unemployed. **The land tax (realistic, income taxes):** the debt village borrows least when its land tax is paid out at the lever's rate (49k), more at the base rate paid out (96k, 500 alive), and 84k kept as revenue with 480 alive. **Full employment in the debt village:** on the base only when everyone is paid an income (DGI8, DDGL8, RV8: 0 unemployed at 254–376k of debt); on the realistic set not even then (36–96 unemployed at 311–397k).
+
+**The base labour market on `.13`** (for "what the realistic rules change"): the SuMSy village keeps 512 with a government at every step, 0 unemployed; the debt village 509–512, borrowing 24–195k; the base numbers barely moved from `.9`.
+
+## 4j. Work wanted and work done — for the work/life slide (24 Oct, night; `docs/talk/work_capacity_2026-10-24.9.csv`)
+
+Capacity is 4 units of work a head a month. "Offered" is the work the villagers looked for; "accepted" is the paid work they got (firms and public jobs); both as a share of capacity, the tenth year, mean of four seeds, the talk run (`.9`), income taxes.
+
+**Realistic set (the talk's case):**
+
+| step | debt: offered / accepted / looked for and not found | SuMSy: offered / accepted / looked for and not found | unemployed, debt / SuMSy |
+|---|---|---|---|
+| 0 bare bones | 89 / 51 / 37 % | 63 / 53 / 10 % | 7.5 / 40 |
+| 2 government | 85 / 65 / 19 % | 67 / 61 / 6 % | 101 / 24 |
+| 8 shares | 77 / 71 / 6 % | 73 / 72 / 1 % | 33 / 2.6 |
+| 11 VAT | 79 / 68 / 11 % | 73 / 73 / 0 % | 58 / 1 |
+| V8 productive | 76 / 59 / 17 % | 63 / 62 / 1 % | 110 / 5 |
+| B co-ops | 78 / 69 / 9 % | 74 / 73 / 0 % | 51 / 2 |
+| BG with gold | 82 / 71 / 11 % | 76 / 74 / 2 % | 54 / 7 |
+| SB2 everyone greedy | 81 / 68 / 12 % | 76 / 75 / 2 % | 67 / 7 |
+| B-nodiv | 89 / 71 / 18 % | 74 / 73 / 1 % | 88 / 4 |
+
+On the base labour market the pattern is cleaner: the SuMSy village sells 100 % of what it offers at every step with a government (0 unemployed), the debt village 74–92 % offered, 55–66 % accepted, 61–171 unemployed.
+
+**What it shows — and the framing that holds:**
+1. **Both villages do about the same amount of work**, about seven hours in ten of what they could (SuMSy 61–75 %, the debt village 59–71 % with a government) — the village needs the same bread and seats either way. The SuMSy villager does *not* work less; at most steps slightly more (2.4–3.0 units a head against 2.3–2.8).
+2. **What differs is whether people get the work they look for.** In the debt village 6–19 % of capacity is work people looked for and did not find, and it falls on 33–110 unemployed people; in the SuMSy village 0–6 %.
+3. **The SuMSy villager looks for less work** (63–76 % against 76–89 %), because the income already pays part of the bread — and gets it. So the free time in the SuMSy village is chosen and spread over everyone; in the debt village it is unwanted and lands on a few.
+4. **The slide's line:** "Both villages do the same work. In the SuMSy village people get the hours they ask for — and ask for fewer, because their income pays part of their bread. In the debt village one in five or ten hours people want goes unsold, and it falls on the unemployed." "Better work/life balance" is fair if it means *control over one's hours*; it would be wrong if it meant *fewer hours worked*.
+
+**Caveats to keep ready:** (a) the offer is the model's rule — each villager offers the hours that cover a meal, a cushion top-up and the standard-of-living tickets, less other income, and at least their share of the village's needed work; it is an assumption about people, not a measurement; (b) public jobs are in "accepted" — about 10 % of capacity in the debt village (≈ 200 units a month) and 5–9 % in the SuMSy village; (c) the realistic SuMSy village has some unwanted idleness at step 0 (10 %, 40 unemployed, no government) and step 2 (6 %, 24 unemployed) — the contracts' outsiders; (d) four seeds, the tenth year.
+
 ## 4h. Why prices fall in the greedy village — "greed without collusion" (24 Oct, night; for the talk and the Q&A)
 
 **What "greedy" means in the model.** A greedy firm that sells out sets its ask at what the market allows (the price last paid times the overpay multiplier); greedy buyers spend their cash above the buffer on extra loaves and tickets. That is all greed does on the price side. A greedy firm prices at cost like any other when it does not sell out — no margin in its floor unless the margin switch is on, and it is not in SB2.

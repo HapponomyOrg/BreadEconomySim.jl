@@ -1,0 +1,37 @@
+set,cell,money,seeds,offered,accepted,looked_not_found,unemployed,units_a_head,debt_peak_k,debt_end_k,last_month_in_debt
+realistic,0 bare,debt,4,89,51,38,10.0,1.98,0.0,0.0,0
+realistic,0 bare,sumsy,4,68,55,13,57.8,2.19,0.0,0.0,0
+realistic,2 government,debt,4,84,67,17,83.5,2.67,109.2,109.2,120
+realistic,2 government,sumsy,4,65,61,4,13.5,2.43,7.2,0.0,22
+realistic,8 shares,debt,4,80,74,6,31.7,2.95,55.6,55.4,120
+realistic,8 shares,sumsy,4,76,74,2,7.5,2.95,4.9,0.0,22
+realistic,11 VAT,debt,4,80,69,11,55.9,2.73,25.1,24.1,120
+realistic,11 VAT,sumsy,4,78,75,3,9.0,2.98,4.0,0.0,22
+realistic,V8 productive,debt,4,76,61,15,83.0,2.44,26.1,26.1,120
+realistic,V8 productive,sumsy,4,60,58,2,12.0,2.31,4.9,0.0,22
+realistic,B co-ops,debt,4,79,70,9,48.7,2.78,48.7,48.7,120
+realistic,B co-ops,sumsy,4,77,74,3,10.9,2.94,4.9,0.0,22
+realistic,BG gold,debt,4,79,72,8,36.0,2.84,47.3,46.8,120
+realistic,BG gold,sumsy,4,78,75,3,7.9,2.99,4.9,0.0,22
+realistic,SB2 greedy,debt,4,79,71,8,48.9,2.82,90.5,90.3,120
+realistic,SB2 greedy,sumsy,4,75,73,1,6.9,2.93,5.4,0.0,22
+realistic,B-nodiv,debt,4,89,72,17,82.4,2.83,83.9,83.9,120
+realistic,B-nodiv,sumsy,4,76,74,1,4.1,2.96,1.6,0.0,21
+base,0 bare,debt,4,78,53,25,31.4,2.11,0.0,0.0,0
+base,0 bare,sumsy,4,57,54,3,12.1,2.14,0.0,0.0,0
+base,2 government,debt,4,89,63,26,145.8,2.52,194.7,194.7,120
+base,2 government,sumsy,4,58,58,0,0.0,2.32,7.2,0.0,22
+base,8 shares,debt,4,79,66,13,67.0,2.64,85.1,85.1,120
+base,8 shares,sumsy,4,71,71,0,0.0,2.84,4.9,0.0,22
+base,11 VAT,debt,4,85,65,20,83.8,2.59,24.5,24.5,120
+base,11 VAT,sumsy,4,71,71,0,0.0,2.84,4.0,0.0,22
+base,V8 productive,debt,4,79,55,24,170.5,2.2,71.8,71.8,120
+base,V8 productive,sumsy,4,55,55,0,1.8,2.19,4.9,0.0,31
+base,B co-ops,debt,4,80,66,13,58.6,2.65,75.1,75.1,120
+base,B co-ops,sumsy,4,72,72,0,0.0,2.87,4.9,0.0,22
+base,BG gold,debt,4,81,66,15,69.6,2.65,80.4,80.4,120
+base,BG gold,sumsy,4,72,72,0,0.0,2.87,4.9,0.0,22
+base,SB2 greedy,debt,4,74,64,9,61.8,2.57,78.0,78.0,120
+base,SB2 greedy,sumsy,4,77,77,0,1.7,3.07,5.4,0.0,22
+base,B-nodiv,debt,4,92,66,26,133.9,2.64,175.8,175.8,120
+base,B-nodiv,sumsy,4,72,72,0,0.0,2.87,1.6,0.0,21
