@@ -307,6 +307,8 @@ function run_all(; jobs::Int = max(Sys.CPU_THREADS - 1, 1), seeds::Int = 10, rou
     jobs_list = NamedTuple[]
     for (N, settlement) in ladders
         def = ladder(N, rounds, settlement, fiscal, surplus_rule)
+        missing_steps = [r for r in rungs if !any(x -> startswith(x[1], r), def.rungs)]   # 25 Oct: a name that matches nothing used to be skipped without a word
+        isempty(missing_steps) || error("run_all: no step of the ladder matches " * join(repr.(missing_steps), ", ") * " — check the name, or unpack the latest package (this code is version $(MODEL_VERSION))")
         for (name, kd, ks) in def.rungs
             (isempty(rungs) || any(p -> startswith(name, p), rungs)) || continue
             for system in ("debt", "sumsy"), seed in 1:seeds
