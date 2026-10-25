@@ -206,6 +206,12 @@ Base.@kwdef struct SimulationParameters
     # Without the cap a refounded farm whose first grain did not sell had its floor doubled (lost share 51–99 % → the 50 % cap), sold
     # nothing at that price, spoiled more, and kept the village on half its grain for three months. On in the ladder's base.
     lost_share_capped_at_buffer::Bool = false
+    # 24 Oct (traced, the realistic debt village at step 2: bread 6 → 39 in five years with everyone fed): under the expected-sales
+    # rule a price fell only when sales were 10 % short of expectation but rose on any sell-out with a customer turned away — with a
+    # thin buffer and fixed demand that ratchets up ~3 % a month, and indexed wages carry each step into costs. With this on, the
+    # price rises only when the demand seen (sales plus the firm's share of those turned away) exceeds expected sales by the same
+    # `expected_sales_tolerance`. On in the ladder's base; false = as before.
+    price_rise_band::Bool = false
     planning_margin::Float64 = 0.0              # extra share of demand planned for (0.0 = plan exactly the population's meals)
     # 14 October (the greedy village's bakeries): plan greedy demand on last month's greedy purchases, not on the greedy villagers'
     # cash; and never target more grain than the ovens can bake — `bakery_capacity_share` of the village's labour, spread over the

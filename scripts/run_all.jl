@@ -51,7 +51,7 @@ using Dates, Pkg, Distributed
 
 const ROOT = normpath(joinpath(@__DIR__, ".."))
 
-const MODEL_VERSION = "2026-10-24.12"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
+const MODEL_VERSION = "2026-10-24.13"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
 
 # ---- packages (once per session) ---------------------------------------------------------------------------------------
 const PACKAGES_READY = Ref(false)
