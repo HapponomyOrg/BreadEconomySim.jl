@@ -295,6 +295,18 @@ Base.@kwdef struct SimulationParameters
     # 24 Oct (Stef): the land tax never falls below its base rate — the lever and the tax cuts may raise its scale, never take it
     # under `levy_scale_floor`. 1.0 in the ladder's base; 0.0 = as before (the lever could cut it to nothing).
     levy_scale_floor::Float64 = 0.0
+    # 25 Oct (the inheritance bug): the heir of a dead villager receives everything, not only cash, land and peer claims —
+    # shares, co-op memberships, government bonds, gold and the invoices owed to the dead; the dead's own unpaid bills are paid
+    # pro rata from the estate and the rest written off; anything paid to a dead villager afterwards goes to the heir. Before, the
+    # shares, bonds and gold stayed with the dead and coupons and invoices kept being paid into dead accounts. false = as before.
+    inherit_all_assets::Bool = false   # on in the ladder's base (the golden values predate it)
+    # 25 Oct (Stef): the heir also takes on what the estate could not pay. The estate still settles first (bank loans pro rata from
+    # the cash, then land seized; peer loans the same; bills pro rata); what is left — today written off — passes to the heir and
+    # is serviced by its terms (bank loans keep their schedule, the liability moved from the dead balance to the heir's; peer loans
+    # and bills change debtor). One switch for a dead villager's debt, one for a closed firm's (the heir of its cash and land).
+    # Both false here (the golden values); in the ladder's base personal debt on, firm debt off.
+    heir_inherits_personal_debt::Bool = false
+    heir_inherits_firm_debt::Bool = false
     # Public land (18 October, Stef — close to Gesell's Freiland): all land is the government's; farms rent the plots they work,
     # bakeries and theatres pay for the ground they stand on, every villager for the ground they live on — ground rents set in
     # loaves, scaled with the tax levers (`tax_scale`), paid to the government as tax. Nobody owns land, so no land market, no land

@@ -2061,6 +2061,56 @@ end
     @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., land_levy = true, land_levy_dividend = true, levy_dividend_target_in_breads = 2.0, levy_scale_floor = 1.0))) < 1e-6
 end
 
+
+@testset "the heir receives everything (25 October 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., inherit_all_assets = true, maximum_rounds = 6))
+    for _ in 1:3; B.econo_step!(m, 1); end
+    ps = B.persons(m); dead = ps[1]; e = first(B.enterprises(m, :bakery))
+    dead.gold = 7.0; e.shares[dead.id] = 3.0
+    push!(m.bonds, B.Bond(length(m.bonds) + 1, dead.id, 10.0, 0.01, 1, 100, false))
+    push!(m.invoices, B.Invoice(e.id, dead.id, 2.5, 2.5, :wage, :wage, B.current_round(m)))     # owed to the dead
+    B.die!(m, dead)
+    heir = m[dead.heir_id]
+    @test dead.heir_id != 0 && heir.alive
+    @test heir.gold >= 7.0 && dead.gold == 0.0
+    @test get(e.shares, heir.id, 0.0) >= 3.0 && !haskey(e.shares, dead.id)
+    @test all(b.holder_id != dead.id for b in m.bonds if !b.settled)
+    @test all(iv.to_id != dead.id for iv in m.invoices)
+    @test B.living_heir(m, dead) === heir
+    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., inherit_all_assets = true))) < 1e-6
+end
+
+
+@testset "the heir takes on the debt the estate cannot pay (25 October 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., inherit_all_assets = true, heir_inherits_personal_debt = true, maximum_rounds = 6))
+    for _ in 1:3; B.econo_step!(m, 1); end
+    ps = B.persons(m); dead = ps[1]; bank = first(B.enterprises(m, :bank))
+    dead.land = 0
+    B.make_loan!(m, bank, dead, 40.0, :test)
+    B.transfer!(m, dead, ps[2], B.cash(dead), :gift)                         # nothing left to pay with
+    l = last(m.loans); due = B.total_due(l)
+    lender = ps[3]; pl = B.PeerLoan(length(m.peer_loans) + 1, lender.id, dead.id, lender.id, 20.0, 20.0, 2.0, 0.005, 0.005, false, 1, 0, false, false, 0.0)
+    push!(m.peer_loans, pl)
+    B.die!(m, dead)
+    heir = m[dead.heir_id]
+    @test !l.settled && l.debtor_id == heir.id && l.debt.debtor === heir.balance && B.total_due(l) ≈ due
+    @test !pl.settled && pl.borrower_id == heir.id && pl.outstanding ≈ 20.0
+    @test l in B.debtor_loans(m, heir) && pl in B.peer_loans_of(m, heir)
+    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., inherit_all_assets = true, heir_inherits_personal_debt = true, heir_inherits_firm_debt = true))) < 1e-6
+end
+
+
+@testset "GDP and public debt as a share of GDP (26 October 2026)" begin
+    d = round_data(run(; seed = 1, maximum_rounds = 15, BEH...))
+    for c in (:gdp_consumption, :gdp_government, :gdp_banks, :gdp_inventory, :gdp_nominal, :gdp_annual, :gdp_in_loaves, :gdp_per_head_loaves, :public_debt_pct_gdp)
+        @test hasproperty(d, c)
+    end
+    @test all(isapprox.(d.gdp_nominal, d.gdp_consumption .+ d.gdp_government .+ d.gdp_banks .+ d.gdp_inventory; atol = 1e-6))   # the pieces add up
+    @test all(d.gdp_consumption .>= 0) && all(d.gdp_government .>= 0)
+    @test d.gdp_annual[end] ≈ sum(d.gdp_nominal[end-11:end])                                         # twelve trailing months
+    @test all(isapprox.(d.gdp_per_head_loaves .* d.persons_alive, d.gdp_in_loaves; rtol = 1e-9))
+end
+
 @testset "cooperative forms (14 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     params(m) = B.parameters(m)

@@ -51,7 +51,7 @@ using Dates, Pkg, Distributed
 
 const ROOT = normpath(joinpath(@__DIR__, ".."))
 
-const MODEL_VERSION = "2026-10-24.13"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
+const MODEL_VERSION = "2026-10-26.0"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
 
 # ---- packages (once per session) ---------------------------------------------------------------------------------------
 const PACKAGES_READY = Ref(false)
@@ -223,11 +223,14 @@ end
 """One row per rung and village: the numbers the report quotes (means over the runs, with the worst run and the count of
 runs in which the village stayed whole, i.e. lost at most one person in sixteen)."""
 function summarise(rounds::DataFrame, N::Int)
-    rounds.gdp_round = coalesce.(rounds.bread_sold .* coalesce.(rounds.price_bread, 0.0) .+ rounds.ticket_revenue, 0.0)
+    # 26 Oct: the model's own GDP (bread, tickets, premium loaves, public wages, the banks' margin, stock changes) where the run has it;
+    # older runs fall back to bread and tickets only, which leaves out the government and overstates the debt ratio
+    rounds.gdp_round = hasproperty(rounds, :gdp_nominal) ? coalesce.(rounds.gdp_nominal, 0.0) : coalesce.(rounds.bread_sold .* coalesce.(rounds.price_bread, 0.0) .+ rounds.ticket_revenue, 0.0)
+    rounds.gdp_head_round = hasproperty(rounds, :gdp_per_head_loaves) ? coalesce.(rounds.gdp_per_head_loaves, NaN) : fill(NaN, nrow(rounds))
     last_rows = combine(groupby(sort(rounds, :round), [:rung, :system, :seed]), last)
     maxround = maximum(rounds.round)
     tail = combine(groupby(filter(r -> r.round > maxround - 12, rounds), [:rung, :system, :seed]),
-        :gdp_round => mean => :gdp, :tickets_sold => mean => :tickets, :price_bread => (x -> mean(skipmissing(x))) => :bread_price,
+        :gdp_round => mean => :gdp, :gdp_head_round => (x -> (v = filter(isfinite, x); isempty(v) ? missing : mean(v))) => :gdp_per_head, :tickets_sold => mean => :tickets, :price_bread => (x -> mean(skipmissing(x))) => :bread_price,
         :unemployed => mean => :unemployed, :tax => mean => :revenue, :government_outlay => mean => :outlay)
     # every run is kept: a run that ended early (a village that lost its last farm or bakery) has no rows in the tail window,
     # and an inner join silently dropped it — survivorship bias (review 3). Left join; the run's last recorded row stands.
@@ -262,7 +265,7 @@ function summarise(rounds::DataFrame, N::Int)
         [:persons_alive, :collapsed] => ((a, c) -> count(i -> !c[i] && a[i] >= N * 15 / 16, eachindex(a))) => :runs_whole,   # a collapsed village is never whole (review 5)
         [:persons_alive, :collapsed] => ((a, c) -> (v = a[.!c]; isempty(v) ? missing : mean(v))) => :alive_complete_runs,
         :unemployed => m => :unemployed, :tickets => m => :tickets, :bread_price => m => :bread_price,
-        :government_debt => m => :public_debt, :debt_pct_gdp => m => :public_debt_pct_gdp, :shortfall => m => :shortfall_per_month,
+        :government_debt => m => :public_debt, :debt_pct_gdp => m => :public_debt_pct_gdp, :gdp_per_head => m => :gdp_per_head_loaves, :shortfall => m => :shortfall_per_month,
         :debt_peak => m => :public_debt_peak, :debt_peak_month => m => :public_debt_peak_month,
         :owes_nothing => count => :runs_debt_repaid,   # 15 Oct: runs that owe nothing at the end (a run that never borrowed counted as unpaid before)
          :debt_repaid_month => (x -> all(ismissing, x) ? missing : mean(skipmissing(x))) => :public_debt_repaid_month,

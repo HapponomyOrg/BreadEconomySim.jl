@@ -360,7 +360,7 @@ function settle_invoices!(model)
         for iv in due
             paid = round(min(iv.amount, available), digits = 4)
             paid > 1e-6 || break
-            to = model[iv.to_id]
+            to = model[iv.to_id]                         # (25 Oct: transfer! sends a payment to a dead villager on to the heir)
             if to.alive
                 transfer!(model, from, to, paid, iv.purpose); book_settled!(model, from, to, paid, iv.income_kind)
             end
@@ -378,6 +378,7 @@ invoices_overdue(model, a::Agent, rounds::Int) = sum(iv.amount for iv in model.i
 
 """Immediate transfer, used only outside the clearing cycle (estates, seizure refunds)."""
 function transfer!(model, from::Agent, to::Agent, amount::Float64, purpose::Symbol)
+    parameters(model).inherit_all_assets && to isa Person && !to.alive && (to = living_heir(model, to))   # 25 Oct: nothing is paid into a dead villager's account
     amount = round(amount, digits = 4)
     amount <= 0 && return 0.0
     cash(from) < amount && amount - cash(from) < 1e-3 && (amount = cash(from))
@@ -479,6 +480,12 @@ function clear!(model)
     p = parameters(model); rng = stream(model, :credit)
     promises = model.promises
     isempty(promises) && return nothing
+    if p.inherit_all_assets                                                  # 25 Oct: a promise to a dead villager (arrears earned before death) is the heir's
+        for pr in promises
+            t = model[pr.to_id]
+            (t isa Person && !t.alive && t.heir_id != 0) && (pr.to_id = living_heir(model, t).id)
+        end
+    end
     agents = OrderedDict(a.id => a for a in agents_by_id(model))
     # one pass over the books: obligations, receipts and peer debt service per agent (used by lendable and issue_bonds!)
     empty!(model.clearing_obligations); empty!(model.clearing_receipts); empty!(model.clearing_debt_service)
@@ -864,7 +871,7 @@ function pay_overdue_invoices!(model, e::Enterprise)
     now = current_round(model)
     for iv in sort([iv for iv in model.invoices if iv.from_id == e.id && iv.round_issued < now]; by = iv -> iv.round_issued)
         amt = round(min(iv.amount, cash(e)), digits = 4); amt > 1e-6 || break
-        to = model[iv.to_id]
+        to = model[iv.to_id]                             # (25 Oct: transfer! sends a payment to a dead villager on to the heir)
         to.alive && (transfer!(model, e, to, amt, iv.purpose); book_settled!(model, e, to, amt, iv.income_kind))
         iv.amount = round(iv.amount - amt, digits = 4); model.invoices_paid_this_round += amt
     end
@@ -917,7 +924,7 @@ function refound!(model, e::Enterprise)
     # the proceeds settle what is owed, oldest invoices first
     for iv in sort([iv for iv in model.invoices if iv.from_id == e.id]; by = iv -> iv.round_issued)
         amt = round(min(iv.amount, cash(e)), digits = 4); amt > 1e-6 || break
-        to = model[iv.to_id]
+        to = model[iv.to_id]                             # (25 Oct: transfer! sends a payment to a dead villager on to the heir)
         to.alive && (transfer!(model, e, to, amt, iv.purpose); book_settled!(model, e, to, amt, iv.income_kind))
         iv.amount = round(iv.amount - amt, digits = 4); model.invoices_paid_this_round += amt
     end
@@ -1409,6 +1416,13 @@ Creditors are paid pro rata from cash, then land; the rest goes to a random livi
 """
 function settle_estate!(model, dead::Agent)
     p = parameters(model)
+    inherit_debt = dead isa Person ? p.heir_inherits_personal_debt : p.heir_inherits_firm_debt   # 25 Oct
+    debt_heir = nothing
+    if inherit_debt                                                          # drawn once: the same heir takes the debts and the assets
+        hs = [h for h in persons(model) if h.id != dead.id]
+        isempty(hs) || (debt_heir = stable_pick(stream(model, :estates), hs))
+    end
+    moved = false
     loans = debtor_loans(model, dead)
     owed = sum(total_due(l) for l in loans; init = 0.0)
     if owed > 1e-9
@@ -1421,6 +1435,15 @@ function settle_estate!(model, dead::Agent)
         end
         for l in loans
             remaining = total_due(l)
+            if remaining > 1e-9 && debt_heir !== nothing                     # 25 Oct: the heir takes the loan on, by its terms
+                principal = outstanding_principal(l)
+                book_liability!(dead.balance, DEBT, -principal; skip_check = true)
+                book_liability!(debt_heir.balance, DEBT, principal; skip_check = true)
+                l.debt.debtor = debt_heir.balance; l.debtor_id = debt_heir.id; l.arrears_rounds = 0; l.in_arrears = false
+                log_event!(model, :debt_inherited; actor = dead.id, heir = debt_heir.id, loan = l.id, amount = remaining)
+                moved = true
+                continue
+            end
             if remaining > 1e-9
                 creditor = model[l.creditor_id]
                 principal = outstanding_principal(l)
@@ -1437,6 +1460,9 @@ function settle_estate!(model, dead::Agent)
             l.settled = true
         end
     end
+    if dead isa Enterprise && debt_heir !== nothing                          # 25 Oct: a closed firm's unpaid bills go to the heir
+        for iv in model.invoices; (iv.from_id == dead.id && iv.amount > 1e-6) && (iv.from_id = debt_heir.id); end
+    end
     dead isa Enterprise && write_off_invoices!(model, dead)
     dead isa Enterprise && recapitalise_banks!(model)
     # peer loans: pro rata from cash, then land, then written off; claims pass to the heir
@@ -1452,6 +1478,12 @@ function settle_estate!(model, dead::Agent)
             l.outstanding > 1e-9 && dead.land > 0 && seize_land_peer!(model, l)
         end
         for l in ploans
+            if l.outstanding > 1e-9 && debt_heir !== nothing                 # 25 Oct: the heir takes the peer loan on
+                l.borrower_id = debt_heir.id; l.arrears_rounds = 0; l.in_arrears = false
+                log_event!(model, :debt_inherited; actor = dead.id, heir = debt_heir.id, peer_loan = l.id, amount = l.outstanding)
+                moved = true
+                continue
+            end
             if l.outstanding > 1e-9 && ((l.insured && p.default_insurance) || p.peer_loan_insurance)
                 # the insurance pool covers what it can; the rest is the lender's loss
                 bank = model[l.bank_id]; lender = model[l.lender_id]
@@ -1489,10 +1521,43 @@ function settle_estate!(model, dead::Agent)
             (e isa Enterprise && haskey(e.buffer_pledged_by, dead.id)) && release_pledge!(model, e, dead.id)
         end
     end
+    if p.inherit_all_assets && dead isa Person                              # 25 Oct: the dead's unpaid bills, pro rata from the estate, the rest written off
+        bills = [iv for iv in model.invoices if iv.from_id == dead.id && iv.amount > 1e-6]
+        billed = sum(iv.amount for iv in bills; init = 0.0)
+        estate_cash = cash(dead)
+        for iv in bills
+            to = living_heir(model, model[iv.to_id])
+            pay = round(min(iv.amount / billed * estate_cash, iv.amount, cash(dead)), digits = 4)
+            pay > 1e-6 && to.alive && (transfer!(model, dead, to, pay, iv.purpose); iv.amount = round(iv.amount - pay, digits = 4))
+            (iv.amount > 1e-6 && debt_heir !== nothing) && (iv.from_id = debt_heir.id; moved = true; continue)   # 25 Oct: the heir takes the rest of the bill
+            iv.amount > 1e-6 && (model.cumulative_bad_debt += iv.amount; log_event!(model, :write_off; actor = dead.id, invoice_to = iv.to_id, amount = iv.amount, kind = :invoice); iv.amount = 0.0)
+        end
+        filter!(iv -> !(iv.from_id == dead.id), model.invoices)
+    end
+    moved && (model.loan_index_version += 1)                                # 25 Oct: loans changed debtor
     heirs = [h for h in persons(model) if h.id != dead.id]
     left = cash(dead)
     if !isempty(heirs)
-        heir = stable_pick(stream(model, :estates), heirs)
+        heir = debt_heir === nothing ? stable_pick(stream(model, :estates), heirs) : debt_heir
+        if p.inherit_all_assets && dead isa Person                          # 25 Oct: everything else the dead held goes to the same heir
+            dead.heir_id = heir.id
+            for e in model.enterprise_list
+                u = get(e.shares, dead.id, 0.0)
+                u > 0 && (e.shares[heir.id] = get(e.shares, heir.id, 0.0) + u; delete!(e.shares, dead.id))
+                n = get(e.members, dead.id, 0)
+                if n > 0
+                    e.members[heir.id] = get(e.members, heir.id, 0) + n; delete!(e.members, dead.id)
+                    haskey(e.membership_unpaid, dead.id) && (e.membership_unpaid[heir.id] = get(e.membership_unpaid, heir.id, 0.0) + e.membership_unpaid[dead.id]; delete!(e.membership_unpaid, dead.id))
+                end
+            end
+            for b in model.bonds; (!b.settled && b.holder_id == dead.id) && (b.holder_id = heir.id); end
+            heir.gold += dead.gold; dead.gold = 0.0
+            for iv in model.invoices; iv.to_id == dead.id && (iv.to_id = heir.id); end
+            log_event!(model, :inheritance_assets; from = dead.id, heir = heir.id)
+        end
+        if p.inherit_all_assets && dead isa Enterprise                      # 25 Oct: a closed firm's bonds go to the heir of its cash and land
+            for b in model.bonds; (!b.settled && b.holder_id == dead.id) && (b.holder_id = heir.id); end
+        end
         left > 0 && transfer!(model, dead, heir, left, :inheritance)
         heir.land += dead.land
         for l in peer_claims_of(model, dead); l.lender_id = heir.id; end
@@ -1940,4 +2005,15 @@ function prune_settled_loans!(model)
     model.loans_pruned += n0 - length(model.loans); model.peer_loans_pruned += m0 - length(model.peer_loans)
     (n0 != length(model.loans) || m0 != length(model.peer_loans)) && (model.loan_index_version += 1)
     return nothing
+end
+
+
+"""The living recipient of a payment meant for `a` (25 October): `a` itself, or — for a dead villager — the heir, followed
+through further deaths. A dead villager without an heir is returned as is."""
+function living_heir(model, a::Agent)
+    seen = 0
+    while a isa Person && !a.alive && a.heir_id != 0 && seen < 10_000
+        a = model[a.heir_id]; seen += 1
+    end
+    return a
 end

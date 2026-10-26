@@ -18,3 +18,5 @@ Not yet written down: a monetary policy for SuMSy (a rule adjusting the parking 
 *19 October 2026:* `roadmap_macrosim_2026-10-18.md` (Stef) — the plan from BreadEconomySim to MacroSim; its step 3 (distributions, paired tests) is partly done in `run_all.jl` and `scripts/paired_tests.py`; its step 12.5 (the claims ledger) is next after the talk.
 
 *23 October 2026:* `banks_on_real_world_economics_2026-10-23.md` — the model's banks keep 83–97 % of their revenue (one employee, the loan rate at its cap); costs that scale with customers and loans, calibrated to real margins; the long-run test of the 2021 paper's `p`.
+
+*25 October 2026:* `roadmap_macrosim_2026-10-18.md` brought up to date — the state of the bread model before the refactor, the week's bugs as test-harness lessons, findings per step, relationships between actors (step 7, item 8, on MoneySim.jl's population model), new open questions. The refactor is the next step.

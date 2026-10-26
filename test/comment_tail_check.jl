@@ -9,7 +9,8 @@ let hits = String[]
             stripped = lstrip(line)
             (startswith(stripped, "#") || !occursin('#', line)) && continue
             code, comment = split(line, '#'; limit = 2)
-            occursin(r"\w+\s*=\s*[^,#]+,\s*$", comment) && occursin(r"(\(;|,)\s*$", rstrip(code)) && push!(hits, "$(basename(f)):$i")
+            # 25 Oct (the fourth time): a setting anywhere in the comment, not only at its end, when the code before it is an open literal
+            occursin(r"(\(;|,)\s*$", rstrip(code)) && occursin(r"(^|[\s,(])[a-z_][a-z0-9_]*\s*=\s*[^=,#]+,", comment) && push!(hits, "$(basename(f)):$i")
         end
     end
     @test isempty(hits) || error("code after a comment (a swallowed tail): " * join(hits, ", "))

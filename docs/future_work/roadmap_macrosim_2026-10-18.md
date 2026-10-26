@@ -1,6 +1,28 @@
 # From BreadEconomySim to a full ABM engine — implementation roadmap
 
-*18 October 2026. A working document: every design choice below is open to challenge. Source of truth for the plan until superseded; decisions taken against it are recorded in `HANDOFF_2026-09-18.md`.*
+*18 October 2026; brought up to date on 25 and 26 October 2026 (see the update below). A working document: every design choice below is open to challenge. Source of truth for the plan until superseded; decisions taken against it are recorded in `HANDOFF_2026-09-18.md`.*
+
+## Update of 25 October 2026 — where things stand before the refactor
+
+**Status.** The talk of 25 October is given. The bread model stands at version `2026-10-25.2` (72,728 tests). **The refactor is the next step**, starting with Phase A; this version is the reference Phase A must reproduce. The week's decisions and traces are in `HANDOFF_2026-09-18.md`; the talk's numbers and their caveats in `docs/talk/handoff_talk_2026-10-22.md` (§4k–§4l).
+
+**What changed in the bread model since 18 October** — all of it must survive the refactor (four new rows in the checklist below):
+
+- *Comparisons on identical rules.* `run_all(fiscal = :taxes | :parking)` gives both villages the same fiscal package at every rung (income taxes, or a 1.5 % tax on balances above a cushion of 30), and a test asserts that the two villages' settings differ only in money fields. The surplus rule (`surplus_rule = :debt_levy_taxcut`): the benefit and public wages are paid, the land tax is paid out to everyone, debt is serviced by its terms, the surplus builds a three-month reserve, and once that is full every other tax comes down. The land tax never falls below its base rate (`levy_scale_floor`); a lever raises it so that income plus the land dividend is a meal (SuMSy). Under the parking package the debt village pays a meal-sized basic income from the tax on idle money and borrowing, with no separate benefit.
+- *Base rules added to the ladder* (each a switch, off in the model's defaults so the golden values hold): debt collection stops at a meal (`collection_floor_in_breads = 2`); the banks' loan rate covers their staff at the going wage, and staff scale with loans (one unit per 12 loans); a greedy firm's ask is set from the price last paid; bakeries bake to their target, not their hands; prices fall only when sales are 10 % below expectation and rise only when demand is 10 % above it (`price_on_expected_sales`, `price_rise_band`); a firm that turned customers away plans more; the cost floor passes on at most the spoilage of the planned buffer; an heir receives all the dead villager's assets, and nothing is paid into a dead account (`inherit_all_assets`); heirs' and firms' debt inheritance exist as experimental switches, off.
+- *The realistic set* (`REALISTIC_LABOUR`): contracts for four fifths of the hands, indexed to bread, with notice; own-market planning (three-month average of sales plus customers turned away, net of stock) with an adaptive buffer; the cost floor carrying interest and the founding loan's instalments (`floor_debt_service = :long`) and spreading spoilage over what sells; farms buying land only on a term the rent and reserve can carry, and the land price meeting the best offer; deleveraging by land sales; a minimum of two firms of each kind; sale of a failing firm before closure.
+- *Speed.* Settled loans pruned with unique ids and an indexed loan lookup; the wealth sums of the data row, the invoice settlement, the land reservation and the share valuations computed once per month instead of once per candidate. Results identical (old code against new, column by column); a 24-month run about six times faster than on 24 October morning.
+- *GDP and public debt as a share of GDP (26 Oct, version `2026-10-26.0`).* Each month the data row carries GDP by spending — final sales of bread, tickets and premium loaves (`gdp_consumption`); public wages, government output valued at cost (`gdp_government`); the banks' margin, the month's change in retained interest plus account fees (`gdp_banks`); the change in the bakeries' unsold stock at the price paid (`gdp_inventory`) — summed in `gdp_nominal`, with `gdp_annual` (trailing twelve months), GDP in loaves per survivor and per starting villager, and `public_debt_pct_gdp` (public debt over the trailing twelve months' GDP). Grain is an input and land is not produced, so neither counts. The run summaries' existing debt ratio now uses this GDP (before, bread and tickets only — it left out the government and overstated the ratio); `gdp_per_head_loaves` joins them. A test checks that the pieces add up. Step 3 must carry it, with the improvements listed there.
+- *Infrastructure.* Combined outputs carry the version in their names; `scripts/regression_check.jl` (one cell against an earlier run, month by month), `death_trace.jl`, `profile_run.jl`, `prune_check.jl`, `talk_run.jl`; `run_all` refuses a step name that matches nothing; a test fails on any code placed after a comment on the same line.
+
+**Bugs found this week, and what they teach the refactor's test harness.** A mid-line comment swallowed the rest of a definition three times (18, 23 and 24 Oct: eighteen ladder rules, V8's starting prices) → the comment test, kept. A price rule raised prices on any sell-out but cut them only on a 10 % shortfall → a ratchet (debt village bread 6 → 39) → every price rule needs a symmetry test. A floor that divided by the spoiled share doubled a refounded farm's price and starved a village with full pockets → floors need a test that unsold stock cannot raise its own price. Wage arrears earned before death were booked into dead accounts at clearing, outside `transfer!` → Step 2 needs a check that no payment reaches a dead agent and that every estate account is empty after settlement.
+
+**Findings that bear on the steps** (each is traced in the handoffs):
+- *Step 5.* With the cost fix the model's banks still keep 83–97 % of their revenue (one employee; real banks about 30 %): bank costs must scale with customers and loans and be calibrated (`docs/future_work/banks_on_real_world_economics_2026-10-23.md`).
+- *Step 6.* The debt village has no nominal anchor. At step 2 under realistic rules it inflates (bread up 6.8 % a year): a government borrowing to pay a benefit set at the price of two loaves creates the money that drives the price. In the productive village (V8) it deflates without end once its founding loans are repaid and nothing is fixed in money; an income fixed in money stops it (345k of public debt in ten years). A policy rate that responds to inflation is the obvious missing stabiliser; it must be tested, not assumed.
+- *Step 7.* Labour supply is need-based: villagers offer the hours that cover a meal, a cushion top-up and the theatre tickets, less other income. Both villages work about seven hours in ten; the SuMSy villager asks for fewer and gets them, the debt villager asks for more and 6–17 % of capacity goes unfound.
+- *Step 8.* Ownerless firms have no working outlet for cash above their reserve under contracts (realistic bare debt village: bakeries at 2.5–11× their reserve, holding 48–83 % of the money); the contraction trap (two firms of each kind) is still open.
+- *Step 9.* The land-tax floor makes the SuMSy village's land tax pay out two to three meals a head in the productive village, which then inflates about 8 % a year; whether the part above the meal target should be paid out or go to the reserve is a design decision (open questions).
 
 ## Purpose and scope
 
@@ -163,6 +185,8 @@ Every result the engine reports should come with how many runs it rests on, how 
 
 **Depends on.** Step 1's experiment registry is helpful but not required. Can start now on the current model.
 
+**Added 26 October — national accounts in the outputs.** The bread model computes GDP by spending since `2026-10-26.0` (see the update at the top). MacroSim should take it further: (1) a chained price index (Fisher, from the price and quantity of each final good) instead of the bread price as the only deflator, so real GDP does not treat a ticket as worth its price in loaves; (2) the income side — wages, rent, profits including retained earnings, net interest — and a test that it reconciles with the spending side each month; (3) the production side per sector (value added of farms, bakeries, theatres, banks, government), which needs firms' purchases recorded; (4) bank output measured the way the national accounts do (FISIM: the margin between lending and deposit rates against a reference rate), not the change in retained interest; (5) investment once capital goods exist (step 4); (6) debt ratios on the trailing year's GDP, as now, and also on GDP per starting villager, so deaths do not flatter them.
+
 ## Step 4 — Capital goods and investment
 
 Add durable means of production that firms buy, use for years, and usually borrow for. This is the largest single gap between the village and every model in the Handbook survey except two.
@@ -270,14 +294,16 @@ Keep satiation as the village's signature, and make it one testable option among
 5. **Labour supply.** Keep the need-based offer, the sharing margin, contracts and experience. Add Caiani's adaptive reservation wage as an alternative, and heterogeneous capacity per person.
 6. **Demography.** Births, ageing, retirement and natural death, so the population can be stable without hunger. Life-cycle saving and pensions become possible; the Pension Plan game could later supply behaviour to test.
 7. **Heterogeneous preferences.** Per-person draws for satiation level, saving target, greed and hoarding. Initial wealth and income distributions taken from survey data (the Eurosystem's Household Finance and Consumption Survey covers Belgium).
+8. **Relationships between actors** (added 25 October, Stef). Today no villager is related to any other: an estate goes to a randomly chosen villager, nobody gives anyone a loaf, there are no households and no family. Build families and households (pooled income and consumption), inheritance within the family, and informal transfers and mutual care — on the population model of MoneySim.jl, after the refactor, rather than in the village. Two questions it opens: dynastic inheritance should concentrate wealth across generations more than the random heir does; and mutual care would act exactly where each village is weakest (the debt village's indebted poor, the SuMSy village's pooled money).
 
 **Done when**
 
 - [ ] The headline cells are rerun with wealth spending switched on; the report states how much of each result survives.
 - [ ] With demography on and no shocks, the population stays within 2 % of its start over 600 months.
 - [ ] The starting wealth Gini matches the survey value for the reference country.
+- [ ] Inheritance can be switched between a random heir and kin; a household pools income and consumption; the effect of mutual care on survival is measured in both villages.
 
-**Depends on.** Step 1. Portfolio choice needs the instruments of steps 2 and 5.
+**Depends on.** Step 1. Portfolio choice needs the instruments of steps 2 and 5. Relationships (item 8) need MoneySim.jl's population model and demography (item 6).
 
 ## Step 8 — Firms: production, pricing, entry and exit, scale
 
@@ -472,12 +498,18 @@ Thirteen features of the village go beyond the three sources. Each must keep at 
 | SuMSy credit: peer loans, default insurance, buffer pool, co-op pledges | No credit without money creation | Registered instruments (step 5) |
 | The institutional ladder as structural sensitivity | Parameter sweeps only | Frozen and exploratory ladders (step 12) |
 | Per-subsystem stable random streams, golden values, a nominal-homogeneity test | Not reported | Test harness carried into MacroSim (step 1) |
+| Both monetary systems on identical fiscal and market rules, asserted by a test that they differ only in money settings (25 Oct) | Not discussed in the three sources | Experiment specification and its checks (steps 1, 3) |
+| A surplus rule — reserve first, then tax cuts — with a land tax paid out to everyone and floored at its base rate; a meal lever (25 Oct) | Mostly one budget rule | Fiscal registry and policy types (step 9) |
+| The realistic labour and pricing set: indexed contracts, own-market planning with an adaptive buffer, symmetric expected-sales pricing, floors carrying founding-loan instalments (25 Oct) | Pricing on mark-ups, no expected-sales band | Firm and labour roles (steps 7, 8) |
+| Full inheritance to a living heir; nothing paid into a dead account; debt inheritance as an experiment (25 Oct) | No mortality, so no estates | Demography module (step 7) and settlement (step 2) |
 
 One more feature has no row because it is a practice: the public report chain with its AI disclaimer, errata and links between versions. The engine should support it by stamping every output with model version, experiment hash and seed range.
 
 ## Sequencing and milestones
 
 The thirteen steps fall into five phases; a phase starts only when the gate before it has passed. Phases A and B together are the proposed minimum for the thesis.
+
+**Status 25 October:** the refactor starts now, with Phase A. Its reference is the bread model at `2026-10-25.2`: the test suite (golden values included) and the run folders made with it.
 
 ```mermaid
 flowchart TB
@@ -509,6 +541,10 @@ Seven choices shape the plan; a proposed answer is given for each.
 - [ ] **Reference economy for validation.** Belgium for calibration (step 10); for business-cycle facts, euro-area or US series, which have longer and cleaner records? Proposed: Belgium for levels and distributions, euro area for cycles.
 - [ ] **Time unit.** Keep the month and aggregate to quarters for validation? Proposed: yes; it keeps the village's settlement and tax timing.
 - [ ] **AI-steered agents.** In scope for the PhD, or a later project? Proposed: later, after step 12.
+- [ ] **The land tax above its base rate** (added 25 Oct). Paid out in full, as now, or the part above what the meal target needs into the reserve or tax cuts? In the productive village paying it all out inflates the SuMSy village about 8 % a year. No proposal yet; a design question for SuMSy's fiscal side.
+- [ ] **Owner guarantee** (added 25 Oct). The base makes owners take over a failed firm's bank debt. Founders and sole owners only, or all shareholders? Proposed: founders and sole owners; shareholders of a share-market firm keep limited liability.
+- [ ] **A nominal anchor for debt money** (added 25 Oct). Build an inflation-responsive policy rate (step 6) and test whether it stabilises the debt village's step-2 inflation and V8 deflation — in a fixed-output village a higher rate on government borrowing also raises the deficit. Proposed: build it for both systems and measure.
+- [x] **Debt inheritance** (settled 25 Oct). Off in the base: an heir renounces an estate whose debts exceed its assets (Belgian law allows renunciation or acceptance with benefit of inventory), and a bankrupt firm's debt is written off; both switches stay for experiments.
 
 ## References
 

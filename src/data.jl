@@ -123,9 +123,29 @@ function record!(model)
     banks = enterprises(model, :bank); gov = government(model)
     r = current_round(model)
     ev = @view model.events[model.event_start:end]
+    # 26 Oct (Stef): GDP by spending, each month — final sales of bread, theatre tickets and premium loaves; public wages (government
+    # output at cost, as the national accounts value it); the banks' margin (the month's change in retained interest plus account fees);
+    # and the change in the bakeries' unsold stock at the price paid. Grain is an input to bread and is not counted again; land changes
+    # hands without being produced. Public debt as a share of GDP uses the trailing twelve months (annualised while fewer).
+    gdp_pb = average_price(model, :bread)
+    gdp_pb = (gdp_pb isa Real && isfinite(gdp_pb) && gdp_pb > 0) ? gdp_pb : expected_price(model, :bread)
+    gdp_c = sum(t[1] * t[2] for t in model.transactions[:bread]; init = 0.0) + sum(t[1] * t[2] for t in model.transactions[:ticket]; init = 0.0) + model.premium_revenue_this_round
+    gdp_g = gov.wage_bill
+    gdp_retained = sum(b.retained_interest for b in banks; init = 0.0)
+    gdp_b = (gdp_retained - model.gdp_prev_retained) + model.account_fees_this_round
+    gdp_stock = sum(bread_units(b) for b in enterprises(model, :bakery) if b.alive; init = 0.0)
+    gdp_i = model.gdp_prev_stock < 0 ? 0.0 : (gdp_stock - model.gdp_prev_stock) * gdp_pb
+    gdp = gdp_c + gdp_g + gdp_b + gdp_i
+    model.gdp_prev_retained = gdp_retained; model.gdp_prev_stock = gdp_stock
+    push!(model.gdp_history, gdp); length(model.gdp_history) > 12 && popfirst!(model.gdp_history)
+    gdp_annual = sum(model.gdp_history) * 12 / length(model.gdp_history)
+    gdp_debt = debt_of(gov) + government_rest_interest(model) + bonds_outstanding(model) + government_trade_arrears(model) + peer_debt_of(model, gov)
     row = (
         round = r,
         persons_alive = length(ps),
+        gdp_consumption = gdp_c, gdp_government = gdp_g, gdp_banks = gdp_b, gdp_inventory = gdp_i, gdp_nominal = gdp, gdp_annual = gdp_annual,
+        gdp_in_loaves = gdp / gdp_pb, gdp_per_head_loaves = gdp / gdp_pb / max(length(ps), 1), gdp_per_villager_loaves = gdp / gdp_pb / max(parameters(model).number_of_persons, 1),
+        public_debt_pct_gdp = gdp_annual > 1e-9 ? 100 * gdp_debt / gdp_annual : NaN,
         farms_open = length(enterprises(model, :farm)),
         bakeries_open = length(enterprises(model, :bakery)),
         money_in_circulation = sum(cash(a) for a in alive; init = 0.0),
