@@ -406,6 +406,10 @@ Base.@kwdef struct SimulationParameters
     tax_response_coverage::Float64 = 0.5              # share of the shortfall a raise is sized to cover
     tax_response_step::Float64 = 0.02                 # largest relative change in revenue per round (2 % = incremental)
     bracket_fixed_rise::Float64 = 0.0                 # :brackets — points added to every bracket per step, on top of the proportional rise
+    # 28 Oct (the full-ladder check): no tax rate may exceed `maximum_tax_rate`. A budget-balancing policy had scaled the wage tax
+    # past 100 % (UP8, UP8-P: tax scale 6–10); the public wage is set gross of tax by dividing by (1 − rate), so it turned negative
+    # and the government took money from its workers. When the cap binds, the government borrows the rest.
+    maximum_tax_rate::Float64 = 0.9
     tax_scale_maximum::Float64 = 3.0                  # :scale — the multiplier never exceeds this (statutory rates × 3)
     bracket_rate_maximum::Float64 = 0.9               # :brackets — no bracket rate above this
     demurrage_free_buffer::Float64 = 30.0             # persons only (3 meals at initial prices); everyone else: 0

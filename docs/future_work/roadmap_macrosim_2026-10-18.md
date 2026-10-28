@@ -1,6 +1,6 @@
 # From BreadEconomySim to a full ABM engine — implementation roadmap
 
-*18 October 2026; brought up to date on 25 and 26 October 2026 (see the update below). A working document: every design choice below is open to challenge. Source of truth for the plan until superseded; decisions taken against it are recorded in `HANDOFF_2026-09-18.md`.*
+*18 October 2026; brought up to date on 25, 26 and 28 October 2026 (see the update below and the notes per step). A working document: every design choice below is open to challenge. Source of truth for the plan until superseded; decisions taken against it are recorded in `HANDOFF_2026-09-18.md`.*
 
 ## Update of 25 October 2026 — where things stand before the refactor
 
@@ -360,6 +360,8 @@ Here the village is already ahead of the literature, so the step is mostly conso
 - [ ] Running a SuMSy cell with an income tax raises a visible "comparison only" label in every output.
 
 **Depends on.** Steps 1 and 2; bond yields need step 6.
+
+**Added 28 October — the tax module.** Step 9's fiscal registry is to be built as the tax module planned in `docs/future_work/tax_module_plan_2026-10-28.md`: tax sources with separate weights for raises and cuts, a destination per source (handout and budget), handouts that are fixed, revenue-linked or targeted (a top-up of net income over a chosen period, one month by default, with a weight in [0, 1] per income source), shortfalls split between borrowing and paying out less, and no side effects (assess, then book; double entry only). MoneySim.jl will be merged into MacroSim, so the module replaces MoneySim's tax scheme as well.
 
 ## Step 10 — Calibration and steady-state initialisation
 

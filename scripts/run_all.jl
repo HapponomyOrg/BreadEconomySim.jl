@@ -51,7 +51,7 @@ using Dates, Pkg, Distributed
 
 const ROOT = normpath(joinpath(@__DIR__, ".."))
 
-const MODEL_VERSION = "2026-10-26.0"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
+const MODEL_VERSION = "2026-10-28.0"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
 
 # ---- packages (once per session) ---------------------------------------------------------------------------------------
 const PACKAGES_READY = Ref(false)
@@ -143,14 +143,14 @@ const WORKER_SETUP = quote
         isfile(job.file) && (say("skipped (already done): $(job.rung) | $(job.system) seed $(job.seed)"); return "skipped")
         def = ladder(job.N, job.rounds, job.settlement, get(job, :fiscal, :own), get(job, :surplus_rule, :debt_levy_taxcut))
         i = only(k for (k, r) in enumerate(def.rungs) if r[1] == job.rung); (_, kd, ks) = def.rungs[i]
-        kd = isempty(kd) ? kd : (; kd..., job.extra...); ks = isempty(ks) ? ks : (; ks..., job.extra...)   # 18 Oct: the contracts variant travels inside the job (workers do not see the main process's globals)
+        kd = isempty(kd) ? kd : (; job.extra..., kd...); ks = isempty(ks) ? ks : (; job.extra..., ks...)   # 28 Oct: a step's own settings win over the variant (the realistic set had overwritten the contract steps)   # 18 Oct: the contracts variant travels inside the job (workers do not see the main process's globals)
         base, kw = job.system == "debt" ? (def.BARE_DEBT, kd) : (def.BARE_SUMSY, ks)
         # 12 Oct: a rung whose settings are unchanged for this village from the rung below is the same village run again, so that
         # the two stay side by side — say so (the ladder names each rung once for both: "interest on deposits | sumsy" has none)
         same_as = i > 1 && kw == (job.system == "debt" ? def.rungs[i - 1][2] : def.rungs[i - 1][3]) ? " (as " * first(split(def.rungs[i - 1][1])) * ")" : ""
         t = @elapsed m = run_simulation(SimulationParameters(; seed = job.seed, base..., kw...))
         d = round_data(m)
-        d.rung .= job.rung; d.system .= job.system; d.seed .= job.seed; d.identity .= money_identity_gap(m)
+        d.rung .= job.rung; d.system .= job.system; d.seed .= job.seed; d.identity .= hasproperty(d, :identity_gap) ? d.identity_gap : fill(money_identity_gap(m), nrow(d))
         mkpath(dirname(job.file)); tmp = job.file * ".tmp"
         CSV.write(tmp, d); mv(tmp, job.file; force = true)
         line = "$(job.N) $(job.settlement) | $(job.rung) | $(job.system)$(same_as) seed $(job.seed): alive $(d.persons_alive[end]) of $(job.N), $(round(t, digits = 0)) s"

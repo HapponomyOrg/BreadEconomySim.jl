@@ -212,15 +212,22 @@ function service_peer_loans!(model)
         inst = min(l.installment, l.outstanding)
         interest = round(l.rate * l.outstanding, digits = 4)
         lender_interest = round(l.lender_rate * l.outstanding, digits = 4)
-        due = round(max(inst + interest, 0.0), digits = 4)
+        # 24 Sept: a negative rate (a land instalment under SuMSy, where money itself loses value) is a discount on the payment —
+        # the borrower pays the instalment less the interest and the claim falls by the whole instalment. 28 Oct (the identity gap of
+        # the realistic ladder): when the negative interest exceeds the instalment, the payment would be negative; it was clipped to
+        # zero for the borrower but the lender's share went negative and the bank's positive, and the bank was paid money nobody paid.
+        # Now nobody pays or is paid, and the claim falls by the whole negative interest. The lender never gets more than was paid.
+        due_raw = inst + interest
+        due = round(max(due_raw, 0.0), digits = 4)
         pay = round(min(due, borrower isa Person ? max(cash(borrower) - collection_floor(model), 0.0) : cash(borrower)), digits = 4)   # the protected minimum (24 Sept)
         share = due > 1e-9 ? pay / due : 1.0
-        to_lender = round(share * (inst + lender_interest), digits = 4)
+        to_lender = round(clamp(share * (inst + lender_interest), 0.0, pay), digits = 4)
         to_bank = round(pay - to_lender, digits = 4)
+        (to_lender < -1e-9 || to_bank < -1e-9) && error("peer loan $(l.id): a payment that books money out of nothing")
         pay > 0 && (book_asset!(borrower.balance, DEPOSIT, -pay) || error("peer loan payment failed"))
         to_lender > 0 && book_asset!(lender.balance, DEPOSIT, to_lender)
         to_bank > 0 && book_asset!(bank.balance, DEPOSIT, to_bank)
-        l.outstanding = round(l.outstanding - share * inst, digits = 4)
+        l.outstanding = round(max(l.outstanding - share * inst - max(-due_raw, 0.0), 0.0), digits = 4)
         model.cumulative_interest_paid += share * interest
         if share < 1 - 1e-6 && due - pay > p.arrears_de_minimis_in_meals * meal_price(model)
             l.in_arrears = true; l.arrears_rounds += 1

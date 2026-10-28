@@ -143,6 +143,7 @@ function record!(model)
     row = (
         round = r,
         persons_alive = length(ps),
+        identity_gap = money_identity_gap(model),
         gdp_consumption = gdp_c, gdp_government = gdp_g, gdp_banks = gdp_b, gdp_inventory = gdp_i, gdp_nominal = gdp, gdp_annual = gdp_annual,
         gdp_in_loaves = gdp / gdp_pb, gdp_per_head_loaves = gdp / gdp_pb / max(length(ps), 1), gdp_per_villager_loaves = gdp / gdp_pb / max(parameters(model).number_of_persons, 1),
         public_debt_pct_gdp = gdp_annual > 1e-9 ? 100 * gdp_debt / gdp_annual : NaN,

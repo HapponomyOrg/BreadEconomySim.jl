@@ -34,7 +34,7 @@ net_wage(model) = expected_price(model, :wage) * (1 - effective_wage_tax_rate(mo
 function wage_tax_amount(model, gross::Float64)
     p = parameters(model)
     gross <= 0 && return 0.0
-    p.income_tax_schedule == :flat && return gross * p.wage_tax_rate * model.tax_scale
+    p.income_tax_schedule == :flat && return gross * min(p.wage_tax_rate * model.tax_scale, p.maximum_tax_rate)
     ref = p.maximum_capacity * expected_price(model, :wage)          # full-time gross wage per round
     ssc = p.social_contribution_rate * gross
     taxable = gross - ssc
@@ -47,14 +47,14 @@ function wage_tax_amount(model, gross::Float64)
     end
     tax = max(tax - rates[1] * min(p.tax_free_share * ref, taxable), 0.0)
     scale = p.tax_policy == :brackets ? 1.0 : model.tax_scale                 # under :brackets the bracket rates carry the policy
-    return (ssc + tax * (1 + p.municipal_surcharge)) * scale
+    return min((ssc + tax * (1 + p.municipal_surcharge)) * scale, p.maximum_tax_rate * gross)   # 28 Oct: never above the maximum rate
 end
 """Effective (average) wage tax rate of a full-time worker under the schedule; the flat rate under :flat."""
 function effective_wage_tax_rate(model)
     p = parameters(model)
-    p.income_tax_schedule == :flat && return p.wage_tax_rate * model.tax_scale
+    p.income_tax_schedule == :flat && return min(p.wage_tax_rate * model.tax_scale, p.maximum_tax_rate)
     ref = p.maximum_capacity * expected_price(model, :wage)
-    return ref > 0 ? wage_tax_amount(model, ref) / ref : p.wage_tax_rate * model.tax_scale
+    return ref > 0 ? wage_tax_amount(model, ref) / ref : min(p.wage_tax_rate * model.tax_scale, p.maximum_tax_rate)
 end
 
 function expected_income(model, a::Agent)
@@ -424,15 +424,15 @@ person (priority 2). Government wages: tax is withheld, only the net is promised
 function pay_income!(model, payer::Agent, person::Person, gross::Float64, kind::Symbol)
     p = parameters(model)
     if kind == :dividend
-        tax = round(gross * p.dividend_tax_rate * model.tax_scale, digits = 4)
+        tax = round(gross * min(p.dividend_tax_rate * model.tax_scale, p.maximum_tax_rate), digits = 4)
     elseif kind == :wage && p.income_tax_schedule == :flat
-        tax = round(gross * p.wage_tax_rate * model.tax_scale, digits = 4)      # the fiscal policy's multiplier applies here too
+        tax = round(gross * min(p.wage_tax_rate * model.tax_scale, p.maximum_tax_rate), digits = 4)      # the fiscal policy's multiplier applies here too
         person.gross_wage_this_round += gross
     elseif kind == :wage
         tax = round(wage_tax_amount(model, person.gross_wage_this_round + gross) - wage_tax_amount(model, person.gross_wage_this_round), digits = 4)
         person.gross_wage_this_round += gross
     else
-        tax = round(gross * p.capital_tax_rate * model.tax_scale, digits = 4)
+        tax = round(gross * min(p.capital_tax_rate * model.tax_scale, p.maximum_tax_rate), digits = 4)
     end
     if p.income_tax_period > 1 && tax > 0                    # accrued, charged at the end of the tax year (`charge_income_tax!`)
         person.income_tax_accrued += tax

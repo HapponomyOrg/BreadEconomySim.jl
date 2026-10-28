@@ -2111,6 +2111,33 @@ end
     @test all(isapprox.(d.gdp_per_head_loaves .* d.persons_alive, d.gdp_in_loaves; rtol = 1e-9))
 end
 
+
+@testset "a negative-rate peer loan books no money out of nothing (28 October 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., maximum_rounds = 6))
+    for _ in 1:3; B.econo_step!(m, 1); end
+    ps = B.persons(m); bank = first(B.enterprises(m, :bank)); far = first(B.enterprises(m, :farm))
+    gap0 = money_identity_gap(m)
+    l = B.PeerLoan(B.next_peer_loan_id!(m), ps[1].id, far.id, bank.id, 200.0, 200.0, 200.0 / 240, -0.0125, -0.0125, false, 1, 0, false, false, 0.0)
+    push!(m.peer_loans, l)
+    cash_far = B.cash(far); cash_lender = B.cash(ps[1]); cash_bank = B.cash(bank)
+    B.service_peer_loans!(m)
+    @test abs(money_identity_gap(m) - gap0) < 1e-9                         # no money created
+    @test B.cash(bank) - cash_bank < 1e-9                                   # the bank is not paid what nobody paid
+    @test l.outstanding < 200.0 - 2.4                                       # the negative interest shrank the claim
+    @test abs((B.cash(ps[1]) - cash_lender) + (B.cash(bank) - cash_bank) + (B.cash(far) - cash_far)) < 1e-9
+end
+
+
+@testset "no tax rate above the maximum; the public wage stays positive (28 October 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., maximum_rounds = 4))
+    for _ in 1:2; B.econo_step!(m, 1); end
+    m.tax_scale = 10.0                                                      # a balancing policy at its extreme
+    p = B.parameters(m)
+    @test B.effective_wage_tax_rate(m) <= p.maximum_tax_rate + 1e-12
+    @test B.wage_tax_amount(m, 100.0) <= p.maximum_tax_rate * 100.0 + 1e-9
+    @test B.government_wage_per_unit(m) > 0
+end
+
 @testset "cooperative forms (14 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     params(m) = B.parameters(m)
