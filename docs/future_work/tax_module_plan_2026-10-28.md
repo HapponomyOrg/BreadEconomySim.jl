@@ -94,7 +94,9 @@ The module books through the money's interface, never a specific balance entry, 
 - **Property tests**: random configurations and states; the invariants hold.
 
 ## 9. Phasing
-1. **Specification** (this plan → a full specification with the decisions of §10): a week of design, no code.
+*Decided 29 Oct: the tax module is the first module of the refactor (roadmap, Phase A). Steps 2–4 below are preceded by the two interfaces it uses and nothing else — a ledger interface (accounts, `transfer!`, liabilities, the money identity, under both monies) and an actor-state interface (income by kind this period, purchases, holdings at the outputs' valuations, alive or not) — with a minimal implementation for hand-built test villages; step 4 runs through an adapter that implements both interfaces on EconoSim's balances and BreadEconomySim's actors.*
+
+1. **Specification** (this plan → a full specification with the decisions of §10, and the two interfaces): a week of design, no code.
 2. **Statement and invariants**: the pure assessment and the test harness, against small hand-built states.
 3. **Sources and rates**, then **destinations and handouts**, then **the budget and financing**, each step with its invariants.
 4. **Reproduction**: the bread model's fiscal behaviour through the module, golden values matched; then the special cases removed.

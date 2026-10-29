@@ -4,7 +4,7 @@
 
 ## Update of 25 October 2026 — where things stand before the refactor
 
-**Status.** The talk of 25 October is given. The bread model stands at version `2026-10-25.2` (72,728 tests). **The refactor is the next step**, starting with Phase A; this version is the reference Phase A must reproduce. The week's decisions and traces are in `HANDOFF_2026-09-18.md`; the talk's numbers and their caveats in `docs/talk/handoff_talk_2026-10-22.md` (§4k–§4l).
+**Status.** The talk of 25 October is given. The bread model stands at version `2026-10-28.1` (72,930 tests). **The refactor is the next step**, starting with Phase A and, within it, the tax module (29 Oct); this version is the reference Phase A must reproduce. The week's decisions and traces are in `HANDOFF_2026-09-18.md`; the talk's numbers and their caveats in `docs/talk/handoff_talk_2026-10-22.md` (§4k–§4l).
 
 **What changed in the bread model since 18 October** — all of it must survive the refactor (four new rows in the checklist below):
 
@@ -511,11 +511,13 @@ One more feature has no row because it is a practice: the public report chain wi
 
 The thirteen steps fall into five phases; a phase starts only when the gate before it has passed. Phases A and B together are the proposed minimum for the thesis.
 
-**Status 25 October:** the refactor starts now, with Phase A. Its reference is the bread model at `2026-10-25.2`: the test suite (golden values included) and the run folders made with it.
+**Status 25 October:** the refactor starts now, with Phase A. Its reference is the bread model at `2026-10-28.1`: the test suite (golden values included) and the run folders made with it.
+
+**Decided 29 October — Phase A starts with the tax module.** The first module delivered is the tax module of `tax_module_plan_2026-10-28.md`, with the core built just big enough to carry it; the market engine and the roles come after. In order: (1) two small interfaces the module uses and nothing else — a *ledger* interface (accounts, `transfer!`, liabilities, the money identity, under both monies) and an *actor-state* interface (income by kind this period, purchases, holdings at the outputs' valuations, alive or not) — plus a period clock; (2) a minimal implementation of both for hand-built villages in tests; (3) the tax module, test-first: the statement and its invariants, then sources and rates, destinations and handouts, the budget and financing; (4) an adapter that implements the two interfaces on EconoSim's balances and BreadEconomySim's actors, so the bread model's fiscal rules run through the module and must reproduce the golden values exactly — after which the bread model's special cases (ladder line 314, the land exclusion in the policy) are removed. Reasons: taxes are the ledger's most demanding user (accruals over a period, arrears, VAT held and remitted, handouts, financing), so a ledger that carries them carries the rest; and MoneySim's tax scheme is replaced at once, which settles that merger early. Risk: the interfaces may need revision when the labour and market modules arrive; keeping them small limits it. The Phase A gate is unchanged.
 
 ```mermaid
 flowchart TB
-    A["<b>Phase A — Foundations</b> · steps 1, 2, 3, in parallel<br/>Specification and decision interface · full SFC accounting · statistics on the current village"]
+    A["<b>Phase A — Foundations</b> · the tax module first (ledger and actor-state interfaces, the module, the adapter onto the bread model), then steps 1, 2, 3<br/>Specification and decision interface · full SFC accounting · statistics on the current village"]
     GA{{"Gate: golden values unchanged · both SFC checks pass on every cell · every figure has n and an interval"}}
     B["<b>Phase B — Money and finance</b> · steps 5, 6, plus the wealth-spending switch of step 7<br/>Central bank and policy rules for both systems · risk-priced banking · satiation made testable"]
     GB{{"<b>Gate — thesis minimum:</b> inequality paper rerun with stabilisers on both sides and full distributions"}}
