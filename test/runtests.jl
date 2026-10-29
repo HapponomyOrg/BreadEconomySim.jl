@@ -686,7 +686,7 @@ end
     @test B.gross_price(m, w, 10.0) == 10.6 && B.gross_price(m, b, 10.0) == 10.0
     # willingness to pay is gross: the ceiling handed to the seller is divided by 1 + rate
     m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., maximum_rounds = 1))
-    @test isapprox(B.buyer_reservation(m, w, :bread) * 1.06, B.buyer_reservation(m0, first(B.persons(m0)), :bread); rtol = 1e-9)
+    @test isapprox(B.buyer_reservation(m, w, :bread), B.buyer_reservation(m0, first(B.persons(m0)), :bread); rtol = 1e-9)   # 28 Oct: VAT cancels from the net ceiling (the expected price is net)
     # the policy scales it with the same triggers; without a mix target it follows the income scale
     mp = create_bread_economy(SimulationParameters(; seed = 1, BEH..., consumption_tax_rate = 0.06, government_reserve_in_rounds = 3,
                                                     tax_policy = :scale, tax_response_coverage = 1.0, tax_response_step = 0.02, maximum_rounds = 1))

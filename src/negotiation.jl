@@ -113,12 +113,15 @@ function buyer_reservation(model, buyer::Agent, good::Symbol)
     elseif good == :grain
         return p.breads_per_grain * expected_price(model, :bread) - p.bakery_grain_wage_fraction * expected_price(model, :wage)
     elseif good == :bread
-        # willingness to pay is for the price including the consumption tax; the seller sees it net
-        return expected_price(model, :bread) * (p.bread_bid_base_multiplier + p.bread_bid_hunger_multiplier * buyer.hunger) / (1 + (buyer isa Person ? consumption_tax_rate(model) : 0.0))
+        # 28 Oct (Stef): the expected price is net of VAT (it is built from the prices sellers received), so a buyer who expects
+        # to pay that price plus VAT bids on the gross price, and the net ceiling passed to the negotiation is the net expectation
+        # times the premium — VAT cancels. Dividing the net expectation by (1 + VAT), as before, counted the VAT twice. The cash
+        # a buyer needs still includes VAT (gross_price), so VAT still limits what buyers can afford.
+        return expected_price(model, :bread) * (p.bread_bid_base_multiplier + p.bread_bid_hunger_multiplier * buyer.hunger)
     elseif good == :ticket
         worth = expected_price(model, :ticket) * p.bread_bid_base_multiplier
         isfinite(p.ticket_max_in_breads) && (worth = min(worth, p.ticket_max_in_breads * expected_price(model, :bread)))   # 28 Sept: a seat is worth so many loaves
-        return worth / (1 + (buyer isa Person ? consumption_tax_rate(model) : 0.0))
+        return worth                                                        # 28 Oct: net expectation × premium — VAT cancels (see bread)
     end
 end
 
