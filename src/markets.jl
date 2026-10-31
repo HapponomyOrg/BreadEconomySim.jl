@@ -3,10 +3,10 @@
 land_to_let(a::Agent) = (a isa Person || is_bank(a)) ? a.land - a.land_let : 0
 
 """A landowner's reservation price for a unit: the value of the rent stream at the cost of holding cash instead."""
-land_reservation(model, o::Person) = land_reservation(model)      # 24 Oct (speed): the reservation does not depend on the owner — one value a month
-function land_reservation(model)
+land_reservation(model, o::Person) = land_reservation(model; premium = land_premium(model, o))   # 30 Oct: the owner's own premium (24 Oct: without it, one value a month)
+function land_reservation(model; premium::Float64 = 0.0)
     p = parameters(model); rent = expected_price(model, :rent)
-    p.land_pricing == :market && return land_worth(model, seller_alternative(model))   # 24 Sept: the seller's best alternative for the money
+    p.land_pricing == :market && return land_worth(model, seller_alternative(model); premium)   # 24 Sept: the seller's best alternative for the money
     p.monetary_system == :sumsy && p.demurrage_rate > 0 && return rent / p.demurrage_rate
     return rent * p.land_reservation_multiple
 end
@@ -29,10 +29,14 @@ Land's worth to someone whose alternative for the money earns `alternative` a mo
 holding the alternative yields `alternative` × price, so they are indifferent at rent ÷ (levy + alternative). When that is not
 positive, land beats the alternative at any price (Inf): under SuMSy without a levy, nobody sells land to hold money.
 """
-function land_worth(model, alternative::Float64)
-    denominator = land_levy_rate(model) + alternative
-    return denominator > 1e-6 ? expected_price(model, :rent) / denominator : Inf
+function land_worth(model, alternative::Float64; premium::Float64 = 0.0)
+    p = parameters(model); rent = expected_price(model, :rent)
+    denominator = land_levy_rate(model) + alternative + premium
+    worth = denominator > 1e-6 ? rent / denominator : Inf
+    p.land_valuation_horizon > 0 && (worth = min(worth, rent * p.land_valuation_horizon))   # 30 Oct: no more than the rent of a lifetime's horizon
+    return worth
 end
+land_premium(model, a::Agent) = (parameters(model).land_premium_from_yield && a isa Person) ? parameters(model).land_premium_factor * a.required_yield : 0.0   # 30 Oct: a person's own required return on land
 
 """The credit alternatives around a land sale: the seller's best use of the money and the buyer's best other source of credit."""
 function seller_alternative(model)
@@ -55,9 +59,12 @@ end
 
 """A buyer's reservation for a unit, by how it pays: its own money (worth the money's return), a loan or instalments (the rate)."""
 function land_buyer_reservation(model, b::Agent, via::Symbol)
-    via == :cash && return land_worth(model, money_return_rate(model))
-    via == :instalment && return land_worth(model, instalment_rate(model, b))
-    return land_worth(model, buyer_alternative(model, b))
+    pr = land_premium(model, b)
+    # 30 Oct: with the long-term valuation on, a cash buyer's alternative is the best use of the money — the same as a seller's
+    # (holding it, or lending it through the bank) — so the same villager does not value a plot higher as a buyer than as a seller
+    via == :cash && return land_worth(model, parameters(model).land_premium_from_yield ? seller_alternative(model) : money_return_rate(model); premium = pr)
+    via == :instalment && return land_worth(model, instalment_rate(model, b); premium = pr)
+    return land_worth(model, buyer_alternative(model, b); premium = pr)
 end
 
 """
@@ -150,6 +157,11 @@ function land_market!(model)
     farms = stable_shuffle(rng, enterprises(model, :farm))
     price = land_price(model)
     sellers_cache = Agent[]; sellers_dirty = Ref(true)
+    # 30 Oct: a plot can pass down a chain of hundreds of villagers within one month (EB seed 6, month 114: 365 purchases, 355 of the
+    # buyers selling the same month). Blocking resale within the month (`no_resale_within_month`, a research switch, off) collapsed
+    # that village (10 alive instead of 352, deaths from month 39), so the chain does something structural — see the handoff.
+    bought_this_month = Set{Int}()
+    not_resold(s) = !(parameters(model).no_resale_within_month && s isa Person && s.id in bought_this_month)   # the block applies to sales only — never to letting
     function sellers()
         if sellers_dirty[]
             sellers_cache = vcat(Agent[b for b in enterprises(model, :bank) if land_to_let(b) > 0], Agent[o for o in sort([o for o in persons(model) if land_to_let(o) > 0]; by = o -> o.ask[:rent])])
@@ -166,10 +178,12 @@ function land_market!(model)
     # purchases: enterprises first, then persons
     buyers = vcat(farms, stable_shuffle(rng, [w for w in persons(model) if !hoards_cash(w)]))   # 15 Oct: cash hoarders buy no land
     land_unmet = 0.0; land_sold = 0.0; best_unmet_bid = 0.0; best_offer_below = 0.0   # 22 Oct: the best offer under the price
-    lres = land_reservation(model)                                       # 24 Oct (speed): once a month, not once per candidate — the same value
-    offering = parameters(model).land_pricing == :market ? [s for s in sellers() if !(s isa Person) || price >= lres] : Agent[]
+    lres = land_reservation(model)                                       # 24 Oct (speed): the common value; the owner's own below
+    margin = parameters(model).land_trade_margin
+    sres(s) = s isa Person ? land_reservation(model, s) * (1 + margin) : 0.0   # 30 Oct: a person sells only above their own value by the margin
+    offering = parameters(model).land_pricing == :market ? [s for s in sellers() if (!(s isa Person) || price >= sres(s)) && not_resold(s)] : Agent[]
     land_supply = sum(Float64(land_to_let(s)) for s in offering; init = 0.0)
-    lowest_ask = isempty(offering) ? 0.0 : minimum(s isa Person ? lres : 0.0 for s in offering)   # the least an offering seller accepts
+    lowest_ask = isempty(offering) ? 0.0 : minimum(sres(s) for s in offering)   # the least an offering seller accepts
     for b in buyers
         while true
             # a farm wants land it will work; a person wants land only below the value of its rent stream to them
@@ -200,6 +214,7 @@ function land_market!(model)
             if pm0.land_pricing == :market && wants
                 via = surplus >= price ? :cash : instalment ? :instalment : :loan
                 bres = land_buyer_reservation(model, b, via)
+                bres = b isa Person ? bres * (1 - margin) : bres                  # 30 Oct: a person buys only below their value by the margin
                 wants = price <= bres + 1e-9                                      # nobody pays more than the land is worth to them, by how they pay
                 wants || (best_offer_below = max(best_offer_below, bres))        # 22 Oct: an offer under the price, for the price to meet
             end
@@ -210,12 +225,12 @@ function land_market!(model)
             else
                 (wants && debt_of(b) <= 1e-9 && surplus >= price) || break
             end
-            candidates = [s for s in sellers() if s.id != b.id]
+            candidates = [s for s in sellers() if s.id != b.id && not_resold(s)]
             pm = parameters(model)
             if pm.land_sales == :distress_only
                 candidates = [s for s in candidates if !(s isa Person)]                # only banks' seized land is for sale
             elseif pm.land_sales == :reservation
-                candidates = [s for s in candidates if !(s isa Person) || price >= lres]
+                candidates = [s for s in candidates if !(s isa Person) || price >= sres(s)]
             end
             if isempty(candidates)
                 land_unmet += b isa Enterprise ? max(b.production_target - b.land, 0) : 1      # wanted, could pay, found no seller at this price
@@ -237,7 +252,7 @@ function land_market!(model)
             s.land -= 1; s.market[:rent].offered -= 1
             b.land += 1
             b isa Enterprise && (b.market[:rent].wanted = max(b.production_target - b.land, 0))
-            log_event!(model, :land_purchase; buyer = b.id, buyer_kind = kind_of(b), seller = s.id, price = price)
+            log_event!(model, :land_purchase; buyer = b.id, buyer_kind = kind_of(b), seller = s.id, price = price); push!(bought_this_month, b.id)
             land_sold += 1
             record_land_sale!(model, price)
             b isa Person && break     # persons buy at most one unit per round
@@ -277,7 +292,7 @@ function land_market!(model)
             o.land -= 1; o.market[:rent].offered -= 1; b.land += 1
             b isa Enterprise && (b.market[:rent].wanted = max(b.production_target - b.land, 0))
             forced || (record_land_sale!(model, bid); land_sold += 1)
-            log_event!(model, :land_purchase; buyer = b.id, buyer_kind = kind_of(b), seller = o.id, price = bid, distress = forced, life_event = !forced)
+            log_event!(model, :land_purchase; buyer = b.id, buyer_kind = kind_of(b), seller = o.id, price = bid, distress = forced, life_event = !forced); push!(bought_this_month, b.id)
         end
         model.land_sold_this_round = land_sold
     end
@@ -292,7 +307,7 @@ function land_market!(model)
             transfer!(model, b, o, dprice, :distress_land_sale)   # a fire sale: not a valuation price (24 Sept)
             o.land -= 1; o.market[:rent].offered -= 1; b.land += 1
             b isa Enterprise && (b.market[:rent].wanted = max(b.production_target - b.land, 0))
-            log_event!(model, :land_purchase; buyer = b.id, buyer_kind = kind_of(b), seller = o.id, price = dprice, distress = true)
+            log_event!(model, :land_purchase; buyer = b.id, buyer_kind = kind_of(b), seller = o.id, price = dprice, distress = true); push!(bought_this_month, b.id)
         end
     end
     # renting, round robin

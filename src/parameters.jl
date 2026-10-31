@@ -623,6 +623,24 @@ Base.@kwdef struct SimulationParameters
     #                `liquidation_arrears_share` of the firm's monthly turnover, *and* a loan to pay them is refused;
     #   :book      — the 22 September rule: overdue invoices reach that share of book value (fires on any overdue once book ≤ 0).
     liquidation_test::Symbol = :cash_flow
+    # 30 Oct (traced on EB seed 6): before the credit test, a firm that holds the cash to pay what is overdue pays it — it was
+    # declared insolvent when refused a loan for 1.5 while holding 2,376. In the :book test a book value at or below zero closed
+    # a firm on any overdue amount; now only when `liquidate_when_insolvent` is on. Both on in the ladder's base; the model
+    # defaults keep the old behaviour for the golden values.
+    pay_overdue_from_cash::Bool = false
+    anticipate_hunger::Bool = false
+    # 30 Oct (Stef): land is bought for its long-term value, linked to expected rent. A person's valuation adds a premium of their own
+    # (their required yield × `land_premium_factor`, so buyers and sellers differ), and a person buys only below their value by
+    # `land_trade_margin` and sells only above it by the same margin — no indifference zone, so a plot bought is not resold in the
+    # same month. The premium also bounds the price (rent ÷ required return) — a horizon cap (`land_valuation_horizon`, months of
+    # rent) is a research switch only, off in the base (Stef: a price that does not sell caps itself). All off here (golden values).
+    land_premium_from_yield::Bool = false
+    land_premium_factor::Float64 = 0.3
+    land_valuation_horizon::Int = 0
+    land_trade_margin::Float64 = 0.0
+    posted_consumer_prices::Bool = false     # 30 Oct (Stef): bread and tickets at the producer's posted price — the consumer buys or not, no bargaining (on in the base)          # 30 Oct (Stef): a villager without bread for the month bids as if hungry; hungry villagers one level higher (on in the base)
+    no_resale_within_month::Bool = false    # 30 Oct: land bought this month is not offered again this month — a research switch (it collapsed EB seed 6)
+    liquidate_when_insolvent::Bool = true
     # Founders pay in equity at the founding equal to the firm's working reserve, from savings or a personal loan (23 Sept; a Belgian
     # BV must start with sufficient equity). false = the old rule: firms start empty and call on founders when short.
     founding_equity::Bool = false

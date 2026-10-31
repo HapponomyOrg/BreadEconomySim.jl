@@ -117,7 +117,11 @@ function buyer_reservation(model, buyer::Agent, good::Symbol)
         # to pay that price plus VAT bids on the gross price, and the net ceiling passed to the negotiation is the net expectation
         # times the premium — VAT cancels. Dividing the net expectation by (1 + VAT), as before, counted the VAT twice. The cash
         # a buyer needs still includes VAT (gross_price), so VAT still limits what buyers can afford.
-        return expected_price(model, :bread) * (p.bread_bid_base_multiplier + p.bread_bid_hunger_multiplier * buyer.hunger)
+        # 30 Oct (Stef): people know when they would go hungry — a villager without bread for this month's meal bids one hunger
+        # level up, and a villager already hungry one level above that (the loaves beyond the meal get the same ceiling; a per-loaf
+        # distinction would need the market to ask the ceiling per loaf)
+        hunger = buyer.hunger + ((p.anticipate_hunger && buyer isa Person && bread_units(buyer) < p.breads_per_meal) ? 1 : 0)
+        return expected_price(model, :bread) * (p.bread_bid_base_multiplier + p.bread_bid_hunger_multiplier * hunger)
     elseif good == :ticket
         worth = expected_price(model, :ticket) * p.bread_bid_base_multiplier
         isfinite(p.ticket_max_in_breads) && (worth = min(worth, p.ticket_max_in_breads * expected_price(model, :bread)))   # 28 Sept: a seat is worth so many loaves
@@ -177,6 +181,13 @@ function negotiate(model, seller::Agent, buyer::Agent, good::Symbol; age::Int = 
     buyer_ceiling = buyer_reservation(model, buyer, good)
     ask = max(seller.ask[good], seller_floor)
     bid = min(buyer.bid[good], buyer_ceiling)
+    if p.posted_consumer_prices && good in (:bread, :ticket) && buyer isa Person
+        # 30 Oct (Stef): consumers do not bid — the producer posts a price and the consumer buys at it or does not; what the
+        # producer learns is its sales (and the customers it turned away). Bargaining stays for grain, labour, rent and land.
+        ask <= buyer_ceiling + 1e-9 || return nothing
+        price = round(ask, digits = 4); seller.negotiated[key] = price
+        return price
+    end
     price = nothing
     for step in 0:p.negotiation_steps
         if bid >= ask

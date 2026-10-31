@@ -832,12 +832,23 @@ function insolvent(model, e::Enterprise)
     if p.liquidation_test == :book
         overdue = invoices_overdue(model, e, p.liquidation_overdue_rounds)
         overdue > 1e-6 || return false
+        if p.pay_overdue_from_cash && cash(e) >= overdue - 1e-9                 # 30 Oct: a firm that can pay what is overdue pays it
+            pay_overdue_invoices!(model, e)
+            log_event!(model, :caught_up; actor = e.id, agent_kind = e.kind, amount = overdue, purpose = :cash)
+            return false
+        end
         book = book_value_net(model, e)
-        return book <= 1e-6 || overdue >= p.liquidation_arrears_share * book - 1e-9
+        book <= 1e-6 && return p.liquidate_when_insolvent                       # 30 Oct: a negative book value closes a firm only if that rule is on
+        return overdue >= p.liquidation_arrears_share * book - 1e-9
     end
     # :cash_flow — persistent non-payment, measured against what the firm sells, and shaken credit
     overdue = obligations_overdue(model, e, p.liquidation_overdue_rounds)
     overdue > 1e-6 || return false
+    if p.pay_overdue_from_cash && cash(e) >= overdue - 1e-9                     # 30 Oct (EB seed 6: a farm with 2,376 in cash was closed over 1.5 overdue
+        pay_overdue_invoices!(model, e)                                          # because it was refused a loan for it): what it can pay, it pays
+        log_event!(model, :caught_up; actor = e.id, agent_kind = e.kind, amount = overdue, purpose = :cash)
+        return false
+    end
     turnover = isempty(e.turnover_history) ? 0.0 : sum(e.turnover_history) / length(e.turnover_history)
     overdue >= p.liquidation_arrears_share * turnover - 1e-9 || return false
     # the credit test: a firm that can still borrow the money to catch up is not insolvent — it borrows and pays
