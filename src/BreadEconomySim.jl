@@ -63,13 +63,13 @@ append!(ROUND_BEHAVIORS, Function[
     greed_spending!,
     charge_income_tax!,
     collect_land_levy!,
-    pay_levy_dividend!, pay_ground_rent_handout!,                 # 14 Oct: the levy paid out per head
+    pay_levy_dividend!,                 # 14 Oct: the levy paid out per head
     settle_end_of_round!,
     settle_invoices!,
     liquidate_insolvent_firms!,
     refound_missing_producers!,
     market_entry!,
-    clear!,
+    clear!, pay_ground_rent_handout!,
     service_debt!,
     service_peer_loans!,
     service_bonds!,

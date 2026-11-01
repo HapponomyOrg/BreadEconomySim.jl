@@ -469,7 +469,9 @@ function apply_debt_ceiling!(model)
 end
 
 """Public land's ground rents handed out per head (31 Oct, Stef): the share `public_land_rent_handout_share` of this month's
-ground rents goes to every living villager, the rest stays in the budget — the levy dividend's switch, as a share."""
+ground rents goes to every living villager, the rest stays in the budget — the levy dividend's switch, as a share. Paid after
+the month's clearing, when the rents (promised in the land market) have been received (1 Nov: paid before it, the handout was
+capped by the little cash the government held at that moment and the share never bound)."""
 function pay_ground_rent_handout!(model)
     p = parameters(model)
     (p.public_land && p.public_land_rent_handout_share > 0) || return nothing
