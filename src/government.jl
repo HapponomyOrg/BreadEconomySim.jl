@@ -467,3 +467,21 @@ function apply_debt_ceiling!(model)
     model.spending_scale = (ceiling > 0 && debt > ceiling) ? clamp(ceiling / debt, p.public_spending_floor, 1.0) : 1.0
     return nothing
 end
+
+"""Public land's ground rents handed out per head (31 Oct, Stef): the share `public_land_rent_handout_share` of this month's
+ground rents goes to every living villager, the rest stays in the budget — the levy dividend's switch, as a share."""
+function pay_ground_rent_handout!(model)
+    p = parameters(model)
+    (p.public_land && p.public_land_rent_handout_share > 0) || return nothing
+    ps = persons(model); isempty(ps) && return nothing
+    gov = government(model)
+    each = floor(p.public_land_rent_handout_share * model.ground_rent_this_round / length(ps) * 1e4) / 1e4
+    each > 0 || return nothing
+    paid = 0.0
+    for w in ps
+        amount = round(min(each, cash(gov)), digits = 4); amount > 0 || break
+        transfer!(model, gov, w, amount, :ground_rent_handout); paid += amount
+    end
+    model.ground_rent_handout_this_round += paid; model.government_outlay_this_round += paid
+    return nothing
+end

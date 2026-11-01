@@ -93,7 +93,7 @@ function public_land!(model)
         e isa Enterprise && e.kind in (:bakery, :theatre) && charge(e, 1, p.public_land_firm_rent_in_breads, :ground_rent)
     end
     for w in persons(model)
-        p.public_land_dwelling_exempt_benefit && unemployed(w) && continue          # 18 Oct: those on the benefit pay no dwelling rent
+        p.public_land_dwelling_exempt_benefit && w.unemployed_last_round && continue   # 18 Oct: those on the benefit pay no dwelling rent; 31 Oct: last month's status — this month's labour market has not run yet (the exemption never fired)
         charge(w, 1, p.public_land_dwelling_rent_in_breads, :ground_rent)
     end
     return nothing

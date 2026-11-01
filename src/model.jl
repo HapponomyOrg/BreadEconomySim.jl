@@ -125,7 +125,7 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
     props[:entry_margin_history] = OrderedDict{Symbol, Vector{Float64}}()
     props[:entry_last] = OrderedDict{Symbol, Int}()
     props[:refound_last] = OrderedDict{Symbol, Int}()
-    props[:intervention] = false; props[:intervention_months] = 0; props[:fed_months] = 0; props[:labour_shortfall_this_round] = 0.0; props[:public_land_total] = parameters.public_land ? land_units_per_landowner(parameters) * parameters.number_of_landowners : 0; props[:ground_rent_this_round] = 0.0; props[:basic_income_this_round] = 0.0; props[:levy_dividend_this_round] = 0.0
+    props[:ground_rent_handout_this_round] = 0.0; props[:intervention] = false; props[:intervention_months] = 0; props[:fed_months] = 0; props[:labour_shortfall_this_round] = 0.0; props[:public_land_total] = parameters.public_land ? land_units_per_landowner(parameters) * parameters.number_of_landowners : 0; props[:ground_rent_this_round] = 0.0; props[:basic_income_this_round] = 0.0; props[:levy_dividend_this_round] = 0.0
     props[:premium_loaves_this_round] = 0.0; props[:premium_revenue_this_round] = 0.0; props[:premium_labour_this_round] = 0.0
     props[:gold_price] = parameters.gold_initial_price_in_breads * parameters.initial_prices[:bread] * parameters.initial_price_multiplier
     props[:gold_valuation] = props[:gold_price]; props[:gold_sales_log] = Tuple{Int, Float64}[]; props[:gold_sold_this_round] = 0.0
@@ -481,6 +481,7 @@ function begin_round!(model)
         if a isa Person
             a.effective_capacity = a.last_meal == :half ? a.capacity * p.half_meal_capacity_fraction : a.capacity
             a.labour_available = 0.0; a.labour_offered = 0.0; a.labour_sold = 0.0; a.volunteer_hours = 0.0
+            a.unemployed_last_round = a.labour_offered > 1e-9 && a.labour_sold <= 1e-9   # 31 Oct: remembered before the reset
             a.labour_income = 0.0; a.rent_income = 0.0; a.fee_received = 0.0; a.rebate_income = 0.0
             empty!(a.labour_reserved)
             a.ate_this_round = :none; a.glutton = false
@@ -541,7 +542,7 @@ function begin_round!(model)
     model.invoices_issued_this_round = 0.0; model.invoices_paid_this_round = 0.0
     model.profit_tax_this_round = 0.0; model.income_tax_charged_this_round = 0.0; model.after_clearing = false; model.land_levy_this_round = 0.0
     model.levy_dividend_this_round = 0.0; model.surplus_debt_repaid_this_round = 0.0; model.meal_income_paid_this_round = false   # 23 Oct: reset (the dividend now accumulates within a month)
-    model.premium_loaves_this_round = 0.0; model.premium_revenue_this_round = 0.0; model.premium_labour_this_round = 0.0; model.labour_shortfall_this_round = 0.0; model.basic_income_this_round = 0.0; model.levy_dividend_this_round = 0.0; model.ground_rent_this_round = 0.0
+    model.ground_rent_handout_this_round = 0.0; model.premium_loaves_this_round = 0.0; model.premium_revenue_this_round = 0.0; model.premium_labour_this_round = 0.0; model.labour_shortfall_this_round = 0.0; model.basic_income_this_round = 0.0; model.levy_dividend_this_round = 0.0; model.ground_rent_this_round = 0.0
     for e in model.enterprise_list; empty!(e.patronage_this_round); end
     model.gi_this_round = 0.0; model.demurrage_this_round = 0.0; model.demurrage_tax_this_round = 0.0
     model.account_fees_this_round = 0.0; model.peer_lent_this_round = 0.0

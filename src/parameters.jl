@@ -315,6 +315,9 @@ Base.@kwdef struct SimulationParameters
     public_land_farm_rent_in_breads::Float64 = 0.0     # per plot a farm works, a month
     public_land_firm_rent_in_breads::Float64 = 0.0     # per bakery or theatre, a month
     public_land_dwelling_rent_in_breads::Float64 = 0.0 # per villager, a month
+    # 31 Oct (Stef): the ground rent gets the levy's switch, as a share — this part of the month's ground rents is handed out to
+    # every living villager per head, the rest stays in the budget (0 = all to the budget, as before; 1 = all handed out).
+    public_land_rent_handout_share::Float64 = 0.0
     # 18 Oct (Stef): the dwelling rent and those on the benefit — exempt them, or add the rent to the benefit (the two policies a
     # debt-money village has; under SuMSy the dividend covers it without a policy).
     public_land_dwelling_exempt_benefit::Bool = false
