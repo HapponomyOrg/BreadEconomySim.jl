@@ -9,8 +9,8 @@ DEBT, SUMSY, GREY = '#b8541c', '#2a7f62', '#8a8a8a'
 
 # ---------- data ----------
 lad = pd.read_csv(R('ladder2_64_summary.csv'))
-order = ['0 bare bones','1 + planning margin','2 + government','3 + interest on deposits','4 + theatre','5 + government bonds','6 + charge on balances','7 + second theatre','8 + shareholders & share market','9 co-ops (side rung)','10 + responsive prices','11 + government reserve','12 + fiscal policy and VAT']
-short = ['0 bare','1 plan','2 gov','3 int','4 theatre','5 bonds','6 charge','7 2nd th.','8 shares','9 co-ops','10 prices','11 reserve','12 fiscal']
+order = ['0 bare bones','1 + planning margin','2 + government','3 + interest on deposits','4 + services','5 + government bonds','6 + charge on balances','7 + second services','8 + shareholders & share market','9 co-ops (side rung)','10 + responsive prices','11 + government reserve','12 + fiscal policy and VAT']
+short = ['0 bare','1 plan','2 gov','3 int','4 services','5 bonds','6 charge','7 2nd th.','8 shares','9 co-ops','10 prices','11 reserve','12 fiscal']
 def series(col, system): return [float(lad[(lad.rung==r)&(lad.system==system)][col].iloc[0]) for r in order]
 
 # ---------- svg helpers ----------
@@ -57,12 +57,12 @@ F['alive'] = fig(chart('Alive at the end, of 64', [('Debt money', DEBT, series('
     'Figure 1. Who is alive after a hundred months, step by step. Debt money needs a government (step 2); SuMSy needs only a planning margin (step 1). Step 12 costs the debt village eleven people.')
 F['debt'] = fig(chart('Public debt, % of yearly output', [('Debt money', DEBT, series('debt_gdp','debt'))], short, yfmt=lambda v: f'{v:.0f} %', note='SuMSy: none at any step'),
     'Figure 2. What the debt village\'s government owes, as a share of what the village produces in a year. It never falls below 170 %; the SuMSy government owes nothing.')
-F['tickets'] = fig(chart('Theatre tickets sold a month', [('Debt money', DEBT, series('tickets','debt')), ('SuMSy', SUMSY, series('tickets','sumsy'))], short, note='last twelve months, mean'),
-    'Figure 3. Tickets — the village\'s only spending beyond bread. The stock market (step 8) halves them in both villages; the cooperatives (side step 9) restore them on the SuMSy side.')
+F['services'] = fig(chart('Services services sold a month', [('Debt money', DEBT, series('services','debt')), ('SuMSy', SUMSY, series('services','sumsy'))], short, note='last twelve months, mean'),
+    'Figure 3. Services — the village\'s only spending beyond bread. The stock market (step 8) halves them in both villages; the cooperatives (side step 9) restore them on the SuMSy side.')
 F['gini'] = fig(chart('How unevenly the cash is spread (Gini, 0 = equal)', [('Debt money', DEBT, series('gini_c','debt')), ('SuMSy', SUMSY, series('gini_c','sumsy'))], short, ymax=1, yfmt=lambda v: f'{v:.2f}', kind='line'),
     'Figure 4. SuMSy\'s money stays almost evenly spread until shares arrive at step 8; the responsive prices of step 10 spread it further apart.')
 F['unempl'] = fig(chart('Without work, of 64', [('Debt money', DEBT, series('unempl','debt')), ('SuMSy', SUMSY, series('unempl','sumsy'))], short, note='mean over the run'),
-    'Figure 5. Unemployment. The theatre (step 4) is the biggest employer in both villages; SuMSy\'s falls to ten, the debt village\'s to sixteen.')
+    'Figure 5. Unemployment. The services (step 4) is the biggest employer in both villages; SuMSy\'s falls to ten, the debt village\'s to sixteen.')
 
 # greed matrix (Section 10) from block results
 def survived(path, variant, system='sumsy'):
@@ -107,19 +107,19 @@ def panel_for(step):
     d = d.iloc[0] if len(d) else None; u = u.iloc[0] if len(u) else None
     def col(r, system):
         if r is None: return '<td>—</td>'
-        firms = f"{int(r.farms)} farms, {int(r.bakeries)} bakeries" + (f", {int(r.theatres)} theatres" if r.theatres else "")
+        firms = f"{int(r.farms)} farms, {int(r.bakeries)} bakeries" + (f", {int(r.services)} services" if r.services else "")
         if r.coops: firms += f" ({int(r.coops)} of them cooperatives)"
-        if r.theatres and r.seats_per_theatre: firms += f"; {int(r.shows)} show a month, {int(r.seats_per_theatre)} seats a theatre"
+        if r.services and r.seats_per_services: firms += f"; {int(r.shows)} show a month, {int(r.seats_per_services)} seats a services"
         own = f"{int(r.founders)} founders hold shares" + (", shares trade" if r.share_market else "") if r.founders else "no owners"
         if system == 'debt':
-            gov = ("none" if not r.public_jobs_share else f"public jobs for {pct(r.public_jobs_share)} of the village's work, {r.benefit_loaves:g} loaves for the workless; taxes: wages {pct(r.wage_tax)}, capital income {pct(r.capital_tax)}, dividends {pct(r.dividend_tax)}" + (f", bread and tickets {pct(r.consumption_tax)}" if r.consumption_tax else "") + (", borrows by bonds" if r.bonds else ", borrows from the banks"))
+            gov = ("none" if not r.public_jobs_share else f"public jobs for {pct(r.public_jobs_share)} of the village's work, {r.benefit_loaves:g} loaves for the workless; taxes: wages {pct(r.wage_tax)}, capital income {pct(r.capital_tax)}, dividends {pct(r.dividend_tax)}" + (f", bread and services {pct(r.consumption_tax)}" if r.consumption_tax else "") + (", borrows by bonds" if r.bonds else ", borrows from the banks"))
             money_ = f"created by bank loans; banks start at {pct(r.bank_rate_start)} a month, capped at {pct(r.bank_rate_cap)}; the government borrows at {pct(r.government_rate)}" + (f"; savings earn {pct(r.deposit_interest)} a year" if r.deposit_interest else "")
         else:
-            gov = ("none" if not r.public_jobs_share else f"public jobs for {pct(r.public_jobs_share)} of the village's work; no benefit, no tax on income; parking tax {pct(r.parking_tax)} a month on idle money" + (f"; bread and tickets {pct(r.consumption_tax)}" if r.consumption_tax else ""))
+            gov = ("none" if not r.public_jobs_share else f"public jobs for {pct(r.public_jobs_share)} of the village's work; no benefit, no tax on income; parking tax {pct(r.parking_tax)} a month on idle money" + (f"; bread and services {pct(r.consumption_tax)}" if r.consumption_tax else ""))
             money_ = f"guaranteed income {money(r.guaranteed_income)} a month; cushion {money(r.buffer)}; parking fee {pct(r.parking_fee)} a month above it; banks at −1 %"
         if r.charge_on_balances: money_ += f"; charge on firms' idle balances {pct(r.charge_on_balances)} a month"
         fiscal = "" if r.tax_policy == 'none' and not r.reserve_rounds else (f"reserve of {int(r.reserve_rounds)} months of spending" if r.reserve_rounds else "") + (f"; tax policy, levers {r.levers}" if r.tax_policy != 'none' else "")
-        prices = f"bread {money(r.price_bread)}, grain {money(r.price_grain)}, wage {money(r.price_wage)} a unit (a full month's work {money(4*float(r.price_wage))}), rent {money(r.price_rent)}, ticket {money(r.price_ticket)}; a buyer pays up to {r.bread_ceiling:g} × last month's bread price" + (", never below cost" if r.ask_floor == 'cost' else "")
+        prices = f"bread {money(r.price_bread)}, grain {money(r.price_grain)}, wage {money(r.price_wage)} a unit (a full month's work {money(4*float(r.price_wage))}), rent {money(r.price_rent)}, service {money(r.price_service)}; a buyer pays up to {r.bread_ceiling:g} × last month's bread price" + (", never below cost" if r.ask_floor == 'cost' else "")
         greed = f"; greed: {r.greed}" if isinstance(r.greed, str) and r.greed else ""
         return f"<td><b>{int(r.villagers)} villagers</b>, {int(r.landowners)} of them landowners · {firms} · {own}<br>Money: {money_}<br>Government: {gov}{('<br>Public finance: ' + fiscal) if fiscal else ''}<br>Starting prices: {prices}{greed}</td>"
     return ('<div class="wrap"><table class="whatis"><thead><tr><th>Debt money</th><th>SuMSy</th></tr></thead><tbody><tr>' + col(d,'debt') + col(u,'sumsy') + '</tr></tbody></table></div>')
@@ -134,7 +134,7 @@ assert 'allowance' not in md.lower() or 'benefit' in md, 'terminology: allowance
 # the frames: render their markdown separately (Python-Markdown leaves raw HTML blocks alone), then drop the HTML in
 md = re.sub(r'\\\[ KADER\s*\n(.*?)\n\\\]', lambda m: '\n<aside class="frame">\n' + markdown.markdown(m.group(1).strip(), extensions=['tables']) + '\n</aside>\n', md, flags=re.S)
 # figure placement markers by section heading
-place = {'## 7. The ladder': 'alive', '### What the ladder says': 'debt', '### Step 8. Owners and a stock market': 'tickets', '### Step 10. Prices that respond': 'gini', '### Step 4. A theatre': 'unempl', '## 10. Greed': 'greed', '## 13. The stress test: greed on the best villages': 'stress', '## 11. Taxes, and why the debt village\'s books do not balance': 'tax'}
+place = {'## 7. The ladder': 'alive', '### What the ladder says': 'debt', '### Step 8. Owners and a stock market': 'services', '### Step 10. Prices that respond': 'gini', '### Step 4. A services': 'unempl', '## 10. Greed': 'greed', '## 13. The stress test: greed on the best villages': 'stress', '## 11. Taxes, and why the debt village\'s books do not balance': 'tax'}
 body = markdown.markdown(md, extensions=['tables'])
 body = re.sub(r'<a href="(https?://[^"]+)"', r'<a href="\1" target="_blank" rel="noopener"', body)   # new tab: in-frame navigation is blocked (report_style.md §8)
 # every address that appears as plain text becomes a link too, so it can be right-clicked (report_style.md §8); an address

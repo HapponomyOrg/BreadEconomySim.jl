@@ -14,13 +14,14 @@ using Statistics
 using StableRNGs
 using OrderedCollections
 
-export SimulationParameters, create_bread_economy, run_simulation, run_simulation!
+export CALIBRATIONS, calibrated, anchor_table, SimulationParameters, create_bread_economy, run_simulation, run_simulation!
 export round_data, event_log, agent_end_state, money_identity_gap, gini, land_units_per_landowner
 export Person, Enterprise
 export DEMURRAGE_TIERS_TEST
 
 include("stable_random.jl")
 include("parameters.jl")
+include("calibration.jl")
 include("agents.jl")
 include("model.jl")
 include("credit.jl")
@@ -44,7 +45,7 @@ append!(ROUND_BEHAVIORS, Function[
     set_interest_rates!,
     land_market!,
     gold_market!,                       # 5 Oct: a pure store of value, traded like land
-    m -> labour_market!(m, (:farm, :bank, :theatre)),   # the theatres here unless the joint market is on (then with the bakeries, after the grain) month: 283 hungry)
+    m -> labour_market!(m, (:farm, :bank, :services)),   # the services here unless the joint market is on (then with the bakeries, after the grain) month: 283 hungry)
     m -> staff_with_volunteers!(m, (:farm,)),   # 15 Oct: volunteers where allowed
     produce_grain!,
     grain_market!,
@@ -56,20 +57,19 @@ append!(ROUND_BEHAVIORS, Function[
     pay_unemployment_fees!,
     pay_basic_income!,                  # 14 Oct: a basic income under debt money
     bread_market!,
-    staff_theatres_with_volunteers!,   # 4 Oct: after the labour markets, before the shows
-    ticket_market!,
+    staff_services_with_volunteers!,   # 4 Oct: after the labour markets, before the shows
+    service_market!,
     sell_rides!,
     volunteer!,
     greed_spending!,
     charge_income_tax!,
     collect_land_levy!,
     pay_levy_dividend!,                 # 14 Oct: the levy paid out per head
-    settle_end_of_round!,
     settle_invoices!,
     liquidate_insolvent_firms!,
     refound_missing_producers!,
     market_entry!,
-    clear!, pay_ground_rent_handout!,
+    clear!, settle_end_of_round!, pay_ground_rent_handout!,          # 2 Nov: wages and rents settled after the clearing, from the month's takings (farms were paid for grain only at the clearing)
     service_debt!,
     service_peer_loans!,
     service_bonds!,

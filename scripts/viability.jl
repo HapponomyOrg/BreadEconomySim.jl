@@ -42,9 +42,9 @@ SG = (; SRR..., gluttony_probability = 0.1, plan_for_gluttony = true)
 variants = [
     ("debt_partial",             DG),
     ("debt_fullonly",            (; DG..., partial_unemployment_fee = false)),
-    ("debt_theatre_partial",     (; DG..., entertainment = true)),
-    ("debt_theatre_fullonly",    (; DG..., entertainment = true, partial_unemployment_fee = false)),
-    ("debt_theatre_fullonly_margin", (; DG..., entertainment = true, partial_unemployment_fee = false, planning_margin = 0.1)),
+    ("debt_services_partial",     (; DG..., entertainment = true)),
+    ("debt_services_fullonly",    (; DG..., entertainment = true, partial_unemployment_fee = false)),
+    ("debt_services_fullonly_margin", (; DG..., entertainment = true, partial_unemployment_fee = false, planning_margin = 0.1)),
     ("debt_fullonly_nofee",      (; DG..., partial_unemployment_fee = false, unemployment_fee_in_breads = 0.0, minimum_fee_in_breads = 0.0, entertainment = true)),
 ]
 variants_old = [
@@ -85,9 +85,9 @@ function summarise(name, kw, s)
      seizures = count(e -> e.kind == :seizure, m.events), write_offs = round(d.cumulative_write_offs[end], digits = 1),
      missed = sum(d.missed_payments), pool = round(d.buffer_pool[end], digits = 1), premiums = round(d.insurance_premiums[end], digits = 1), payouts = round(d.insurance_payouts[end], digits = 1),
      gini_cash = round(d.gini_cash_persons[end], digits = 3), below_meal = round(mean(d.persons_below_meal), digits = 2),
-     tickets = round(mean(lastn(d.tickets_sold)), digits = 1), theatre_labour = round(mean(lastn(d.theatre_labour)), digits = 1),
-     ticket_share_gdp = round(mean(lastn(d.ticket_revenue)) / (mean(lastn(d.bread_bill)) + mean(lastn(d.ticket_revenue))), digits = 3),
-     p_ticket = round(mean_nn(lastn(d.price_ticket)), digits = 2), cash_theatres = round(d.cash_theatres[end], digits = 0),
+     services = round(mean(lastn(d.services_sold)), digits = 1), services_labour = round(mean(lastn(d.services_labour)), digits = 1),
+     service_share_gdp = round(mean(lastn(d.service_revenue)) / (mean(lastn(d.bread_bill)) + mean(lastn(d.service_revenue))), digits = 3),
+     p_service = round(mean_nn(lastn(d.price_service)), digits = 2), cash_services = round(d.cash_services[end], digits = 0),
      glut_attempted = sum(d.gluttony_attempted), glut_refused = sum(d.gluttony_refused),
      income_over_bill = round(mean(lastn(d.persons_income)) / mean(lastn(d.bread_bill)), digits = 3),
      unsold_last10 = round(mean(lastn(d.bread_baked .- d.bread_sold)), digits = 2),

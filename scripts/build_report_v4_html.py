@@ -9,8 +9,8 @@ DEBT, SUMSY, GREY = '#b8541c', '#2a7f62', '#8a8a8a'
 
 # ---------- data ----------
 lad = pd.read_csv(R('ladder2_512_summary.csv'))
-order = ['0 bare bones','1 + planning margin','2 + government','3 + interest on deposits','4 + theatres','5 + government bonds','6 + charge on balances','7 + two more theatres','8 + shareholders & share market','9 co-ops (side rung)','10 + government reserve','11 + fiscal policy and VAT']
-short = ['0 bare','1 plan','2 gov','3 int','4 theatres','5 bonds','6 charge','7 4 th.','8 shares','9 co-ops','10 reserve','11 fiscal']
+order = ['0 bare bones','1 + planning margin','2 + government','3 + interest on deposits','4 + services','5 + government bonds','6 + charge on balances','7 + two more services','8 + shareholders & share market','9 co-ops (side rung)','10 + government reserve','11 + fiscal policy and VAT']
+short = ['0 bare','1 plan','2 gov','3 int','4 services','5 bonds','6 charge','7 4 th.','8 shares','9 co-ops','10 reserve','11 fiscal']
 def series(col, system): return [float(lad[(lad.rung==r)&(lad.system==system)][col].iloc[0]) for r in order]
 def cell(prefix, system, col):
     x = lad[lad.rung.str.startswith(prefix) & (lad.system==system)]; return float(x[col].iloc[0]) if len(x) else float('nan')
@@ -65,8 +65,8 @@ F['bread'] = fig(chart('The price of a loaf at month 120 (from 5)', [('Debt mone
     'Figure 4. Both villages deflate; the SuMSy village faster, to 2, because its people work two units in three and want no more. A village that has enough lets its prices fall; a money that is not a debt can afford to let them.')
 F['poor'] = fig(chart('What the poorest tenth hold, in meals', [('Debt money', DEBT, series('wealth_bottom10_meals','debt')), ('SuMSy', SUMSY, series('wealth_bottom10_meals','sumsy'))], short, yfmt=lambda v: f'{v:.0f}', note='land and shares counted, gold not'),
     'Figure 5. The poorest tenth. In the debt village they hold a meal or less at every step and go under water at step 11; in the SuMSy village they hold sixteen meals from step 8, when the land dividend arrives, and twenty with cooperatives.')
-F['tickets'] = fig(chart('Theatre tickets sold a month', [('Debt money', DEBT, series('tickets','debt')), ('SuMSy', SUMSY, series('tickets','sumsy'))], short, note='last twelve months, mean'),
-    'Figure 6. Tickets, the village\'s only spending beyond bread. The SuMSy village fills four theatres; the debt village fills one, and the other three fail and are started again.')
+F['services'] = fig(chart('Services services sold a month', [('Debt money', DEBT, series('services','debt')), ('SuMSy', SUMSY, series('services','sumsy'))], short, note='last twelve months, mean'),
+    'Figure 6. Services, the village\'s only spending beyond bread. The SuMSy village fills four services; the debt village fills one, and the other three fail and are started again.')
 pol = [('step 8', cell('8 + share','debt','alive_at_end')), ('austerity', cell('A8','debt','alive_at_end')), ('ceiling 1×', cell('D8-100','debt','alive_at_end')), ('ceiling 0.5×', cell('D8-50','debt','alive_at_end')), ('taxes balance (UP8)', cell('UP8','debt','alive_at_end')), ('tax on bread (11)', cell('11','debt','alive_at_end'))]
 F['policies'] = fig(chart('The debt village: alive at the end under each policy, of 512', [('Debt money', DEBT, [v for _,v in pol])], [l for l,_ in pol], ymax=540, w=760, h=340),
     'Figure 7. Every policy that brings the debt village\'s debt down costs it people: austerity forty-three, a debt ceiling up to two hundred, taxes raised until the budget balances nearly three hundred at fixed prices and everyone at free prices, the tax on bread seventy-five. The SuMSy village keeps 512 under each.')
@@ -89,9 +89,9 @@ def panel_for(step):
     d = d.iloc[0] if len(d) else None; u = u.iloc[0] if len(u) else None
     def col(r, system):
         if r is None: return '<td>—</td>'
-        firms = f"{int(r.farms)} farms, {int(r.bakeries)} bakeries" + (f", {int(r.theatres)} theatres" if r.theatres else "")
+        firms = f"{int(r.farms)} farms, {int(r.bakeries)} bakeries" + (f", {int(r.services)} services" if r.services else "")
         if r.coops: firms += f" ({int(r.coops)} of them cooperatives)"
-        if r.theatres and r.seats_per_theatre: firms += f"; {int(r.shows)} show a month, {int(r.seats_per_theatre)} seats a theatre"
+        if r.services and r.seats_per_services: firms += f"; {int(r.shows)} show a month, {int(r.seats_per_services)} seats a services"
         own = f"{int(r.founders)} founders hold shares" + (", shares trade" if r.share_market else "") if r.founders else "no owners"
         if system == 'debt':
             gov = ("none" if not r.public_jobs_share else f"public jobs for {pct(r.public_jobs_share)} of the village's work, {r.benefit_loaves:g} loaves for the workless" + (f"; wage tax {pct(r.wage_tax)}, capital tax {pct(r.capital_tax)}" if r.wage_tax or r.capital_tax else "") + (f", VAT {pct(r.consumption_tax)}" if r.consumption_tax else "") + ("; bonds" if r.bonds else "; borrows from its bank"))
@@ -101,7 +101,7 @@ def panel_for(step):
             money_ = f"guaranteed income {money(r.guaranteed_income)} a month; cushion {money(r.buffer)}; parking fee {pct(r.parking_fee)} a month above it; banks lend idle balances at −1 % a month"
         if r.charge_on_balances: money_ += f"; charge on firms' idle reserves {pct(r.charge_on_balances)} a month"
         fiscal = "" if r.tax_policy == 'none' and not r.reserve_rounds else (f"reserve of {int(r.reserve_rounds)} months of spending" if r.reserve_rounds else "") + (f"; tax policy: {r.tax_policy}" if r.tax_policy != 'none' else "")
-        prices = f"bread {money(r.price_bread)}, grain {money(r.price_grain)}, wage {money(r.price_wage)} a unit, rent {money(r.price_rent)} a month" + (f", ticket {money(r.price_ticket)}" if r.theatres else "")
+        prices = f"bread {money(r.price_bread)}, grain {money(r.price_grain)}, wage {money(r.price_wage)} a unit, rent {money(r.price_rent)} a month" + (f", service {money(r.price_service)}" if r.services else "")
         return f"<td><b>{int(r.villagers)} villagers</b>, {int(r.landowners)} of them landowners · {firms} · {own}<br>Money: {money_}<br>Government: {gov}{('<br>Public finance: ' + fiscal) if fiscal else ''}<br>Starting prices: {prices}</td>"
     return ('<div class="wrap"><table class="whatis"><thead><tr><th>Debt money</th><th>SuMSy</th></tr></thead><tbody><tr>' + col(d,'debt') + col(u,'sumsy') + '</tr></tbody></table></div>')
 
@@ -110,7 +110,7 @@ md = open(os.path.join(ROOT, 'docs', 'report_v4_en_public.md')).read()
 assert 'This is an AI-generated report' in md, 'disclaimer missing (report_style.md §3)'
 assert 'Previous report:' in md and 'Next report:' in md, 'navigation line missing (report_style.md §3)'
 md = re.sub(r'\\\[ KADER\s*\n(.*?)\n\\\]', lambda m: '\n<aside class="frame">\n' + markdown.markdown(m.group(1).strip(), extensions=['tables']) + '\n</aside>\n', md, flags=re.S)
-place = {'## 7. The ladder': 'alive', '### What the ladder says': 'debt', '### Step 8. Owners and a stock market, and the land dividend': 'tickets', '## 9. What prices do with the debt': 'bread', '## 10. Full employment': 'unempl', '## 11. Where the debt village': 'employment', '## 12. Land': 'land', '## 13. Three policies, tried': 'policies', '### Step 9, a side step. Cooperatives': 'poor'}
+place = {'## 7. The ladder': 'alive', '### What the ladder says': 'debt', '### Step 8. Owners and a stock market, and the land dividend': 'services', '## 9. What prices do with the debt': 'bread', '## 10. Full employment': 'unempl', '## 11. Where the debt village': 'employment', '## 12. Land': 'land', '## 13. Three policies, tried': 'policies', '### Step 9, a side step. Cooperatives': 'poor'}
 body = markdown.markdown(md, extensions=['tables'])
 body = re.sub(r'<a href="(https?://[^"]+)"', r'<a href="\1" target="_blank" rel="noopener"', body)
 def _linkify(m):

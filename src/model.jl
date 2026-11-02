@@ -41,7 +41,7 @@ const ROUND_BEHAVIORS = Function[]
 # on, a reordered check — shifts every later draw everywhere, so the same seed no longer gives the same experiment
 # in the parts that did not change. Separate streams confine such a change to its own subsystem. Each stream is
 # seeded from the run seed and its own name, so adding a stream never re-seeds the others.
-const RANDOM_STREAMS = (:negotiation, :land, :labour, :grain, :bread, :tickets, :greed, :credit, :estates, :shares, :cooperatives, :entry, :nonworking, :gold)
+const RANDOM_STREAMS = (:negotiation, :land, :labour, :grain, :bread, :services, :greed, :credit, :estates, :shares, :cooperatives, :entry, :nonworking, :gold)
 
 """The random generator of a subsystem; the model's single generator when `random_streams` is off."""
 stream(model, name::Symbol) = parameters(model).random_streams ? model.streams[name] : model.single_stream
@@ -125,7 +125,7 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
     props[:entry_margin_history] = OrderedDict{Symbol, Vector{Float64}}()
     props[:entry_last] = OrderedDict{Symbol, Int}()
     props[:refound_last] = OrderedDict{Symbol, Int}()
-    props[:ground_rent_handout_this_round] = 0.0; props[:intervention] = false; props[:intervention_months] = 0; props[:fed_months] = 0; props[:labour_shortfall_this_round] = 0.0; props[:public_land_total] = parameters.public_land ? land_units_per_landowner(parameters) * parameters.number_of_landowners : 0; props[:ground_rent_this_round] = 0.0; props[:basic_income_this_round] = 0.0; props[:levy_dividend_this_round] = 0.0
+    props[:ground_rent_handout_this_round] = 0.0; props[:payroll_overdraft_this_round] = 0.0; props[:credit_line_loans] = Dict{Tuple{Int, Symbol}, Vector{Int}}(); props[:expansion_credit_this_round] = 0.0; props[:intervention] = false; props[:intervention_months] = 0; props[:fed_months] = 0; props[:labour_shortfall_this_round] = 0.0; props[:public_land_total] = parameters.public_land ? land_units_per_landowner(parameters) * parameters.number_of_landowners : 0; props[:ground_rent_this_round] = 0.0; props[:basic_income_this_round] = 0.0; props[:levy_dividend_this_round] = 0.0
     props[:premium_loaves_this_round] = 0.0; props[:premium_revenue_this_round] = 0.0; props[:premium_labour_this_round] = 0.0
     props[:gold_price] = parameters.gold_initial_price_in_breads * parameters.initial_prices[:bread] * parameters.initial_price_multiplier
     props[:gold_valuation] = props[:gold_price]; props[:gold_sales_log] = Tuple{Int, Float64}[]; props[:gold_sold_this_round] = 0.0
@@ -157,7 +157,7 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
     props[:greedy_loaves_this_round] = 0
     props[:ration_this_round] = 0
     props[:tier_revenue_this_round] = 0.0
-    props[:greedy_tickets_this_round] = 0
+    props[:greedy_services_this_round] = 0
     props[:greedy_land_this_round] = 0
     props[:greedy_shares_this_round] = 0
     props[:gluttony_refused_this_round] = 0
@@ -210,9 +210,9 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
                    ask = OrderedDict{Symbol, Float64}(prices), bid = OrderedDict{Symbol, Float64}(prices))
     end
     if parameters.entertainment
-        target0 = max(ceil(Int, parameters.number_of_persons * parameters.entertainment_propensity / parameters.customers_per_labour_unit / parameters.number_of_theatres), 1)
-        for k in 1:parameters.number_of_theatres
-            add_agent!(Enterprise, model; kind = :theatre, balance = Balance(), production_target = target0, pricing = strategy(k, parameters.number_of_theatres),
+        target0 = max(ceil(Int, parameters.number_of_persons * parameters.entertainment_propensity / parameters.customers_per_labour_unit / parameters.number_of_services), 1)
+        for k in 1:parameters.number_of_services
+            add_agent!(Enterprise, model; kind = :services, balance = Balance(), production_target = target0, pricing = strategy(k, parameters.number_of_services),
                        ask = OrderedDict{Symbol, Float64}(prices), bid = OrderedDict{Symbol, Float64}(prices))
         end
     end
@@ -223,10 +223,10 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
         firm_no = 0                                                   # :distinct founders: each firm gets the next villagers in id order
         founders_of() = parameters.founders == :distinct ?
             [ps[mod1((firm_no - 1) * parameters.shareholder_count + j, length(ps))] for j in 1:min(parameters.shareholder_count, length(ps))] : holders
-        for kind in (:farm, :bakery, :theatre)
+        for kind in (:farm, :bakery, :services)
             es = sort([a for a in agents_by_id(model) if a isa Enterprise && a.kind == kind]; by = a -> a.id)
             ncoop = parameters.ownership == :cooperative ? length(es) : parameters.ownership == :shareholders ? 0 :
-                    kind == :farm ? parameters.cooperative_farms : kind == :bakery ? parameters.cooperative_bakeries : parameters.cooperative_theatres
+                    kind == :farm ? parameters.cooperative_farms : kind == :bakery ? parameters.cooperative_bakeries : parameters.cooperative_services
             for (k, e) in enumerate(es)
                 if k <= ncoop
                     e.ownership = :cooperative
@@ -269,8 +269,8 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
         chosen = parameters.greed_selection == :rich ? sort(ps; by = w -> (-wealth1(w), w.id))[1:n] : stable_shuffle(stream(model, :greed), ps)[1:n]
         for w in chosen; w.greed = :cash_hoarder; end
     end
-    if parameters.community_theatres > 0                            # 15 Oct: volunteer-run community theatres
-        for t in sort([e for e in agents_by_id(model) if e isa Enterprise && e.kind == :theatre]; by = e -> e.id)[1:min(parameters.community_theatres, end)]
+    if parameters.community_services > 0                            # 15 Oct: volunteer-run community services
+        for t in sort([e for e in agents_by_id(model) if e isa Enterprise && e.kind == :services]; by = e -> e.id)[1:min(parameters.community_services, end)]
             t.community = true
         end
     end
@@ -481,6 +481,7 @@ function begin_round!(model)
         if a isa Person
             a.effective_capacity = a.last_meal == :half ? a.capacity * p.half_meal_capacity_fraction : a.capacity
             a.unemployed_last_round = a.labour_offered > 1e-9 && a.labour_sold <= 1e-9   # 31 Oct: remembered before the reset (1 Nov: it sat one line too late and was always false)
+            a.income_last_round = a.labour_income + a.rent_income + a.dividend_income + a.fee_received + a.rebate_income   # 1 Nov: before the reset
             a.labour_available = 0.0; a.labour_offered = 0.0; a.labour_sold = 0.0; a.volunteer_hours = 0.0
             a.labour_income = 0.0; a.rent_income = 0.0; a.fee_received = 0.0; a.rebate_income = 0.0
             empty!(a.labour_reserved)
@@ -505,7 +506,7 @@ function begin_round!(model)
     model.deposit_interest_this_round = 0.0
     model.event_start = length(model.events) + 1
     model.gluttony_attempted_this_round = 0; model.gluttony_refused_this_round = 0; model.demurrage_persons_this_round = 0.0
-    model.greedy_loaves_this_round = 0; model.greedy_tickets_this_round = 0; model.tier_revenue_this_round = 0.0
+    model.greedy_loaves_this_round = 0; model.greedy_services_this_round = 0; model.tier_revenue_this_round = 0.0
     model.greedy_land_this_round = 0; model.greedy_shares_this_round = 0
     for w in model.person_list                                       # 3 Oct: tenure — consecutive months with each employer
         for (eid, _) in collect(w.tenure)
@@ -542,7 +543,7 @@ function begin_round!(model)
     model.invoices_issued_this_round = 0.0; model.invoices_paid_this_round = 0.0
     model.profit_tax_this_round = 0.0; model.income_tax_charged_this_round = 0.0; model.after_clearing = false; model.land_levy_this_round = 0.0
     model.levy_dividend_this_round = 0.0; model.surplus_debt_repaid_this_round = 0.0; model.meal_income_paid_this_round = false   # 23 Oct: reset (the dividend now accumulates within a month)
-    model.ground_rent_handout_this_round = 0.0; model.premium_loaves_this_round = 0.0; model.premium_revenue_this_round = 0.0; model.premium_labour_this_round = 0.0; model.labour_shortfall_this_round = 0.0; model.basic_income_this_round = 0.0; model.levy_dividend_this_round = 0.0; model.ground_rent_this_round = 0.0
+    model.ground_rent_handout_this_round = 0.0; model.payroll_overdraft_this_round = 0.0; model.expansion_credit_this_round = 0.0; model.premium_loaves_this_round = 0.0; model.premium_revenue_this_round = 0.0; model.premium_labour_this_round = 0.0; model.labour_shortfall_this_round = 0.0; model.basic_income_this_round = 0.0; model.levy_dividend_this_round = 0.0; model.ground_rent_this_round = 0.0
     for e in model.enterprise_list; empty!(e.patronage_this_round); end
     model.gi_this_round = 0.0; model.demurrage_this_round = 0.0; model.demurrage_tax_this_round = 0.0
     model.account_fees_this_round = 0.0; model.peer_lent_this_round = 0.0

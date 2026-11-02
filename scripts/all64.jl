@@ -3,7 +3,7 @@ using BreadEconomySim, DataFrames, CSV, Statistics
 nseeds = length(ARGS) >= 2 ? parse(Int, ARGS[2]) : 3; rounds = 100; N = 64
 BASE = (; number_of_persons = N, number_of_landowners = 16, land_per_person = 1.5, initial_production_target = 10, shares_per_person = 10, shareholder_count = 4,
          demand_based_targets = true, wage_ceiling_from_own_ask = true, expected_price_from_asks = true, ask_increase_only_on_unmet_demand = true, random_hiring_ties = true, no_labour_tolerance = true, offer_full_capacity = true, credit_for_bread = true, spoilage_aware_stocking = true, distress_land_sales = true, maximum_capacity = 4.0,
-         wage_reservation_net_of_tax = true, initial_endowment = :norm, startup_loan_term = 60, land_sales = :reservation, gluttony_probability = 0.1, plan_for_gluttony = true, planning_margin = 0.1, entertainment = true, number_of_theatres = 2, maximum_rounds = rounds, stop_when_half_dead = false, stop_when_stationary = false)
+         wage_reservation_net_of_tax = true, initial_endowment = :norm, startup_loan_term = 60, land_sales = :reservation, gluttony_probability = 0.1, plan_for_gluttony = true, planning_margin = 0.1, entertainment = true, number_of_services = 2, maximum_rounds = rounds, stop_when_half_dead = false, stop_when_stationary = false)
 DEBT = (; wage_tax_rate = 0.15, capital_tax_rate = 0.15, unemployment_fee_in_breads = 2.0, minimum_fee_in_breads = 2.0, government_employment_share = 0.1, deposit_interest_period = 12, deposit_interest_rate = 0.01, loyalty_bonus_rate = 0.02, account_fee_person = 0.0, account_fee_enterprise = 0.0, government_bonds = true)
 SUMSY = (; monetary_system = :sumsy, wage_tax_rate = 0.0, capital_tax_rate = 0.0, dividend_tax_rate = 0.0, unemployment_fee_in_breads = 0.0, minimum_fee_in_breads = 0.0, government_employment_share = 0.1, demurrage_tax_rate = 0.01, guaranteed_income = 5.0, demurrage_free_buffer = 30.0, demurrage_rate = 0.02, account_fee_person = 0.5, account_fee_enterprise = 1.5, instalment_purchases = true, land_price_rent_multiple = 50.0)
 MARKET = (; ownership = :shareholders, share_market = true, forward_valuation = true, required_yield_dispersion = 0.002, startup_financing = :paid_in_capital)
@@ -14,13 +14,13 @@ experiments = Dict(
  "coops" => (COOP = (; MARKET..., number_of_farms = 4, number_of_bakeries = 4, ownership = :mixed);
              WORKFOOD = (; cooperative_form_farms = :worker, cooperative_form_bakeries = :worker);
              [("member co-ops (13 Sept rule)", COOP),
-              ("member co-ops + co-op theatre", (; COOP..., cooperative_theatres = 1)),
+              ("member co-ops + co-op services", (; COOP..., cooperative_services = 1)),
               ("worker food chain", (; COOP..., WORKFOOD...)),
-              ("worker food chain + worker theatre", (; COOP..., WORKFOOD..., cooperative_theatres = 1, cooperative_form_theatres = :worker)),
-              ("worker food chain + consumer theatre", (; COOP..., WORKFOOD..., cooperative_theatres = 1, cooperative_form_theatres = :consumer)),
-              ("consumer bakeries + consumer theatre", (; COOP..., cooperative_farms = 0, cooperative_form_bakeries = :consumer, cooperative_theatres = 1, cooperative_form_theatres = :consumer)),
-              ("worker + consumer, no members-first", (; COOP..., WORKFOOD..., cooperative_theatres = 1, cooperative_form_theatres = :consumer, members_first_hiring = false)),
-              ("worker + consumer, symmetric founding", (; COOP..., WORKFOOD..., cooperative_theatres = 1, cooperative_form_theatres = :consumer, cooperative_founding = :symmetric))]),
+              ("worker food chain + worker services", (; COOP..., WORKFOOD..., cooperative_services = 1, cooperative_form_services = :worker)),
+              ("worker food chain + consumer services", (; COOP..., WORKFOOD..., cooperative_services = 1, cooperative_form_services = :consumer)),
+              ("consumer bakeries + consumer services", (; COOP..., cooperative_farms = 0, cooperative_form_bakeries = :consumer, cooperative_services = 1, cooperative_form_services = :consumer)),
+              ("worker + consumer, no members-first", (; COOP..., WORKFOOD..., cooperative_services = 1, cooperative_form_services = :consumer, members_first_hiring = false)),
+              ("worker + consumer, symmetric founding", (; COOP..., WORKFOOD..., cooperative_services = 1, cooperative_form_services = :consumer, cooperative_founding = :symmetric))]),
  "capacity" => (MIX = (; GREEDY..., greed_hoarding = 0.5);
                 [("mixed greed, capacity 4", MIX),
                  ("mixed greed, capacity 5", (; MIX..., maximum_capacity = 5.0)),
@@ -131,8 +131,8 @@ experiments = Dict(
                  ("greedy rich 25 %, unmet 10 %", (; MARKET..., greed = true, greed_share = 0.25, unmet_demand_share = 0.10)),
                  ("hoarding 0.5, unmet 5 %", (; GREEDY..., greed_hoarding = 0.5, unmet_demand_share = 0.05)),
                  ("hoarding 0.5 + wage ceiling 4, unmet 5 %", (; GREEDY..., greed_hoarding = 0.5, wage_ceiling_in_breads = 4.0, unmet_demand_share = 0.05))],
- "contribution" => (COOP = (; MARKET..., number_of_farms = 4, number_of_bakeries = 4, ownership = :mixed, cooperative_theatres = 1,
-                            cooperative_form_farms = :worker, cooperative_form_bakeries = :worker, cooperative_form_theatres = :consumer);
+ "contribution" => (COOP = (; MARKET..., number_of_farms = 4, number_of_bakeries = 4, ownership = :mixed, cooperative_services = 1,
+                            cooperative_form_farms = :worker, cooperative_form_bakeries = :worker, cooperative_form_services = :consumer);
                     [("money only", COOP),
                      ("buffer pledge only", (; COOP..., membership_contribution = :buffer)),
                      ("mixed, both fixed", (; COOP..., membership_contribution = :mixed_fixed)),

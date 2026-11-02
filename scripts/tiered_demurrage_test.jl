@@ -2,8 +2,8 @@
 # tiered_demurrage_test.jl — does a smaller money stock make the guaranteed income worth more? (21 October 2026, Stef)
 #
 # The SuMSy village at one step of the ladder, ten seeds, under four to six variants: flat demurrage or tiers, each with the
-# sector margins off or on. For each run it records the end-of-run bread and ticket prices, the money stock, what the income
-# buys (in meals and in tickets), the three Ginis, the two tenths, the richest tenth's cash, land and shares, and the year's
+# sector margins off or on. For each run it records the end-of-run bread and service prices, the money stock, what the income
+# buys (in meals and in services), the three Ginis, the two tenths, the richest tenth's cash, land and shares, and the year's
 # demurrage. Means over the seeds are printed and everything is written to results/tiered_demurrage_test.csv.
 #
 # In the REPL:
@@ -27,7 +27,7 @@ const TD_SETUP = quote
     using BreadEconomySim, DataFrames, Statistics
     const B = BreadEconomySim
     include(joinpath($TD_ROOT, "scripts", "ladder_definition.jl"))
-    const TD_MARGINS = (; pricing_target_farm = :margin, pricing_target_bakery = :margin, pricing_target_theatre = :margin)
+    const TD_MARGINS = (; pricing_target_farm = :margin, pricing_target_bakery = :margin, pricing_target_services = :margin)
     function td_paper_tiers(p)
         telo = p.guaranteed_income / p.demurrage_rate                             # the flat-rate equilibrium balance
         scale = p.demurrage_rate / 0.01                                          # the paper starts from 1 %
@@ -44,17 +44,17 @@ const TD_SETUP = quote
         ps = B.persons(m); lp = B.land_valuation_price(m)
         w(x) = B.net_wealth(m, x) - B.share_wealth(m, x) + B.measured_share_wealth(m, x)
         srt = sort(ps; by = x -> -w(x)); k = max(length(ps) ÷ 10, 1); top = srt[1:k]
-        bread = mean(skipmissing(filter(!isnan, d.price_bread[max(end-11, 1):end]))); ticket = mean(skipmissing(filter(!isnan, d.price_ticket[max(end-11, 1):end])))
+        bread = mean(skipmissing(filter(!isnan, d.price_bread[max(end-11, 1):end]))); service = mean(skipmissing(filter(!isnan, d.price_service[max(end-11, 1):end])))
         gi = p.guaranteed_income
         (; variant = string(job.tiers, job.margins ? "+margins" : ""), tiers = job.tiers, margins = job.margins, seed = job.seed,
-           alive = d.persons_alive[end], bread_price = bread, ticket_price = ticket,
+           alive = d.persons_alive[end], bread_price = bread, service_price = service,
            bread_change_per_year = nrow(d) > 12 ? 100 * ((d.price_bread[end] / d.price_bread[12])^(12 / (nrow(d) - 12)) - 1) : NaN,
-           money_stock = d.money_in_circulation[end], income_in_meals = gi / (p.breads_per_meal * bread), income_in_tickets = gi / ticket,
+           money_stock = d.money_in_circulation[end], income_in_meals = gi / (p.breads_per_meal * bread), income_in_services = gi / service,
            gini_cash = d.gini_cash_persons[end], gini_wealth = d.gini_net_wealth_persons[end], gini_total = d.gini_total_wealth_persons[end],
            richest_tenth_meals = d.wealth_top10_meals[end], poorest_tenth_meals = d.wealth_bottom10_meals[end],
            top_cash = sum(B.cash(x) for x in top), top_land = sum(x.land for x in top) * lp, top_shares = sum(B.measured_share_wealth(m, x) for x in top),
            demurrage_last_year = sum(d.money_destroyed[max(end-11, 1):end]), dividends_last_year = sum(d.dividends_forprofit[max(end-11, 1):end]),
-           land_price = lp, tickets_sold = d.tickets_sold[end], unemployed = d.unemployed[end])
+           land_price = lp, services_sold = d.services_sold[end], unemployed = d.unemployed[end])
     end
 end
 
@@ -80,9 +80,9 @@ function tiered_test(; step::AbstractString = "8 ", seeds = 1:10, rounds::Int = 
     end
     df = DataFrame(rows)
     mkpath(joinpath(TD_ROOT, "results")); CSV.write(joinpath(TD_ROOT, "results", "tiered_demurrage_test.csv"), df)
-    summary = combine(groupby(df, :variant), :alive => mean => :alive, :bread_price => mean => :bread, :ticket_price => mean => :ticket,
+    summary = combine(groupby(df, :variant), :alive => mean => :alive, :bread_price => mean => :bread, :service_price => mean => :service,
                       :bread_change_per_year => mean => :bread_pct_yr, :money_stock => mean => :money_stock,
-                      :income_in_meals => mean => :income_meals, :income_in_tickets => mean => :income_tickets,
+                      :income_in_meals => mean => :income_meals, :income_in_services => mean => :income_services,
                       :gini_cash => mean => :gini_cash, :gini_wealth => mean => :gini_wealth, :poorest_tenth_meals => mean => :poorest,
                       :richest_tenth_meals => mean => :richest, :top_cash => mean => :top_cash, :top_land => mean => :top_land,
                       :top_shares => mean => :top_shares, :demurrage_last_year => mean => :demurrage_yr, :land_price => mean => :land_price)

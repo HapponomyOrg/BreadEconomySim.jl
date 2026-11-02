@@ -38,7 +38,7 @@ talk_rungs_taxes   = vcat(["0 ", "2 ", "8 ", "11 ", "V8 ", "B ", "BG", "SB2", "B
 talk_rungs_parking = vcat(["2 ", "8 ", "11 ", "V8 ", "B ", "BG", "SB2", "B-nodiv"], talk_employ_all)
 realistic_levybase = merge(REALISTIC_LABOUR, (; levy_dividend_target_in_breads = 0.0))   # Q&A: the land tax at its base rate, paid out (no lever)
 # 25 Oct (the talk chat): the talk without co-ops — step 10, with gold, everyone greedy, the land tax kept as revenue (realistic only)
-talk_rungs_nocoops = ["10 ", "10G", "S3 ", "10-nodiv"]
+talk_rungs_nocoops = ["8 ", "8G", "S3 ", "8-nodiv"]   # 1 Nov: step 10 dropped (it equalled step 8); these cells were 10G and 10-nodiv
 
 if TALK_PART in (:all, :taxes)
     # 1. the talk's main tables: the realistic labour market (contracts, own-market planning, …), income taxes        88 runs

@@ -19,7 +19,7 @@
 function coop_form(p::SimulationParameters, kind::Symbol)
     kind == :farm && return p.cooperative_form_farms
     kind == :bakery && return p.cooperative_form_bakeries
-    kind == :theatre && return p.cooperative_form_theatres
+    kind == :services && return p.cooperative_form_services
     return :member
 end
 
@@ -455,7 +455,7 @@ function validate_cooperatives(p::SimulationParameters)
     forms = (:member, :worker, :consumer)
     p.cooperative_form_farms in forms || throw(ArgumentError("cooperative_form_farms must be one of $forms"))
     p.cooperative_form_bakeries in forms || throw(ArgumentError("cooperative_form_bakeries must be one of $forms"))
-    p.cooperative_form_theatres in forms || throw(ArgumentError("cooperative_form_theatres must be one of $forms"))
+    p.cooperative_form_services in forms || throw(ArgumentError("cooperative_form_services must be one of $forms"))
     p.cooperative_form_farms == :consumer &&
         throw(ArgumentError("farms sell to bakeries, not to persons: a consumer cooperative farm is a secondary cooperative and is not modelled"))
     p.cooperative_founding in (:par_only, :symmetric) || throw(ArgumentError("cooperative_founding must be :par_only or :symmetric"))
@@ -467,7 +467,7 @@ function validate_cooperatives(p::SimulationParameters)
         throw(ArgumentError("membership_contribution = :buffer needs a positive membership_buffer_pledge"))
     p.cooperative_farms <= p.number_of_farms || throw(ArgumentError("cooperative_farms exceeds number_of_farms"))
     p.cooperative_bakeries <= p.number_of_bakeries || throw(ArgumentError("cooperative_bakeries exceeds number_of_bakeries"))
-    p.cooperative_theatres <= p.number_of_theatres || throw(ArgumentError("cooperative_theatres exceeds number_of_theatres"))
+    p.cooperative_services <= p.number_of_services || throw(ArgumentError("cooperative_services exceeds number_of_services"))
     (0 <= p.retained_surplus_share < 1) || throw(ArgumentError("retained_surplus_share must be in [0, 1)"))
     (0 <= p.capital_deduction_share <= 1) || throw(ArgumentError("capital_deduction_share must be in [0, 1]"))
     p.patronage_window >= 1 || throw(ArgumentError("patronage_window must be at least 1"))

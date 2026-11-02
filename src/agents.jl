@@ -3,7 +3,7 @@ mutable struct StockItem
     age::Int
 end
 
-const GOODS = (:bread, :grain, :rent, :wage, :ticket)
+const GOODS = (:bread, :grain, :rent, :wage, :service)
 
 Base.@kwdef mutable struct MarketRecord
     offered::Float64 = 0.0
@@ -111,6 +111,7 @@ end
     gold::Float64 = 0.0                 # grams held (5 Oct)
     heir_id::Int = 0                    # 25 Oct: who inherited this person's estate (0 = none or still alive) — late payments follow it
     unemployed_last_round::Bool = false # 31 Oct: last month's status, for rules that run before this month's labour market (the dwelling-rent exemption)
+    income_last_round::Float64 = 0.0    # 1 Nov: last month's net income (labour, rent, dividends, benefit, rebates), for the services demand
     greed::Symbol = :none               # :none | :greedy (each act of greed: capital with greed_hoarding, consumption otherwise)
     volunteer_hours::Float64 = 0.0      # unpaid labour given to the commons this month (4 Oct)
     contract::Int = 0                   # 17 Oct: the employer this worker is contracted to (0 = a temp)
@@ -125,7 +126,7 @@ end
     units_for::OrderedDict{Int, Float64} = OrderedDict{Int, Float64}()   # employer → units worked this month
     units_last::OrderedDict{Int, Float64} = OrderedDict{Int, Float64}()  # employer → units worked last month
     notice::OrderedDict{Int, Int} = OrderedDict{Int, Int}()        # employer → months of notice still owed to this worker
-    worked_for::Set{Int} = Set{Int}()   # employers this round (a theatre worker is not served at their own theatre)
+    worked_for::Set{Int} = Set{Int}()   # employers this round (a services worker is not served at their own services)
     buffer_lender::Bool = false         # opted into lending part of the buffer to the bank
     buffer_lent::Float64 = 0.0
     buffer_pledged::Float64 = 0.0       # demurrage-free buffer pledged to cooperatives (no money moves: the exemption does)
@@ -186,7 +187,7 @@ end
     refoundings::Int = 0                # times the firm has been sold as a going concern at a liquidation
     staff_target::Float64 = 1.0         # bank: labour units it employs (set at creation from bank_customers_per_labour_unit)
     volunteer_labour::Float64 = 0.0     # unpaid labour this month (4 Oct; any volunteer kind since 15 Oct)
-    community::Bool = false             # a volunteer-run community theatre (15 Oct)
+    community::Bool = false             # a volunteer-run community services (15 Oct)
     plan_share::Float64 = -1.0          # 16 Oct: the firm's share of its kind's planned output, adjusted gradually (< 0 = not yet set)
     share_trend::Int = 0                # 16 Oct: consecutive months its sales share has moved the same way (+ up, − down)
     pricing::Symbol = :sector           # 21 Oct: :sector (its sector's pricing_target), :reserve or :margin — set per firm by `pricing_margin_share`
@@ -201,6 +202,7 @@ end
     revenue_period::Float64 = 0.0       # profit tax: sales since the last assessment (accrued at the sale)
     revenue_this_round::Float64 = 0.0   # sales this month (for the turnover in the liquidation test)
     turnover_history::Vector{Float64} = Float64[]   # the last three months' sales
+    operating_history::Vector{Float64} = Float64[]  # 2 Nov: the last three months' operating result (receipts − outlays), for the overdraft's test
     materials_period::Float64 = 0.0     # grain, rent and interest since the last assessment
     labour_period::Float64 = 0.0        # wages since the last assessment
     insurance_premiums::Float64 = 0.0   # bank: cumulative
@@ -216,8 +218,8 @@ is_farm(a) = a isa Enterprise && a.kind == :farm
 is_bakery(a) = a isa Enterprise && a.kind == :bakery
 is_government(a) = a isa Enterprise && a.kind == :government
 is_authority(a) = a isa Enterprise && a.kind == :authority
-is_producer(a) = a isa Enterprise && a.kind in (:farm, :bakery, :theatre)
-is_theatre(a) = a isa Enterprise && a.kind == :theatre
+is_producer(a) = a isa Enterprise && a.kind in (:farm, :bakery, :services)
+is_services(a) = a isa Enterprise && a.kind == :services
 kind_of(a) = a isa Person ? :person : a.kind
 
 cash(a::Agent) = Float64(asset_value(a.balance, DEPOSIT))

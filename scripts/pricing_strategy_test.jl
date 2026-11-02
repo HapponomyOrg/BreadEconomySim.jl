@@ -48,7 +48,7 @@ const PS_SETUP = quote
         base, kw = job.system == "debt" ? (def.BARE_DEBT, kd) : (def.BARE_SUMSY, ks)
         p = SimulationParameters(; seed = job.seed, base..., kw..., pricing_margin_share = job.share, job.extra...)
         m = create_bread_economy(p)
-        months = Dict{Int, Int}(); sold = Dict{Int, Float64}(); offered = Dict{Int, Float64}(); good(e) = e.kind == :bakery ? :bread : e.kind == :farm ? :grain : :ticket
+        months = Dict{Int, Int}(); sold = Dict{Int, Float64}(); offered = Dict{Int, Float64}(); good(e) = e.kind == :bakery ? :bread : e.kind == :farm ? :grain : :service
         for _ in 1:job.rounds
             B.econo_step!(m, 1)
             for e in m.enterprise_list

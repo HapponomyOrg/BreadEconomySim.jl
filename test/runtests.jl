@@ -41,27 +41,27 @@ const SUMSY_OWN = (; OWN..., SUM..., government_employment_share = 0.1, demurrag
     end
 
 # ---------------------------------------------------------------------------------------------------
-# Features added 13 September 2026: theatre, ownership and dividends, share market, paid-in founding,
+# Features added 13 September 2026: services, ownership and dividends, share market, paid-in founding,
 # cooperative membership, clearing switch, greed, rationing, tiered bread price, self-service rule.
 # ---------------------------------------------------------------------------------------------------
 
 @testset "money identity survives every new feature" begin
     for kw in [TH, OWN, SUMSY_OWN, (; TH..., clearing = false), (; SUMSY_OWN..., clearing = false),
                (; OWN..., greed = true, greed_share = 1.0), (; SUMSY_OWN..., greed = true, greed_share = 1.0, greed_hoarding = 0.0, bread_rationing = true, tiered_bread_price = true),
-               (; OWN..., greed = true, no_self_service = true, number_of_theatres = 2)]
+               (; OWN..., greed = true, no_self_service = true, number_of_services = 2)]
         m = run(; seed = 4, maximum_rounds = 15, kw...)
         @test abs(money_identity_gap(m)) < 1e-6
     end
 end
 
-@testset "theatre: pure service, tickets consumed, staff rule" begin
+@testset "services: pure service, services consumed, staff rule" begin
     d = round_data(run(; seed = 1, maximum_rounds = 15, TH...))
-    @test d.theatres_open[end] == 1 && sum(d.tickets_sold) > 0 && sum(d.ticket_revenue) > 0
-    @test all(d.theatre_labour .<= 4 * 16)                              # never more labour than the village has
+    @test d.services_open[end] == 1 && sum(d.services_sold) > 0 && sum(d.service_revenue) > 0
+    @test all(d.services_labour .<= 4 * 16)                              # never more labour than the village has
     m = run(; seed = 1, maximum_rounds = 8, TH...)
-    @test all(isempty(e.bread) for e in B.enterprises(m, :theatre))     # a theatre holds no goods
-    a = sum(round_data(run(; seed = 2, maximum_rounds = 20, TH...)).tickets_sold)
-    b = sum(round_data(run(; seed = 2, maximum_rounds = 20, TH..., no_self_service = true)).tickets_sold)
+    @test all(isempty(e.bread) for e in B.enterprises(m, :services))     # a services holds no goods
+    a = sum(round_data(run(; seed = 2, maximum_rounds = 20, TH...)).services_sold)
+    b = sum(round_data(run(; seed = 2, maximum_rounds = 20, TH..., no_self_service = true)).services_sold)
     @test b <= a                                                         # excluding staff cannot raise sales
 end
 
@@ -123,7 +123,7 @@ end
 
 @testset "clearing switch: immediate settlement keeps the accounting, leaves SuMSy nearly unchanged" begin
     a = round_data(run(; seed = 3, maximum_rounds = 20, SUMSY_OWN...)); b = round_data(run(; seed = 3, maximum_rounds = 20, SUMSY_OWN..., clearing = false))
-    @test a.persons_alive[end] == b.persons_alive[end] && abs(sum(a.tickets_sold) - sum(b.tickets_sold)) < 0.35 * sum(a.tickets_sold)
+    @test a.persons_alive[end] == b.persons_alive[end] && abs(sum(a.services_sold) - sum(b.services_sold)) < 0.35 * sum(a.services_sold)
     c = round_data(run(; seed = 3, maximum_rounds = 20, TH..., clearing = false))
     @test c.trade_arrears[end] >= 0 && c.persons_alive[end] >= 12
 end
@@ -138,11 +138,11 @@ end
     for f in B.ROUND_BEHAVIORS[1:findfirst(f -> f === B.greed_spending!, B.ROUND_BEHAVIORS)]; f(m2); end
     @test B.bread_units(w) <= 4                                           # greedy cap respected
     d1 = round_data(run(; seed = 1, maximum_rounds = 12, OWN..., greed = true, greed_share = 1.0, greed_hoarding = 1.0))
-    @test sum(d1.greedy_loaves) == 0 && sum(d1.greedy_tickets) == 0     # all-capital greed buys no extras
+    @test sum(d1.greedy_loaves) == 0 && sum(d1.greedy_services) == 0     # all-capital greed buys no extras
     d1s = round_data(run(; seed = 1, maximum_rounds = 20, SUMSY_OWN..., greed = true, greed_share = 1.0, greed_hoarding = 1.0))
     @test sum(d1s.greedy_land) == 0                                       # ... and never buys land at exactly its value (no distress → no seller below it)
     d0 = round_data(run(; seed = 1, maximum_rounds = 12, OWN..., greed = true, greed_share = 1.0, greed_hoarding = 0.0))
-    @test sum(d0.greedy_land) + sum(d0.greedy_shares) == 0 && sum(d0.greedy_loaves) + sum(d0.greedy_tickets) > 0
+    @test sum(d0.greedy_land) + sum(d0.greedy_shares) == 0 && sum(d0.greedy_loaves) + sum(d0.greedy_services) > 0
     # capital yields: under SuMSy cash yields −demurrage and is never chosen while land or shares are on offer and affordable
     ms = create_bread_economy(SimulationParameters(; seed = 1, SUMSY_OWN..., greed = true, greed_share = 1.0, greed_hoarding = 1.0))
     w = first(B.persons(ms)); B.book_asset!(w.balance, B.DEPOSIT, 1000.0)
@@ -472,32 +472,32 @@ end
 end
 
 
-@testset "theatre capacity: shows and seats (20 September 2026)" begin
-    ENT = (; BEH..., entertainment = true, number_of_theatres = 2)
+@testset "services capacity: shows and seats (20 September 2026)" begin
+    ENT = (; BEH..., entertainment = true, number_of_services = 2)
     m = create_bread_economy(SimulationParameters(; seed = 1, ENT..., maximum_rounds = 1))
-    t = first(B.enterprises(m, :theatre))
-    @test B.ticket_capacity(m, t) == Inf                                   # default: unlimited, as before
+    t = first(B.enterprises(m, :services))
+    @test B.service_capacity(m, t) == Inf                                   # default: unlimited, as before
     m1 = create_bread_economy(SimulationParameters(; seed = 1, ENT..., shows_per_round = 1, maximum_rounds = 1))
-    t1 = first(B.enterprises(m1, :theatre))
-    @test B.ticket_capacity(m1, t1) == 10.0                                # one show; two theatres seat 16 × 1.25 = 20 between them, 10 each
-    @test B.theatre_labour_cap(m1, t1) == ceil(10 / B.parameters(m1).customers_per_labour_unit)
-    m1b = create_bread_economy(SimulationParameters(; seed = 1, ENT..., shows_per_round = 1, theatre_seat_margin = 0.0, maximum_rounds = 1))
-    @test B.ticket_capacity(m1b, first(B.enterprises(m1b, :theatre))) == 8.0   # no margin: exactly the village, shared
+    t1 = first(B.enterprises(m1, :services))
+    @test B.service_capacity(m1, t1) == 10.0                                # one show; two services seat 16 × 1.25 = 20 between them, 10 each
+    @test B.services_labour_cap(m1, t1) == ceil(10 / B.parameters(m1).customers_per_labour_unit)
+    m1b = create_bread_economy(SimulationParameters(; seed = 1, ENT..., shows_per_round = 1, services_seat_margin = 0.0, maximum_rounds = 1))
+    @test B.service_capacity(m1b, first(B.enterprises(m1b, :services))) == 8.0   # no margin: exactly the village, shared
     m2 = create_bread_economy(SimulationParameters(; seed = 1, ENT..., shows_per_round = 3, seats_per_show = 10, maximum_rounds = 1))
-    @test B.ticket_capacity(m2, first(B.enterprises(m2, :theatre))) == 30.0
-    # in a run the cap binds: no theatre ever offers more tickets or plans more labour than its seats take
+    @test B.service_capacity(m2, first(B.enterprises(m2, :services))) == 30.0
+    # in a run the cap binds: no services ever offers more services or plans more labour than its seats take
     m3 = run(; seed = 1, maximum_rounds = 30, ENT..., shows_per_round = 1, greed = true, greed_share = 1.0, greed_hoarding = 0.5)
-    for t in B.enterprises(m3, :theatre)
-        @test t.production_target <= B.theatre_labour_cap(m3, t)
-        @test t.market[:ticket].offered <= B.ticket_capacity(m3, t) + 1e-9
+    for t in B.enterprises(m3, :services)
+        @test t.production_target <= B.services_labour_cap(m3, t)
+        @test t.market[:service].offered <= B.service_capacity(m3, t) + 1e-9
     end
     d = round_data(m3)
-    @test maximum(d.theatre_labour) <= 2 * ceil(10 / B.parameters(m3).customers_per_labour_unit) + 1e-9   # both theatres may have closed by then
+    @test maximum(d.services_labour) <= 2 * ceil(10 / B.parameters(m3).customers_per_labour_unit) + 1e-9   # both services may have closed by then
     @test abs(money_identity_gap(m3)) < 1e-6
     # the default reproduces the previous behaviour exactly
     a = round_data(run(; seed = 3, maximum_rounds = 20, ENT...))
     b = round_data(run(; seed = 3, maximum_rounds = 20, ENT..., shows_per_round = 0, seats_per_show = 0))
-    @test a.tickets_sold == b.tickets_sold && a.price_bread == b.price_bread
+    @test a.services_sold == b.services_sold && a.price_bread == b.price_bread
 end
 
 
@@ -517,7 +517,7 @@ end
     b.ask[:bread] = 0.1; b.market[:bread].offered = 10.0; b.market[:bread].sold = 5.0
     B.adapt_prices!(m)
     @test b.ask[:bread] >= cost - 1e-9
-    mr = run(; seed = 1, maximum_rounds = 30, BEH..., entertainment = true, number_of_theatres = 2, greed = true, greed_share = 1.0, greed_hoarding = 0.5, shows_per_round = 1, ask_floor = :cost)
+    mr = run(; seed = 1, maximum_rounds = 30, BEH..., entertainment = true, number_of_services = 2, greed = true, greed_share = 1.0, greed_hoarding = 0.5, shows_per_round = 1, ask_floor = :cost)
     for bk in B.enterprises(mr, :bakery)
         @test bk.ask[:bread] >= B.seller_reservation(mr, bk, :bread) - 1e-6
     end
@@ -1056,7 +1056,7 @@ end
 
 
 @testset "every firm has its own founders (24 September 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., ownership = :shareholders, number_of_persons = 64, number_of_farms = 4, number_of_bakeries = 4, entertainment = true, number_of_theatres = 4, founders = :distinct, maximum_rounds = 1))
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., ownership = :shareholders, number_of_persons = 64, number_of_farms = 4, number_of_bakeries = 4, entertainment = true, number_of_services = 4, founders = :distinct, maximum_rounds = 1))
     fs = [Set(keys(e.shares)) for e in m.enterprise_list if B.is_producer(e)]; k = B.parameters(m).shareholder_count
     @test length(fs) == 12 && all(length(f) == k for f in fs)
     @test length(union(fs...)) == 12k                                                      # every firm its own founders
@@ -1245,7 +1245,7 @@ end
 end
 
 
-@testset "review 6: the tax scale recovers from a surplus, theatres restart with a waiting period (25 September 2026)" begin
+@testset "review 6: the tax scale recovers from a surplus, services restart with a waiting period (25 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     R = (; BEH..., SUM..., demurrage_tax_rate = 0.01, government_reserve_in_rounds = 3, surplus_tax_reduction_share = 1.0)
     m = create_bread_economy(SimulationParameters(; seed = 1, R..., maximum_rounds = 1))
@@ -1258,15 +1258,15 @@ end
     m.tax_this_round = 100.0 * m.tax_scale; m.government_outlay_this_round = 500.0
     B.manage_government_reserve!(m)
     @test m.tax_scale > s0                                                                  # and it climbs back
-    # theatres restart, but at most once per waiting period
-    mt = create_bread_economy(SimulationParameters(; seed = 1, BEH..., entertainment = true, number_of_theatres = 2, founders = :distinct, maximum_rounds = 3))
+    # services restart, but at most once per waiting period
+    mt = create_bread_economy(SimulationParameters(; seed = 1, BEH..., entertainment = true, number_of_services = 2, founders = :distinct, maximum_rounds = 3))
     give!(B.persons(mt)[end], 3_000.0)
-    for t in B.enterprises(mt, :theatre); B.close_enterprise!(mt, t, :test); end
+    for t in B.enterprises(mt, :services); B.close_enterprise!(mt, t, :test); end
     B.refound_missing_producers!(mt)
-    @test length(B.enterprises(mt, :theatre)) == 1
-    for t in B.enterprises(mt, :theatre); B.close_enterprise!(mt, t, :test); end
+    @test length(B.enterprises(mt, :services)) == 1
+    for t in B.enterprises(mt, :services); B.close_enterprise!(mt, t, :test); end
     B.refound_missing_producers!(mt)
-    @test isempty(B.enterprises(mt, :theatre))                                              # same month: the waiting period holds
+    @test isempty(B.enterprises(mt, :services))                                              # same month: the waiting period holds
 end
 
 
@@ -1323,7 +1323,7 @@ end
     run_simulation!(m)
     @test 0.25 <= m.spending_scale <= 1.0
     # over the ceiling: spending scaled to what the ceiling allows
-    for _ in 1:12; push!(m.data, merge(m.data[end], (; bread_sold = 100.0, price_bread = 5.0, ticket_revenue = 0.0, government_debt = 12_000.0))); end
+    for _ in 1:12; push!(m.data, merge(m.data[end], (; bread_sold = 100.0, price_bread = 5.0, service_revenue = 0.0, government_debt = 12_000.0))); end
     B.apply_debt_ceiling!(m)                                                              # output 6,000 a year, debt 12,000, limit 1×: scale 0.5
     @test isapprox(m.spending_scale, 0.5; atol = 1e-9)
     for _ in 1:12; push!(m.data, merge(m.data[end], (; government_debt = 1_000.0))); end
@@ -1344,13 +1344,13 @@ end
 
 
 @testset "a standard of living (27 September 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., entertainment = true, number_of_theatres = 2, standard_of_living_tickets = 2, maximum_rounds = 1))
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., entertainment = true, number_of_services = 2, standard_of_living_services = 2, maximum_rounds = 1))
     w = first(B.persons(m)); give!(a, x) = B.book_asset!(a.balance, B.DEPOSIT, x)
     give!(w, -B.cash(w))
-    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., entertainment = true, number_of_theatres = 2, maximum_rounds = 1))
+    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., entertainment = true, number_of_services = 2, maximum_rounds = 1))
     w0 = first(B.persons(m0)); give!(w0, -B.cash(w0))
-    @test B.labour_supply(m, w) >= B.labour_supply(m0, w0)                                  # works to afford the tickets
-    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 24, BEH..., entertainment = true, number_of_theatres = 2, standard_of_living_tickets = 2))) < 1e-6
+    @test B.labour_supply(m, w) >= B.labour_supply(m0, w0)                                  # works to afford the services
+    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 24, BEH..., entertainment = true, number_of_services = 2, standard_of_living_services = 2))) < 1e-6
 end
 
 
@@ -1416,14 +1416,14 @@ end
 
 
 @testset "the price of leisure is bounded (28 September 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., entertainment = true, number_of_theatres = 2, ticket_max_in_breads = 2.0, employer_wage_margin = 0.25, maximum_rounds = 1))
-    w = first(B.persons(m)); t = first(B.enterprises(m, :theatre))
-    m.expected_prices[:ticket] = 100.0                                                     # a runaway ticket price
-    @test B.buyer_reservation(m, w, :ticket) <= 2.0 * B.expected_price(m, :bread) + 1e-9   # worth at most two loaves
-    t.ask[:ticket] = 100.0
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., entertainment = true, number_of_services = 2, service_max_in_breads = 2.0, employer_wage_margin = 0.25, maximum_rounds = 1))
+    w = first(B.persons(m)); t = first(B.enterprises(m, :services))
+    m.expected_prices[:service] = 100.0                                                     # a runaway service price
+    @test B.buyer_reservation(m, w, :service) <= 2.0 * B.expected_price(m, :bread) + 1e-9   # worth at most two loaves
+    t.ask[:service] = 100.0
     @test B.buyer_reservation(m, t, :wage) <= 1.25 * B.going_wage(m) + 1e-9                # bids at most a quarter above the going (paid) wage
-    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., entertainment = true, number_of_theatres = 2, maximum_rounds = 1))
-    t0 = first(B.enterprises(m0, :theatre)); t0.ask[:ticket] = 100.0
+    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., entertainment = true, number_of_services = 2, maximum_rounds = 1))
+    t0 = first(B.enterprises(m0, :services)); t0.ask[:service] = 100.0
     @test B.buyer_reservation(m0, t0, :wage) > 10 * B.expected_price(m0, :wage)            # without the limits: revenue per worker
 end
 
@@ -1490,16 +1490,16 @@ end
 end
 
 
-@testset "volunteers staff the theatres (4 October 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., entertainment = true, number_of_theatres = 2, volunteers_in_theatres = true, volunteer_share = 1.0, maximum_rounds = 1))
-    t = first(B.enterprises(m, :theatre)); B.book_asset!(t.balance, B.DEPOSIT, -B.cash(t))      # a theatre that can pay nobody
+@testset "volunteers staff the services (4 October 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., entertainment = true, number_of_services = 2, volunteers_in_services = true, volunteer_share = 1.0, maximum_rounds = 1))
+    t = first(B.enterprises(m, :services)); B.book_asset!(t.balance, B.DEPOSIT, -B.cash(t))      # a services that can pay nobody
     t.production_target = 10; push!(t.turnover_history, 0.0)                                   # and earned nothing last month: paid hiring is nil
     for f in B.ROUND_BEHAVIORS
-        f(m); occursin("staff_theatres", string(f)) && break                                   # up to and including the volunteer step
+        f(m); occursin("staff_services", string(f)) && break                                   # up to and including the volunteer step
     end
     @test t.volunteer_labour > 0 && t.hired_labour + t.volunteer_labour <= B.labour_need(t) + 1e-9   # volunteers up to the shortfall, no further
     @test any(w -> w.volunteer_hours > 0, B.persons(m))
-    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 24, BEH..., entertainment = true, number_of_theatres = 2, volunteers_in_theatres = true))) < 1e-6
+    @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 24, BEH..., entertainment = true, number_of_services = 2, volunteers_in_services = true))) < 1e-6
 end
 
 
@@ -1636,7 +1636,7 @@ end
 end
 
 
-@testset "cash hoarders, volunteers anywhere, community theatres, theatres planning on sales (15 October 2026)" begin
+@testset "cash hoarders, volunteers anywhere, community services, services planning on sales (15 October 2026)" begin
     give!(a, x) = B.book_asset!(a.balance, B.DEPOSIT, x)
     m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., cash_hoarder_share = 0.25, land_pricing = :market, maximum_rounds = 3))
     hs = [w for w in B.persons(m) if B.hoards_cash(w)]
@@ -1649,20 +1649,20 @@ end
     b = first(B.enterprises(m2, :bakery)); B.book_asset!(b.balance, B.DEPOSIT, -B.cash(b)); b.production_target = 6; push!(b.turnover_history, 0.0)
     for f in B.ROUND_BEHAVIORS; f(m2); occursin("bake!", string(f)) && break; end
     @test b.volunteer_labour > 0                                                                 # volunteers staffed the bakery the market could not pay for
-    m3 = run(; seed = 1, maximum_rounds = 4, BEH..., entertainment = true, number_of_theatres = 2, community_theatres = 1)
-    c = first(t for t in B.enterprises(m3, :theatre) if t.community)
+    m3 = run(; seed = 1, maximum_rounds = 4, BEH..., entertainment = true, number_of_services = 2, community_services = 1)
+    c = first(t for t in B.enterprises(m3, :services) if t.community)
     @test c.hired_labour == 0
-    @test isapprox(c.ask[:ticket], 0.25 * B.expected_price(m3, :bread); atol = 0.05)               # a quarter of a loaf
+    @test isapprox(c.ask[:service], 0.25 * B.expected_price(m3, :bread); atol = 0.05)               # a quarter of a loaf
     @test abs(money_identity_gap(m3)) < 1e-6
-    m4 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., entertainment = true, number_of_theatres = 2, firms_plan_on_sales = true, maximum_rounds = 3))
+    m4 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., entertainment = true, number_of_services = 2, firms_plan_on_sales = true, maximum_rounds = 3))
     run_simulation!(m4)
-    t1, t2 = B.enterprises(m4, :theatre)[1:2]
+    t1, t2 = B.enterprises(m4, :services)[1:2]
     targets = Int[]
     for _ in 1:3
-        t1.market[:ticket].offered = 30.0; t1.market[:ticket].sold = 30.0; t2.market[:ticket].offered = 0.0; t2.market[:ticket].sold = 0.0
+        t1.market[:service].offered = 30.0; t1.market[:service].sold = 30.0; t2.market[:service].offered = 0.0; t2.market[:service].sold = 0.0
         B.plan_targets!(m4); push!(targets, t2.production_target)
     end
-    @test targets[end] == 1 && issorted(targets; rev = true) && t1.production_target >= 1         # the empty theatre stops hiring for empty seats, over three months
+    @test targets[end] == 1 && issorted(targets; rev = true) && t1.production_target >= 1         # the empty services stops hiring for empty seats, over three months
 end
 
 
@@ -1708,11 +1708,11 @@ end
 end
 
 
-@testset "one labour market for bakeries and theatres (16–17 October 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., entertainment = true, number_of_theatres = 2, joint_labour_market = true, maximum_rounds = 3))
+@testset "one labour market for bakeries and services (16–17 October 2026)" begin
+    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., entertainment = true, number_of_services = 2, joint_labour_market = true, maximum_rounds = 3))
     run_simulation!(m); d = round_data(m)
     @test all(d.bread_baked[2:end] .> 0)                                                        # the bakeries are staffed and bake
-    @test sum(t.hired_labour for t in B.enterprises(m, :theatre)) > 0                               # and the theatres hire in the same market
+    @test sum(t.hired_labour for t in B.enterprises(m, :services)) > 0                               # and the services hire in the same market
     @test abs(money_identity_gap(m)) < 1e-6
 end
 
@@ -1847,7 +1847,7 @@ end
 
 @testset "pricing on a target margin (21 October 2026)" begin
     m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., maximum_rounds = 2))
-    m1 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., pricing_target_bakery = :margin, pricing_target_farm = :margin, pricing_target_theatre = :margin, maximum_rounds = 2))
+    m1 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., pricing_target_bakery = :margin, pricing_target_farm = :margin, pricing_target_services = :margin, maximum_rounds = 2))
     for m in (m0, m1); B.econo_step!(m, 1); end
     b0 = first(B.enterprises(m0, :bakery)); b1 = first(B.enterprises(m1, :bakery))
     @test B.margin_factor(m1, :bakery) ≈ 1.06 && B.margin_factor(m0, :bakery) == 1.0
@@ -2144,24 +2144,24 @@ end
     events(m) = [e for e in B.abmproperties(m)[:events]]
     WORK = (; OWN..., cooperative_form_farms = :worker, cooperative_form_bakeries = :worker)
     CONS = (; OWN..., cooperative_form_bakeries = :consumer, cooperative_farms = 0)
-    THEA = (; OWN..., number_of_theatres = 2, cooperative_theatres = 1)
+    THEA = (; OWN..., number_of_services = 2, cooperative_services = 1)
 
     @testset "parameters are validated, not silently ignored" begin
         @test_throws ArgumentError run(; seed = 1, maximum_rounds = 1, OWN..., cooperative_form_farms = :consumer)
         @test_throws ArgumentError run(; seed = 1, maximum_rounds = 1, OWN..., cooperative_form_bakeries = :syndicate)
-        @test_throws ArgumentError run(; seed = 1, maximum_rounds = 1, OWN..., number_of_theatres = 1, cooperative_theatres = 2)
+        @test_throws ArgumentError run(; seed = 1, maximum_rounds = 1, OWN..., number_of_services = 1, cooperative_services = 2)
         @test_throws ArgumentError run(; seed = 1, maximum_rounds = 1, OWN..., retained_surplus_share = 1.0)
     end
 
-    @testset "the form is set per kind, and theatres can now be cooperatives" begin
-        m = create_bread_economy(SimulationParameters(; seed = 1, THEA..., cooperative_form_theatres = :consumer))
-        ts = B.enterprises(m, :theatre)
+    @testset "the form is set per kind, and services can now be cooperatives" begin
+        m = create_bread_economy(SimulationParameters(; seed = 1, THEA..., cooperative_form_services = :consumer))
+        ts = B.enterprises(m, :services)
         @test count(t -> t.ownership == :cooperative, ts) == 1 && count(t -> t.ownership == :shareholders, ts) == 1
         @test B.coop_form(m, first(t for t in ts if t.ownership == :cooperative)) == :consumer
         @test B.coop_form(m, first(t for t in ts if t.ownership == :shareholders)) == :none
-        # the default leaves every theatre for profit, as before 14 September
-        m0 = create_bread_economy(SimulationParameters(; seed = 1, OWN..., number_of_theatres = 2))
-        @test all(t.ownership == :shareholders for t in B.enterprises(m0, :theatre))
+        # the default leaves every services for profit, as before 14 September
+        m0 = create_bread_economy(SimulationParameters(; seed = 1, OWN..., number_of_services = 2))
+        @test all(t.ownership == :shareholders for t in B.enterprises(m0, :services))
     end
 
     @testset "worker cooperative: membership follows employment, capital out of wages" begin
@@ -2445,9 +2445,9 @@ end
     @testset "money identity and survival hold in every new configuration" begin
         cases = [("worker, debt", (; WORK...)), ("worker, sumsy", (; WORK..., SUM..., government_employment_share = 0.1, demurrage_tax_rate = 0.01)),
                  ("consumer, debt", (; CONS...)), ("consumer, sumsy", (; CONS..., SUM..., government_employment_share = 0.1, demurrage_tax_rate = 0.01)),
-                 ("coop theatre", (; THEA..., cooperative_form_theatres = :consumer)),
-                 ("worker + consumer + coop theatre", (; OWN..., number_of_theatres = 2, cooperative_theatres = 1,
-                    cooperative_form_farms = :worker, cooperative_form_bakeries = :worker, cooperative_form_theatres = :consumer))]
+                 ("coop services", (; THEA..., cooperative_form_services = :consumer)),
+                 ("worker + consumer + coop services", (; OWN..., number_of_services = 2, cooperative_services = 1,
+                    cooperative_form_farms = :worker, cooperative_form_bakeries = :worker, cooperative_form_services = :consumer))]
         for (name, kw) in cases
             m = run(; seed = 1, maximum_rounds = 15, kw...)
             @test abs(money_identity_gap(m)) < 1e-6

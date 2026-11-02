@@ -22,7 +22,7 @@ function record_unsold!(model)
     p = parameters(model)
     for e in model.enterprise_list
         (e.alive && is_producer(e)) || continue
-        good = e.kind == :bakery ? :bread : e.kind == :farm ? :grain : :ticket
+        good = e.kind == :bakery ? :bread : e.kind == :farm ? :grain : :service
         r = e.market[good]
         if r.offered > 1e-9                                                  # 22 Oct (second version): the LOST share — what spoiled — not the unsold share:
             push!(e.unsold_history, min(e.spoiled_this_round / r.offered, 1.0))   # a buffer carried into next month is not a loss, and counting it
@@ -59,7 +59,7 @@ end
 the expected price when there is no row or no trade yet."""
 function last_paid_price(model, g::Symbol)
     isempty(model.data) && return expected_price(model, g)
-    col = g == :bread ? :price_bread : g == :grain ? :price_grain : g == :ticket ? :price_ticket : g == :wage ? :price_wage : nothing
+    col = g == :bread ? :price_bread : g == :grain ? :price_grain : g == :service ? :price_service : g == :wage ? :price_wage : nothing
     col === nothing && return expected_price(model, g)
     x = getproperty(model.data[end], col)
     return (x isa Number && !isnan(x) && x > 0) ? Float64(x) : expected_price(model, g)
@@ -69,9 +69,9 @@ end
 the profit tax, so that the margin left after tax is the target."""
 function margin_factor(model, kind::Symbol, firm_pricing::Symbol = :sector)
     p = parameters(model)
-    mode = firm_pricing != :sector ? firm_pricing : kind == :farm ? p.pricing_target_farm : kind == :bakery ? p.pricing_target_bakery : kind == :theatre ? p.pricing_target_theatre : :reserve
+    mode = firm_pricing != :sector ? firm_pricing : kind == :farm ? p.pricing_target_farm : kind == :bakery ? p.pricing_target_bakery : kind == :services ? p.pricing_target_services : :reserve
     mode == :margin || return 1.0
-    m = kind == :farm ? p.target_net_margin_farm : kind == :bakery ? p.target_net_margin_bakery : p.target_net_margin_theatre
+    m = kind == :farm ? p.target_net_margin_farm : kind == :bakery ? p.target_net_margin_bakery : p.target_net_margin_services
     tax = p.profit_tax_rate > 0 ? min(p.profit_tax_rate * model.profit_tax_scale, 0.95) : 0.0
     return 1 + m / (1 - tax)
 end
@@ -86,8 +86,8 @@ function seller_reservation(model, seller::Agent, good::Symbol; age::Int = 0)
         base = need / p.maximum_capacity                        # gross; the tax wedge is left to redistribution (see handoff)
         p.wage_reservation_net_of_tax && (base /= (1 - effective_wage_tax_rate(model)))
         return base * max(1 - p.hunger_wage_discount * seller.hunger, 0.0)
-    elseif good == :ticket    # theatre: wages per customer served
-        return (expected_price(model, :wage) / p.customers_per_labour_unit + debt_service_per_unit(model, seller, p.customers_per_labour_unit) + reserve_build_per_unit(model, seller, p.customers_per_labour_unit)) / expected_sales_factor(model, seller) * margin_factor(model, :theatre, seller isa Enterprise ? seller.pricing : :sector)
+    elseif good == :service    # services: wages per customer served
+        return (expected_price(model, :wage) / services_per_labour_unit(model) + debt_service_per_unit(model, seller, services_per_labour_unit(model)) + reserve_build_per_unit(model, seller, services_per_labour_unit(model))) / expected_sales_factor(model, seller) * margin_factor(model, :services, seller isa Enterprise ? seller.pricing : :sector)
     elseif good == :grain     # farm: rent + wages per unit
         return (expected_price(model, :rent) + expected_price(model, :wage) + debt_service_per_unit(model, seller, 1.0) + reserve_build_per_unit(model, seller, 1.0)) / expected_sales_factor(model, seller) * margin_factor(model, :farm, seller isa Enterprise ? seller.pricing : :sector)
     elseif good == :bread     # bakery: (grain + wages) per grain unit, per bread, at this round's actual input prices; ageing discount
@@ -122,9 +122,9 @@ function buyer_reservation(model, buyer::Agent, good::Symbol)
         # distinction would need the market to ask the ceiling per loaf)
         hunger = buyer.hunger + ((p.anticipate_hunger && buyer isa Person && bread_units(buyer) < p.breads_per_meal) ? 1 : 0)
         return expected_price(model, :bread) * (p.bread_bid_base_multiplier + p.bread_bid_hunger_multiplier * hunger)
-    elseif good == :ticket
-        worth = expected_price(model, :ticket) * p.bread_bid_base_multiplier
-        isfinite(p.ticket_max_in_breads) && (worth = min(worth, p.ticket_max_in_breads * expected_price(model, :bread)))   # 28 Sept: a seat is worth so many loaves
+    elseif good == :service
+        worth = expected_price(model, :service) * p.bread_bid_base_multiplier
+        isfinite(p.service_max_in_breads) && (worth = min(worth, p.service_max_in_breads * expected_price(model, :bread)))   # 28 Sept: a seat is worth so many loaves
         return worth                                                        # 28 Oct: net expectation × premium — VAT cancels (see bread)
     end
 end
@@ -159,9 +159,9 @@ function employer_wage_limit(model, buyer::Agent)
     if p.wage_ceiling_from_own_ask
         is_farm(buyer) && return max(buyer.ask[:grain], seller_reservation(model, buyer, :grain)) - expected_price(model, :rent)
         is_bakery(buyer) && return p.breads_per_grain * max(buyer.ask[:bread], seller_reservation(model, buyer, :bread)) - expected_price(model, :grain)
-        is_theatre(buyer) && return p.customers_per_labour_unit * max(buyer.ask[:ticket], seller_reservation(model, buyer, :ticket))
+        is_services(buyer) && return services_per_labour_unit(model) * max(buyer.ask[:service], seller_reservation(model, buyer, :service))
     end
-    is_theatre(buyer) && return p.customers_per_labour_unit * expected_price(model, :ticket)
+    is_services(buyer) && return services_per_labour_unit(model) * expected_price(model, :service)
     is_farm(buyer) && return expected_price(model, :grain) - expected_price(model, :rent)
     is_bakery(buyer) && return p.breads_per_grain * expected_price(model, :bread) - expected_price(model, :grain)
     return max(is_sumsy(model) ? cash(buyer) : buyer.retained_interest, expected_price(model, :wage))            # bank
@@ -181,7 +181,7 @@ function negotiate(model, seller::Agent, buyer::Agent, good::Symbol; age::Int = 
     buyer_ceiling = buyer_reservation(model, buyer, good)
     ask = max(seller.ask[good], seller_floor)
     bid = min(buyer.bid[good], buyer_ceiling)
-    if p.posted_consumer_prices && good in (:bread, :ticket) && buyer isa Person
+    if p.posted_consumer_prices && good in (:bread, :service) && buyer isa Person
         # 30 Oct (Stef): consumers do not bid — the producer posts a price and the consumer buys at it or does not; what the
         # producer learns is its sales (and the customers it turned away). Bargaining stays for grain, labour, rent and land.
         ask <= buyer_ceiling + 1e-9 || return nothing
@@ -208,8 +208,8 @@ end
 
 # ---- end-of-round adaptation (spec v1 §5, v2 §6) -----------------------------------
 
-sells(a::Agent) = a isa Person ? (a.land > 0 ? (:wage, :rent) : (:wage,)) : a.kind == :farm ? (:grain,) : a.kind == :bakery ? (:bread,) : a.kind == :bank ? (:rent,) : a.kind == :theatre ? (:ticket,) : ()
-buys(a::Agent) = a isa Person ? (:bread, :ticket) : a.kind == :farm ? (:rent, :wage) : a.kind == :bakery ? (:grain, :wage) : a.kind in (:bank, :theatre) ? (:wage,) : ()
+sells(a::Agent) = a isa Person ? (a.land > 0 ? (:wage, :rent) : (:wage,)) : a.kind == :farm ? (:grain,) : a.kind == :bakery ? (:bread,) : a.kind == :bank ? (:rent,) : a.kind == :services ? (:service,) : ()
+buys(a::Agent) = a isa Person ? (:bread, :service) : a.kind == :farm ? (:rent, :wage) : a.kind == :bakery ? (:grain, :wage) : a.kind in (:bank, :services) ? (:wage,) : ()
 
 """
     demand_unmet(model, a, good)
@@ -251,7 +251,7 @@ end
 """Is failure near (13 October)? Overdue obligations at `distress_share` of what would wind the firm up."""
 function in_distress(model, e::Enterprise)
     p = parameters(model)
-    e.kind in (:farm, :bakery, :theatre) || return false
+    e.kind in (:farm, :bakery, :services) || return false
     overdue = p.liquidation_test == :book ? invoices_overdue(model, e, p.liquidation_overdue_rounds) : obligations_overdue(model, e, p.liquidation_overdue_rounds)
     overdue > 1e-6 || return false
     turnover = isempty(e.turnover_history) ? 0.0 : sum(e.turnover_history) / length(e.turnover_history)
@@ -266,13 +266,13 @@ function shelf_left(model, e::Enterprise, g::Symbol)
 end
 
 """The firm's own good: what it makes and sells."""
-own_good(e::Enterprise) = is_farm(e) ? :grain : e.kind == :bakery ? :bread : is_theatre(e) ? :ticket : :none
+own_good(e::Enterprise) = is_farm(e) ? :grain : e.kind == :bakery ? :bread : is_services(e) ? :service : :none
 
 """
     distress_cost_cutting!(model)
 
 After the month's plan (14 October): a firm near failure that did not sell out cuts next month's target to what it sold — the grain
-a bakery buys, the hands a theatre hires — so that it spends only on what it can sell. A firm that sold out does not cut: its
+a bakery buys, the hands a services hires — so that it spends only on what it can sell. A firm that sold out does not cut: its
 answer is the price.
 """
 function distress_cost_cutting!(model)
@@ -286,7 +286,7 @@ function distress_cost_cutting!(model)
         r.offered > 1e-9 || continue
         r.sold >= r.offered - 1e-9 && continue                                     # sold out: the price is the answer
         sold_target = e.kind == :bakery ? ceil(Int, r.sold / p.breads_per_grain) :
-                      is_theatre(e) ? ceil(Int, r.sold / p.customers_per_labour_unit) : ceil(Int, r.sold)
+                      is_services(e) ? ceil(Int, r.sold / services_per_labour_unit(model)) : ceil(Int, r.sold)
         if sold_target < e.production_target
             log_event!(model, :distress_cut; actor = e.id, agent_kind = e.kind, from = e.production_target, to = sold_target)
             e.production_target = sold_target
@@ -312,8 +312,8 @@ function adapt_prices!(model)
             if p.levy_pass_through && a isa Person && g == :rent && a.land > 0  # 16 Oct: Gesell's objection — the owner asks the levy on top of the rent; the market decides whether it sticks
                 a.ask[g] = max(a.ask[g], expected_price(model, :rent) + land_levy_rate(model) * land_valuation_price(model))
             end
-            if a isa Enterprise && a.community && g == :ticket                # 15 Oct: a community theatre's seat costs a fixed share of a loaf
-                a.ask[g] = round(p.community_ticket_in_breads * expected_price(model, :bread), digits = 4); continue
+            if a isa Enterprise && a.community && g == :service                # 15 Oct: a community services's seat costs a fixed share of a loaf
+                a.ask[g] = round(p.community_service_in_breads * expected_price(model, :bread), digits = 4); continue
             end
             r.offered <= 1e-9 && continue
             if p.price_on_expected_sales && a isa Enterprise && g != :wage && a.expected_sales > 0   # 22 Oct: against what it expected to sell
@@ -579,35 +579,35 @@ function plan_targets!(model)
     for e in vcat(bakeries, farms)
         e.production_target = max(e.production_target, 1)
     end
-    theatres = sort(enterprises(model, :theatre); by = t -> t.id)
-    if !isempty(theatres)
-        tp = expected_price(model, :ticket)
+    services = sort(enterprises(model, :services); by = t -> t.id)
+    if !isempty(services)
+        tp = expected_price(model, :service)
         expected = 0.0
         for w in ps
-            w.greed == :cash_hoarder && continue                          # 15 Oct: cash hoarders buy no tickets
+            w.greed == :cash_hoarder && continue                          # 15 Oct: cash hoarders buy no services
             afford = floor(Int, max(cash(w) - buffer_target(model, w), 0.0) / tp)
             afford >= 1 || continue
             if w.greed == :greedy
-                expected += p.plan_for_tickets ? min(floor((1 - p.greed_hoarding) * afford / 2), p.greedy_max_tickets_per_round) : 1.0; continue
+                expected += p.plan_for_services ? min(floor((1 - p.greed_hoarding) * afford / 2), p.greedy_max_services_per_round) : 1.0; continue
             end
-            expected += p.entertainment_propensity * (p.plan_for_tickets ? sum(min(afford, k) for k in 1:p.max_tickets_per_person) / p.max_tickets_per_person : 1.0)
+            expected += p.entertainment_propensity * (p.plan_for_services ? sum(min(afford, k) for k in 1:p.max_services_per_person) / p.max_services_per_person : 1.0)
         end
-        units = max(ceil(Int, expected / p.customers_per_labour_unit), length(theatres))
+        units = max(ceil(Int, expected / services_per_labour_unit(model)), length(services))
         if own
-            for t in theatres; own_plan!(model, t, :ticket, p.customers_per_labour_unit, max(floor(Int, theatre_labour_cap(model, t)), 1), length(theatres)); end
+            for t in services; own_plan!(model, t, :service, services_per_labour_unit(model), max(floor(Int, services_labour_cap(model, t)), 1), length(services)); end
         else
-            by_sales!(units, theatres, :ticket)
+            by_sales!(units, services, :service)
         end                                                              # 15 Oct: the same logic as bakeries and farms
-        if p.shows_per_round > 0                            # a theatre cannot use more labour than its seats take
-            for t in theatres
-                t.production_target = min(t.production_target, Int(theatre_labour_cap(model, t)))
+        if p.shows_per_round > 0                            # a services cannot use more labour than its seats take
+            for t in services
+                t.production_target = min(t.production_target, Int(services_labour_cap(model, t)))
             end
         end
     end
     if p.price_on_expected_sales && !p.own_market_planning                      # 24 Oct (Stef): the realistic price rule on the base ladder too —
         for e in model.enterprise_list                                           # under share planning a firm's expected sales are its share of the village's need: its target without the planning margin
             (e.alive && is_producer(e)) || continue
-            per = e.kind == :bakery ? Float64(p.breads_per_grain) : e.kind == :farm ? 1.0 : p.customers_per_labour_unit
+            per = e.kind == :bakery ? Float64(p.breads_per_grain) : e.kind == :farm ? 1.0 : services_per_labour_unit(model)
             e.expected_sales = e.production_target * per / (1 + p.planning_margin)
         end
     end
@@ -621,11 +621,11 @@ function adapt_targets!(model)
     total_capacity = sum(w.capacity for w in persons(model); init = 0.0)
     for e in alive_agents(model)
         is_producer(e) || continue
-        if is_theatre(e)                     # service: unmet demand → +1 unit of labour, idle capacity → −1
-            r = e.market[:ticket]
-            demand_unmet(model, e, :ticket) && (e.production_target += 1)
+        if is_services(e)                     # service: unmet demand → +1 unit of labour, idle capacity → −1
+            r = e.market[:service]
+            demand_unmet(model, e, :service) && (e.production_target += 1)
             r.offered - r.sold > p.unsold_tolerance_units && (e.production_target -= 1)
-            e.production_target = clamp(e.production_target, 1, max(floor(Int, min(total_capacity, theatre_labour_cap(model, e))), 1))
+            e.production_target = clamp(e.production_target, 1, max(floor(Int, min(total_capacity, services_labour_cap(model, e))), 1))
             continue
         end
         good = e.kind == :farm ? :grain : :bread

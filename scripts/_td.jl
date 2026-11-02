@@ -4,7 +4,7 @@ const B = BreadEconomySim
 def = ladder_definition(512, 120, :invoicing)
 mode = ARGS[1]
 (_, _, ks) = only(r for r in def.rungs if startswith(r[1], "8 "))
-margins = (; pricing_target_farm = :margin, pricing_target_bakery = :margin, pricing_target_theatre = :margin)
+margins = (; pricing_target_farm = :margin, pricing_target_bakery = :margin, pricing_target_services = :margin)
 extra = mode == "flat" ? (;) : mode == "tiers" ? (; demurrage_tiers = DEMURRAGE_TIERS_TEST) : mode == "margins_flat" ? margins : (; margins..., demurrage_tiers = DEMURRAGE_TIERS_TEST)
 m = run_simulation(SimulationParameters(; seed = 1, def.BARE_SUMSY..., ks..., extra...))
 ps = B.persons(m); lp = B.land_valuation_price(m)

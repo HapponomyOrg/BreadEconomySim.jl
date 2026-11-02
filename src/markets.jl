@@ -71,7 +71,7 @@ end
     public_land!(model)
 
 Public land (18 October): the farms are allotted the government's plots, round robin up to the stock, and the ground rents
-are promised to the government as tax — per plot worked, per bakery or theatre, per villager — in loaves, scaled by the tax levers.
+are promised to the government as tax — per plot worked, per bakery or services, per villager — in loaves, scaled by the tax levers.
 """
 function public_land!(model)
     p = parameters(model); p.public_land || return nothing
@@ -90,7 +90,7 @@ function public_land!(model)
     charge(a, n, rate, purpose) = (amount = round(n * rate * bp * scale, digits = 4); amount > 1e-9 && (promise!(model, a, gov, amount, purpose, 1, :tax); model.ground_rent_this_round += amount))
     for f in farms; charge(f, f.rented_land, p.public_land_farm_rent_in_breads, :ground_rent); end
     for e in alive_agents(model)
-        e isa Enterprise && e.kind in (:bakery, :theatre) && charge(e, 1, p.public_land_firm_rent_in_breads, :ground_rent)
+        e isa Enterprise && e.kind in (:bakery, :services) && charge(e, 1, p.public_land_firm_rent_in_breads, :ground_rent)
     end
     for w in persons(model)
         p.public_land_dwelling_exempt_benefit && w.unemployed_last_round && continue   # 18 Oct: those on the benefit pay no dwelling rent; 31 Oct: last month's status — this month's labour market has not run yet (the exemption never fired)
@@ -350,8 +350,8 @@ end
 """Does this villager keep every surplus as money (15 October)?"""
 hoards_cash(a) = a isa Person && a.greed == :cash_hoarder
 
-"""May volunteers fill this enterprise's shortfall of hands (15 October)? Its kind is a volunteer kind, or it is a community theatre."""
-volunteer_staffed(model, e::Enterprise) = (p = parameters(model); e.community || e.kind in p.volunteer_kinds || (p.volunteers_in_theatres && e.kind == :theatre))
+"""May volunteers fill this enterprise's shortfall of hands (15 October)? Its kind is a volunteer kind, or it is a community services."""
+volunteer_staffed(model, e::Enterprise) = (p = parameters(model); e.community || e.kind in p.volunteer_kinds || (p.volunteers_in_services && e.kind == :services))
 
 """Each villager's share of the labour the village's employers wanted last month, plus `labour_for_bread_margin` (12 October): the
 work the bread needs, spread across everyone before any shortage."""
@@ -365,7 +365,7 @@ function shared_labour(model)
     # offers on that one low month left the restarted bakeries short (DGI8: ~217 hungry in month 6 in every seed)
     n = max(parameters(model).labour_for_bread_memory, 1)
     wanted = maximum(d[i].labour_wanted for i in max(1, length(d) - n + 1):length(d))
-    # 16 Oct: and at least what the employers plan to want this month — in the productive village the theatres' plans grew month
+    # 16 Oct: and at least what the employers plan to want this month — in the productive village the services' plans grew month
     # by month, they hired first, and the bakeries were 168 hands short (283 hungry in month 28, every seed)
     wanted = max(wanted, planned)
     return (1 + parameters(model).labour_for_bread_margin) * wanted / max(row.persons_alive, 1)
@@ -410,27 +410,31 @@ function labour_supply(model, w::Person)
     other = w.land * expected_price(model, :rent) * (1 - p.capital_tax_rate) + w.fee + unearned_income(model)   # 12 Oct: the guaranteed income and the dividend count
     need = meal_price(model) + max(savings_buffer(model) - cash(w), 0.0) - other
     floor_units = p.labour_for_bread ? shared_labour(model) : 0.0                 # 12 Oct: the work the village needs, shared out
-    p.entertainment && p.standard_of_living_tickets > 0 && (need += p.standard_of_living_tickets * expected_price(model, :ticket))   # 27 Sept: works to afford them
+    p.entertainment && p.standard_of_living_services > 0 && (need += p.standard_of_living_services * expected_price(model, :service))   # 27 Sept: works to afford them
     wage = max(net_wage(model), 1e-6)
     units = need <= 0 ? 0.0 : ceil(need / wage)
     units = max(units, p.minimum_labour_offer * w.effective_capacity, floor_units)   # 4 Oct: work is wanted for its own sake too; 12 Oct: and shared
     return min(w.effective_capacity, units)
 end
 
-"""Tickets a theatre can sell in a round: shows × seats, or unlimited with `shows_per_round = 0`."""
-function ticket_capacity(model, t::Enterprise)
+"""Customer-hours a labour unit serves: from staff intensity under the time budget (2 Nov), else the fixed `customers_per_labour_unit`."""
+services_per_labour_unit(model) = (p = parameters(model); p.services_time_budget ? p.hours_per_labour_unit / p.staff_hours_per_customer_hour : p.customers_per_labour_unit)
+"""A villager's leisure hours this month (2 Nov): the month, less sleep and care, less household and family care, less the hours worked."""
+leisure_hours(model, w::Person) = (p = parameters(model); max(p.monthly_hours - 30 * (p.sleep_and_care_hours_per_day + p.household_hours_per_day) - p.hours_per_labour_unit * w.labour_sold, 0.0))
+"""Services a services can sell in a round: shows × seats, or unlimited with `shows_per_round = 0`."""
+function service_capacity(model, t::Enterprise)
     p = parameters(model)
     p.shows_per_round <= 0 && return Inf
     seats = p.seats_per_show > 0 ? p.seats_per_show :
-            ceil(p.number_of_persons / max(p.number_of_theatres, 1) * (1 + p.theatre_seat_margin))   # 25 Sept: fixed at the founding — a new theatre brings its own seats
+            ceil(p.number_of_persons / max(p.number_of_services, 1) * (1 + p.services_seat_margin))   # 25 Sept: fixed at the founding — a new services brings its own seats
     return Float64(p.shows_per_round * seats)
 end
 
-"""Labour a theatre can put to use: enough to serve its seats, no more."""
-theatre_labour_cap(model, t::Enterprise) = ceil(ticket_capacity(model, t) / parameters(model).customers_per_labour_unit)
+"""Labour a services can put to use: enough to serve its seats, no more."""
+services_labour_cap(model, t::Enterprise) = (c = service_capacity(model, t); isinf(c) ? 1.0e9 : ceil(c / services_per_labour_unit(model)))   # 1 Nov: no seat cap → no labour cap (a large finite number, for the integer plans)
 
 labour_need(e::Enterprise) = e.kind == :farm ? max(min(e.production_target, e.land + e.rented_land), 0) :
-                            e.kind == :bakery ? max(min(e.production_target, floor(grain_units(e) + 1e-9)), 0) : e.kind == :bank ? e.staff_target : e.kind == :theatre ? Float64(max(e.production_target, 0)) : 0.0
+                            e.kind == :bakery ? max(min(e.production_target, floor(grain_units(e) + 1e-9)), 0) : e.kind == :bank ? e.staff_target : e.kind == :services ? Float64(max(e.production_target, 0)) : 0.0
 
 """
     hire!(model, e, w, units, wage)
@@ -465,9 +469,9 @@ Wages are promised at hiring (priority 2, taxed at source) and settled at cleari
 before the harvest; bakeries hire after the grain market, up to the grain they hold (spec v2 addendum).
 """
 function labour_market!(model, kinds)
-    if parameters(model).joint_labour_market                              # 17 Oct: farms and banks before the harvest; then bakeries and theatres in one market, in turns
-        kinds == (:farm, :bank, :theatre) && (kinds = (:farm, :bank))
-        kinds == (:bakery,) && (kinds = (:bakery, :theatre))
+    if parameters(model).joint_labour_market                              # 17 Oct: farms and banks before the harvest; then bakeries and services in one market, in turns
+        kinds == (:farm, :bank, :services) && (kinds = (:farm, :bank))
+        kinds == (:bakery,) && (kinds = (:bakery, :services))
     end
     rng = stream(model, :labour)
     if :farm in kinds
@@ -485,9 +489,9 @@ function labour_market!(model, kinds)
     for e in employers
         e.market[:wage].wanted = labour_need(e)
         if e.community
-            e.market[:wage].wanted = 0.0                                  # 15 Oct: a community theatre hires nobody
-        elseif volunteer_staffed(model, e)      # 4 Oct: a theatre pays for what its tickets can cover; volunteers staff the rest
-            income = isempty(e.turnover_history) ? e.production_target * expected_price(model, :ticket) : last(e.turnover_history)
+            e.market[:wage].wanted = 0.0                                  # 15 Oct: a community services hires nobody
+        elseif volunteer_staffed(model, e)      # 4 Oct: a services pays for what its services can cover; volunteers staff the rest
+            income = isempty(e.turnover_history) ? e.production_target * expected_price(model, :service) : last(e.turnover_history)
             e.market[:wage].wanted = min(e.market[:wage].wanted, floor(income / max(going_wage(model), 1e-6)))
         end
     end
@@ -888,39 +892,39 @@ end
 # ---- entertainment (13 September 2026) ----------------------------------------------
 
 """
-    ticket_market!(model)
+    service_market!(model)
 
-After the bread market. Each person who can afford at least one ticket above their savings buffer wants, with
-`entertainment_propensity`, a random number of tickets (1 … `max_tickets_per_person`, capped by what cash allows) and
-buys from the cheapest theatre with capacity (hired labour × customers per unit). Tickets are consumed on purchase.
+After the bread market. Each person who can afford at least one service above their savings buffer wants, with
+`entertainment_propensity`, a random number of services (1 … `max_services_per_person`, capped by what cash allows) and
+buys from the cheapest services with capacity (hired labour × customers per unit). Services are consumed on purchase.
 """
-function ticket_market!(model)
+function service_market!(model)
     p = parameters(model)
     p.entertainment || return nothing
-    rng = stream(model, :tickets)
-    theatres = enterprises(model, :theatre)
-    isempty(theatres) && return nothing
-    for t in theatres
-        t.market[:ticket].offered = min((effective_labour(model, t) + t.volunteer_labour) * p.customers_per_labour_unit, ticket_capacity(model, t))   # 4 Oct: volunteers staff what the paid hiring could not
+    rng = stream(model, :services)
+    services = enterprises(model, :services)
+    isempty(services) && return nothing
+    for t in services
+        t.market[:service].offered = min((effective_labour(model, t) + t.volunteer_labour) * services_per_labour_unit(model), service_capacity(model, t))   # 4 Oct: volunteers staff what the paid hiring could not
     end
-    function buy_tickets!(w, n)
+    function buy_services!(w, n)
         bought = 0; wanted = n
         for _ in 1:n
-            open = [t for t in theatres if t.market[:ticket].offered - t.market[:ticket].sold >= 1 - 1e-9 && !(p.no_self_service && t.id in w.worked_for)]
+            open = [t for t in services if t.market[:service].offered - t.market[:service].sold >= 1 - 1e-9 && !(p.no_self_service && t.id in w.worked_for)]
             if isempty(open)
-                foreach(t -> (t.market[:ticket].unmet_demand = true; t.market[:ticket].unmet_units += wanted - bought), theatres); break
+                foreach(t -> (t.market[:service].unmet_demand = true; t.market[:service].unmet_units += wanted - bought), services); break
             end
-            sort!(open; by = t -> member_ask(model, t, w, :ticket))
+            sort!(open; by = t -> member_ask(model, t, w, :service))
             done = false
             for t in open
-                price = negotiate(model, t, w, :ticket)
+                price = negotiate(model, t, w, :service)
                 price === nothing && continue
-                cash(w) - buffer_target(model, w) >= gross_price(model, w, price) - 1e-6 || continue
-                pay_consumption!(model, w, t, price, :ticket)
+                cash(w) - buffer_target(model, w) >= gross_price(model, w, price; good = :service) - 1e-6 || continue
+                pay_consumption!(model, w, t, price, :service)
                 record_patronage!(model, t, w, 1.0)
-                t.market[:ticket].sold += 1; w.market[:ticket].got += 1; bought += 1
-                record_transaction!(model, :ticket, price, 1.0)
-                log_event!(model, :ticket; buyer = w.id, theatre = t.id, price = price)
+                t.market[:service].sold += 1; w.market[:service].got += 1; bought += 1
+                record_transaction!(model, :service, price, 1.0)
+                log_event!(model, :service; buyer = w.id, services = t.id, price = price)
                 done = true; break
             end
             done || break
@@ -928,23 +932,31 @@ function ticket_market!(model)
         return bought
     end
     for w in stable_shuffle(rng, persons(model))
-        tp = expected_price(model, :ticket)
+        tp = expected_price(model, :service)
         afford = floor(Int, max(cash(w) - buffer_target(model, w), 0.0) / tp)
         afford >= 1 || continue
         rand(rng) < p.entertainment_propensity || continue
         w.greed != :none && continue
-        wanted = p.standard_of_living_tickets > 0 ? min(afford, p.standard_of_living_tickets) : min(afford, stable_range(rng, 1:p.max_tickets_per_person))   # 27 Sept
-        w.market[:ticket].wanted = wanted
-        buy_tickets!(w, wanted)
+        if p.services_engel_demand                                                        # 1 Nov (Stef): Engel's law — a baseline want, plus spending shares of income above the meal and of cash above the buffer
+            meal = p.breads_per_meal * expected_price(model, :bread)
+            spend = p.services_income_share * max(w.income_last_round - meal, 0.0) + p.services_wealth_share * max(cash(w) - buffer_target(model, w), 0.0)
+            wanted = min(afford, p.services_baseline_units + floor(Int, spend / tp))
+            p.services_time_budget && (wanted = min(wanted, floor(Int, p.services_time_share * leisure_hours(model, w))))   # 2 Nov: no more hours than leisure allows
+        else
+            wanted = p.standard_of_living_services > 0 ? min(afford, p.standard_of_living_services) : min(afford, stable_range(rng, 1:p.max_services_per_person))   # 27 Sept
+            p.services_time_budget && (wanted = min(wanted, floor(Int, p.services_time_share * leisure_hours(model, w))))
+        end
+        w.market[:service].wanted = wanted
+        buy_services!(w, wanted)
     end
-    opening = Dict(t.id => t.ask[:ticket] for t in theatres)               # 20 Oct
+    opening = Dict(t.id => t.ask[:service] for t in services)               # 20 Oct
     for round_ in 2:max(p.market_rounds, 1)                                 # 19 Oct: rounds within the month — those who wanted seats and did not get them
-        next_market_round!(model, theatres, :ticket) || break
-        short = [w for w in stable_shuffle(rng, persons(model)) if w.market[:ticket].got < w.market[:ticket].wanted]
+        next_market_round!(model, services, :service) || break
+        short = [w for w in stable_shuffle(rng, persons(model)) if w.market[:service].got < w.market[:service].wanted]
         isempty(short) && break
-        for w in short; buy_tickets!(w, Int(w.market[:ticket].wanted - w.market[:ticket].got)); end
+        for w in short; buy_services!(w, Int(w.market[:service].wanted - w.market[:service].got)); end
     end
-    restore_opening_asks!(model, opening, :ticket)
+    restore_opening_asks!(model, opening, :service)
     return nothing
 end
 
@@ -955,17 +967,17 @@ greedy_bread_cap(p) = isnan(p.spoilage_acceptance) ? Float64(p.greedy_max_breads
 """
     greed_spending!(model)
 
-After the bread and ticket markets. Each greedy consumer spends cash above the reserve one purchase at a time; each
-purchase goes to a loaf or a ticket by a coin flip (a side whose cap is reached, or where nothing is on offer, yields
+After the bread and service markets. Each greedy consumer spends cash above the reserve one purchase at a time; each
+purchase goes to a loaf or a service by a coin flip (a side whose cap is reached, or where nothing is on offer, yields
 to the other). Loaves bought are eaten this round.
 """
 function greed_spending!(model)
     p = parameters(model); rng = stream(model, :greed)
     p.greed || return nothing
-    theatres = enterprises(model, :theatre)
+    services = enterprises(model, :services)
     for w in stable_shuffle(rng, [w for w in persons(model) if w.greed == :greedy])
-        loaves = 0; tickets = 0
-        for _ in 1:(p.greedy_max_breads_per_round + p.greedy_max_tickets_per_round)
+        loaves = 0; services_bought = 0
+        for _ in 1:(p.greedy_max_breads_per_round + p.greedy_max_services_per_round)
             surplus = cash(w) - buffer_target(model, w)
             surplus > 0 || break
             if rand(rng) < p.greed_hoarding
@@ -977,28 +989,28 @@ function greed_spending!(model)
             stocked = [b for b in enterprises(model, :bakery) if sellable_bread(b) >= 1]
             if tiered && isempty(stocked); foreach(b -> b.tier_unmet = true, enterprises(model, :bakery)); end
             can_bread = bread_units(w) < greedy_bread_cap(p) && surplus >= tier_price && !isempty(stocked)
-            open = [t for t in theatres if t.market[:ticket].offered - t.market[:ticket].sold >= 1 - 1e-9 && !(p.no_self_service && t.id in w.worked_for)]
-            can_ticket = p.entertainment && tickets < p.greedy_max_tickets_per_round && !isempty(open) && surplus >= expected_price(model, :ticket)
-            (can_bread || can_ticket) || (p.greed_hoarding > 0 ? continue : break)
-            pick_bread = can_bread && (!can_ticket || rand(rng) < 0.5)
+            open = [t for t in services if t.market[:service].offered - t.market[:service].sold >= 1 - 1e-9 && !(p.no_self_service && t.id in w.worked_for)]
+            can_service = p.entertainment && services_bought < p.greedy_max_services_per_round && !isempty(open) && surplus >= expected_price(model, :service)
+            (can_bread || can_service) || (p.greed_hoarding > 0 ? continue : break)
+            pick_bread = can_bread && (!can_service || rand(rng) < 0.5)
             if pick_bread
-                buy_extra_bread!(model, w, :greed; tier = tiered) || (can_ticket ? nothing : break)
+                buy_extra_bread!(model, w, :greed; tier = tiered) || (can_service ? nothing : break)
                 loaves += 1
             else
-                sort!(open; by = t -> member_ask(model, t, w, :ticket)); done = false
+                sort!(open; by = t -> member_ask(model, t, w, :service)); done = false
                 for t in open
-                    price = negotiate(model, t, w, :ticket)
+                    price = negotiate(model, t, w, :service)
                     price === nothing && continue
-                    cash(w) - buffer_target(model, w) >= gross_price(model, w, price) - 1e-6 || continue
-                    pay_consumption!(model, w, t, price, :ticket); record_patronage!(model, t, w, 1.0)
-                    t.market[:ticket].sold += 1; w.market[:ticket].got += 1; tickets += 1
-                    record_transaction!(model, :ticket, price, 1.0); log_event!(model, :ticket; buyer = w.id, theatre = t.id, price = price, greed = true); done = true; break
+                    cash(w) - buffer_target(model, w) >= gross_price(model, w, price; good = :service) - 1e-6 || continue
+                    pay_consumption!(model, w, t, price, :service); record_patronage!(model, t, w, 1.0)
+                    t.market[:service].sold += 1; w.market[:service].got += 1; services_bought += 1
+                    record_transaction!(model, :service, price, 1.0); log_event!(model, :service; buyer = w.id, services = t.id, price = price, greed = true); done = true; break
                 end
-                done || (isempty(open) ? break : (foreach(t -> (t.market[:ticket].unmet_demand = true; t.market[:ticket].unmet_units += 1.0), theatres); break))
+                done || (isempty(open) ? break : (foreach(t -> (t.market[:service].unmet_demand = true; t.market[:service].unmet_units += 1.0), services); break))
             end
         end
         bread_units(w) > p.breads_per_meal && (w.glutton = true)
-        model.greedy_loaves_this_round += loaves; model.greedy_tickets_this_round += tickets
+        model.greedy_loaves_this_round += loaves; model.greedy_services_this_round += services_bought
     end
     return nothing
 end

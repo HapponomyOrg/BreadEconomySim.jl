@@ -27,7 +27,7 @@ Base.@kwdef struct SimulationParameters
     spoilage_age_in_rounds::Int = 3
 
     # Prices and negotiation
-    initial_prices::OrderedDict{Symbol, Float64} = OrderedDict(:bread => 5.0, :grain => 5.2, :rent => 0.75, :wage => 3.92, :ticket => 2.0)   # static-consistent vector, see HANDOFF
+    initial_prices::OrderedDict{Symbol, Float64} = OrderedDict(:bread => 5.0, :grain => 5.2, :rent => 0.75, :wage => 3.92, :service => 2.0)   # static-consistent vector, see HANDOFF
     land_price_rent_multiple::Float64 = 15.0
     negotiation_steps::Int = 6
     minimum_concession_fraction::Float64 = 0.25
@@ -43,10 +43,10 @@ Base.@kwdef struct SimulationParameters
     farm_maximum_rent_fraction_of_grain_price::Float64 = 0.6
     bakery_grain_wage_fraction::Float64 = 0.5
     bread_bid_base_multiplier::Float64 = 1.3
-    # Two limits on the price of leisure (28 September; the theatres set the wage level at step 4 — a full house raised its ticket
+    # Two limits on the price of leisure (28 September; the services set the wage level at step 4 — a full house raised its service
     # price without end, and an employer's willingness to pay is its revenue per worker): a villager pays at most this many loaves
-    # of bread for a ticket, and an employer bids at most this share above the going wage. Inf = no limit.
-    ticket_max_in_breads::Float64 = Inf
+    # of bread for a service, and an employer bids at most this share above the going wage. Inf = no limit.
+    service_max_in_breads::Float64 = Inf
     employer_wage_margin::Float64 = Inf
     # Unmet demand (19 September 2026). Sellers raise their ask and their production target when demand went unmet.
     # 0 = the original rule: one buyer who found nothing is enough. A share s > 0 requires the units that went unserved
@@ -65,16 +65,16 @@ Base.@kwdef struct SimulationParameters
     ask_floor_markup_when_short::Float64 = 0.05
     # Pricing on a target profit margin (21 Oct, Stef): per sector, :reserve prices at cost (the floor above, as before) and
     # :margin prices at cost × (1 + the target net margin, grossed up for the profit tax). Targets from docs/data/
-    # sector_margin_targets.csv (Vena / NYU Stern, February 2026): farms 7.12 %, bakeries 6.00 %, theatres 0.5 % (no subsidies yet).
+    # sector_margin_targets.csv (Vena / NYU Stern, February 2026): farms 7.12 %, bakeries 6.00 %, services 0.5 % (no subsidies yet).
     # `margin_profit_mode`: :payout (default) keeps the reserve target of `reserve_target_in_rounds` and pays the rest out as
     # dividends, as before — only the price floor changes; :retain keeps the net profit as reserve and pays dividends only above
     # `margin_retain_ceiling_in_rounds` months of costs (owners' wealth then grows with the margin).
     pricing_target_farm::Symbol = :reserve
     pricing_target_bakery::Symbol = :reserve
-    pricing_target_theatre::Symbol = :reserve
+    pricing_target_services::Symbol = :reserve
     target_net_margin_farm::Float64 = 0.0712
     target_net_margin_bakery::Float64 = 0.0600
-    target_net_margin_theatre::Float64 = 0.0050
+    target_net_margin_services::Float64 = 0.0050
     margin_profit_mode::Symbol = :payout
     margin_retain_ceiling_in_rounds::Float64 = 12.0
     # 21 Oct (Stef): margin targets against reserve targets is greed against sufficiency — a margin target never has enough, a
@@ -196,7 +196,7 @@ Base.@kwdef struct SimulationParameters
     demand_based_targets::Bool = false          # producers plan output for the living population instead of the ±1 ratchet
     # 24 Oct (Stef): a bakery bakes to its production target, not to its hands — with contracted hands above the target it pays
     # them and buys less grain, instead of baking what the hands allow from the grain in store. Farms already harvest to their
-    # target (land, labour and target); theatres sell seats. false = as built (bread = hands × grain in store).
+    # target (land, labour and target); services sell seats. false = as built (bread = hands × grain in store).
     bakeries_bake_to_target::Bool = false
     # 24 Oct (Stef): under own-market planning a firm that sold out plans at least a step above its target, and one that turned
     # customers away at least what it sold plus its share of them, with its buffer — applied after the buffer (the 22 Oct
@@ -308,12 +308,12 @@ Base.@kwdef struct SimulationParameters
     heir_inherits_personal_debt::Bool = false
     heir_inherits_firm_debt::Bool = false
     # Public land (18 October, Stef — close to Gesell's Freiland): all land is the government's; farms rent the plots they work,
-    # bakeries and theatres pay for the ground they stand on, every villager for the ground they live on — ground rents set in
+    # bakeries and services pay for the ground they stand on, every villager for the ground they live on — ground rents set in
     # loaves, scaled with the tax levers (`tax_scale`), paid to the government as tax. Nobody owns land, so no land market, no land
     # in wealth, no levy: mutually exclusive with `land_pricing = :market` and `land_levy`. The rents default to zero.
     public_land::Bool = false
     public_land_farm_rent_in_breads::Float64 = 0.0     # per plot a farm works, a month
-    public_land_firm_rent_in_breads::Float64 = 0.0     # per bakery or theatre, a month
+    public_land_firm_rent_in_breads::Float64 = 0.0     # per bakery or services, a month
     public_land_dwelling_rent_in_breads::Float64 = 0.0 # per villager, a month
     # 31 Oct (Stef): the ground rent gets the levy's switch, as a share — this part of the month's ground rents is handed out to
     # every living villager per head, the rest stays in the budget (0 = all to the budget, as before; 1 = all handed out).
@@ -367,7 +367,7 @@ Base.@kwdef struct SimulationParameters
     #   :brackets — needs `income_tax_schedule = :progressive`: a rise of r changes each bracket's rate to
     #               rate × (1 + r) + `bracket_fixed_rise` × sign(r) — proportional, so the 50 % bracket moves five times as
     #               much as the 10 % one, plus a fixed number of points per bracket; falls back to :scale under :flat
-    # Consumption tax (20 September 2026): a VAT on what persons buy to consume — bread and tickets — paid by the buyer on
+    # Consumption tax (20 September 2026): a VAT on what persons buy to consume — bread and services — paid by the buyer on
     # top of the negotiated price and promised to the government (grain is an input and stays untaxed, as VAT is neutral
     # between firms). The buyer's willingness to pay is for the price including tax, so the ceiling passed to the
     # negotiation is divided by (1 + rate). Belgium's average rate on consumption is about 6 %. The fiscal policy scales
@@ -391,7 +391,7 @@ Base.@kwdef struct SimulationParameters
     income_tax_period::Int = 1
     # Profit tax (design §3): per period, revenue − `deductible_materials` × (materials, rent and interest) − `deductible_labour` ×
     # wages, never below 0 (no loss carry-forward), at `profit_tax_rate` (the rate applies to the profit whatever the period's
-    # length). Charged to farms, bakeries and theatres; an invoice to the government under settlement = :invoicing.
+    # length). Charged to farms, bakeries and services; an invoice to the government under settlement = :invoicing.
     profit_tax_rate::Float64 = 0.0
     profit_tax_period::Int = 1
     deductible_materials::Float64 = 1.0
@@ -481,18 +481,18 @@ Base.@kwdef struct SimulationParameters
     municipal_surcharge::Float64 = 0.07
     # Entertainment (13 September 2026): a pure service, labour only
     entertainment::Bool = false
-    number_of_theatres::Int = 1
+    number_of_services::Int = 1
     customers_per_labour_unit::Float64 = 2.5          # 10 customers per full-time job at capacity 4
-    max_tickets_per_person::Int = 3                   # 1–3 tickets a round, at random within what cash above the buffer allows
-    entertainment_propensity::Float64 = 1.0           # probability a person who can afford a ticket wants one
-    plan_for_tickets::Bool = true                     # theatres plan hiring on expected ticket demand (like bakeries on gluttony)
-    # Theatre capacity (20 September 2026). A theatre runs at most `shows_per_round` shows a round with `seats_per_show`
-    # seats each, so it can sell at most shows × seats tickets and never needs more labour than that takes at
-    # `customers_per_labour_unit`. 0 shows = unlimited (the rule until 20 September: a theatre absorbed whatever labour
-    # ticket demand paid for). 0 seats = one seat for every person in the village at founding.
+    max_services_per_person::Int = 3                   # 1–3 services a round, at random within what cash above the buffer allows
+    entertainment_propensity::Float64 = 1.0           # probability a person who can afford a service wants one
+    plan_for_services::Bool = true                     # services plan hiring on expected service demand (like bakeries on gluttony)
+    # Services capacity (20 September 2026). A services runs at most `shows_per_round` shows a round with `seats_per_show`
+    # seats each, so it can sell at most shows × seats services and never needs more labour than that takes at
+    # `customers_per_labour_unit`. 0 shows = unlimited (the rule until 20 September: a services absorbed whatever labour
+    # service demand paid for). 0 seats = one seat for every person in the village at founding.
     shows_per_round::Int = 0
-    seats_per_show::Int = 0                           # 0 = villagers ÷ theatres × (1 + theatre_seat_margin), so the theatres together seat the village plus the margin
-    theatre_seat_margin::Float64 = 0.25               # 21 September: with several theatres a seat per villager *per theatre* would be several times the village
+    seats_per_show::Int = 0                           # 0 = villagers ÷ services × (1 + services_seat_margin), so the services together seat the village plus the margin
+    services_seat_margin::Float64 = 0.25               # 21 September: with several services a seat per villager *per services* would be several times the village
     # Clearing switch (13 September 2026): true = all intra-round payments are promises netted at clearing (spec v2 addendum);
     # false = every payment is settled immediately (cash, then credit, the unpaid tail becomes a trade arrear)
     clearing::Bool = true
@@ -501,13 +501,13 @@ Base.@kwdef struct SimulationParameters
     shareholder_count::Int = 2                         # :shareholders / :mixed — persons (lowest ids) who hold the shares
     cooperative_farms::Int = 2                         # :mixed
     cooperative_bakeries::Int = 2
-    cooperative_theatres::Int = 0                      # :mixed — theatres were for-profit only until 14 September 2026
+    cooperative_services::Int = 0                      # :mixed — services were for-profit only until 14 September 2026
     # Cooperative forms (14 September 2026), per kind: :member (the original equal-share, equal-dividend rule),
     # :worker (membership follows employment, surplus by hours) or :consumer (membership follows purchases,
     # surplus as a patronage rebate). Farms cannot be consumer cooperatives: they sell to bakeries, not to persons.
     cooperative_form_farms::Symbol = :member
     cooperative_form_bakeries::Symbol = :member
-    cooperative_form_theatres::Symbol = :member
+    cooperative_form_services::Symbol = :member
     patronage_window::Int = 12                         # rounds of hours or purchases a distribution is measured over
     retained_surplus_share::Float64 = 0.25             # share of every distribution locked in the indivisible reserve
     capital_deduction_share::Float64 = 0.10            # worker cooperative: share of each net wage collected towards the membership share
@@ -544,12 +544,12 @@ Base.@kwdef struct SimulationParameters
     greed::Bool = false
     greed_share::Float64 = 0.25                        # share of persons who are greedy
     # Cash hoarders (15 October, Stef): `cash_hoarder_share` of villagers (chosen like the greedy, by `greed_selection`) keep every
-    # surplus as money — they buy their bread and nothing else: no tickets, land, shares, gold or premium loaves, and lend nothing.
+    # surplus as money — they buy their bread and nothing else: no services, land, shares, gold or premium loaves, and lend nothing.
     cash_hoarder_share::Float64 = 0.0
     # 15 Oct: when > 0, the hoarders are chosen at this month among those holding the most money (whoever the economy has made
     # cash-rich), not at the founding — the richest at the founding are land-rich, cash-poor founders with loans to repay.
     cash_hoarder_month::Int = 0
-    greed_hoarding::Float64 = 0.5                      # every greedy person is both: each act of greed goes to capital with this probability (most profitable of land, shares, cash first), to consumption (a loaf or a ticket, coin flip) otherwise
+    greed_hoarding::Float64 = 0.5                      # every greedy person is both: each act of greed goes to capital with this probability (most profitable of land, shares, cash first), to consumption (a loaf or a service, coin flip) otherwise
     greed_selection::Symbol = :rich                    # :rich (the wealthiest at the founding) | :random
     greed_month::Int = 0                               # 15 Oct (Stef): > 0 — the greedy are chosen at this month, by net wealth (:rich) or at random, once a trend shows
     greedy_max_breads_per_round::Int = 10              # replaces the 3-loaf ceiling for greedy consumers (eaten, not stocked)
@@ -576,17 +576,17 @@ Base.@kwdef struct SimulationParameters
     distress_pricing::Bool = false
     distress_share::Float64 = 0.5
     distress_months::Int = 3
-    # Cost cutting under distress (14 October, Stef): a firm near failure reads its own market. Bread (tickets, grain) left on the
+    # Cost cutting under distress (14 October, Stef): a firm near failure reads its own market. Bread (services, grain) left on the
     # shelf: it cuts — next month's target falls to what it sold, so it buys and hires only for that — and does not raise its
     # price. Sold out: it raises its price (distress pricing) and does not cut. Neither: it cuts first and prices by what remains.
     distress_cost_cutting::Bool = true                # on by default: realistic behaviour (Stef, 14 Oct); a switch for the controls
-    greedy_max_tickets_per_round::Int = 10             # replaces the 3-ticket ceiling
+    greedy_max_services_per_round::Int = 10             # replaces the 3-service ceiling
     # Bread rationing (13 September 2026): stage one, everyone up to the ration; stage two, leftovers to the greedy
     bread_rationing::Bool = false
     ration_breads_per_person::Int = 4                 # lowered to what the shelves can give everyone, never below a meal
     tiered_bread_price::Bool = false                  # loaves beyond the ration sell at a second posted price that rises on unmet greed and falls on unsold leftovers (never below the ordinary price)
     tier_step::Float64 = 0.06
-    no_self_service::Bool = false                     # a theatre's workers are not served at their own theatre that round
+    no_self_service::Bool = false                     # a services's workers are not served at their own services that round
     wage_ceiling_in_breads::Float64 = 0.0             # incomes policy: no employer pays more than this many loaves per full-time round of work (0 = off); binds bids and the surplus-to-wages rule
     stop_when_half_dead::Bool = true
     stop_when_stationary::Bool = true
@@ -602,7 +602,7 @@ Base.@kwdef struct SimulationParameters
     # `clearing = false` still means cash for everything (legacy).
     settlement::Symbol = :clearing_all              # :invoicing | :clearing_all (see above)
     settlement_clearing::Vector{Symbol} = [:bank, :government]
-    settlement_invoicing::Vector{Symbol} = [:farm, :bakery, :theatre, :government]
+    settlement_invoicing::Vector{Symbol} = [:farm, :bakery, :services, :government]
     # Liquidation (design §2): a producer whose invoices overdue by `liquidation_overdue_rounds` or more reach
     # `liquidation_arrears_share` of its book value is sold as a going concern at `liquidation_price_share` × book value
     # (never below the debt left after its cash), to up to `shareholder_count` buyers with the most spare cash, who hold the
@@ -631,7 +631,59 @@ Base.@kwdef struct SimulationParameters
     # a firm on any overdue amount; now only when `liquidate_when_insolvent` is on. Both on in the ladder's base; the model
     # defaults keep the old behaviour for the golden values.
     pay_overdue_from_cash::Bool = false
+    # 1 Nov (Stef): settlement in the Belgian order — wages and rents first (privileged claims), then taxes and contributions,
+    # then suppliers and the rest — instead of taxes first; and a payroll overdraft: when a firm's cash and ordinary credit do
+    # not cover its wages and rents, the bank lends the wage shortfall as a short loan (within its lending room; under SuMSy a
+    # peer loan), so wages are paid and the firm carries the debt rather than the arrear. Both off here, on in the ladder's base.
+    settlement_order::Symbol = :taxes_first         # :taxes_first | :belgian
+    payroll_overdraft::Bool = false
+    payroll_overdraft_term::Int = 3                 # months to repay the overdraft
+    payroll_overdraft_limit::Float64 = 1.0          # 2 Nov: a credit line — no new overdraft while more than this many wage bills are outstanding on earlier ones
+    # 2 Nov (Stef): a bank gives an overdraft to a firm whose gap is transitory, not structural: only if its operating result
+    # over the last `overdraft_lookback` months is positive, and no more than `overdraft_receivables_cover` × its receivables.
+    # Refounded firms start with working capital — `refound_working_capital_months` of the predecessor's monthly turnover
+    # added to the refounding price — instead of the minimum, which bred the fail–refound–fail loop (139 liquidations in ten years).
+    overdraft_requires_cash_flow::Bool = false
+    overdraft_lookback::Int = 3
+    overdraft_receivables_cover::Float64 = 1.0
+    refound_working_capital_months::Float64 = 0.0
+    # 2 Nov (Stef): small firms may borrow to expand. A firm that turned customers away this month has proof of demand: at the
+    # month's settlement its bank lends the whole shortfall on its obligations (wages, rent, inputs) as working capital over
+    # `expansion_credit_term` months — not only the wage part — so a plan that outgrows the firm's receivables is financed rather
+    # than failing into arrears to suppliers. Off here, on in the ladder's base (with `market_entry`: a new firm enters on
+    # above-normal margins or unserved demand; no limit on a firm's share — the market settles that).
+    expansion_credit::Bool = false
+    expansion_credit_term::Int = 12
+    expansion_credit_limit::Float64 = 3.0           # 2 Nov: outstanding expansion credit at most this many months of the firm's obligations
     anticipate_hunger::Bool = false
+    # 1 Nov (Stef): the theatre is the services sector. Demand by Engel's law (`services_engel_demand`): a villager wants
+    # `services_baseline_units` a month, plus what `services_income_share` of last month's income above the meal and
+    # `services_wealth_share` of the cash above their buffer buy at the expected price — the services share of spending rises
+    # with income, as in household budgets; capacity is labour × `customers_per_labour_unit` (`shows_per_round = 0`: no seat cap).
+    # Services carry VAT (`consumption_tax_rate_services`; NaN = the same rate as bread) and the wage tax like every good.
+    services_engel_demand::Bool = false
+    services_baseline_units::Int = 1
+    services_income_share::Float64 = 0.30
+    services_wealth_share::Float64 = 0.05
+    consumption_tax_rate_services::Float64 = NaN
+    # 2 Nov (Stef): consumption takes time (Becker 1965). A villager's month has `monthly_hours`; sleep, eating and personal care
+    # (HETUS 2010: 8–9 h sleep, 1.5–2 h eating, about 1 h care) and household and family care (2.5–3.5 h a day across HETUS,
+    # about 3 in Belgium) come first; each labour unit sold costs `hours_per_labour_unit` (Belgium: a 38-hour week ≈ 165 h a
+    # month over the model's 3 units ≈ 55 h); what is left is leisure (HETUS: 4.5–6 h a day; OECD 2009: Belgium 6 h 39 min).
+    # With `services_time_budget` on, a service unit is one customer-hour, a villager consumes at most `services_time_share` of
+    # their leisure hours in services (part-time work frees time for it), and a labour unit serves
+    # `hours_per_labour_unit / staff_hours_per_customer_hour` customer-hours (a restaurant ≈ 0.5 staff-hours per customer-hour,
+    # a theatre far less, a hairdresser 1) instead of the fixed `customers_per_labour_unit`.
+    services_time_budget::Bool = false
+    monthly_hours::Float64 = 720.0
+    sleep_and_care_hours_per_day::Float64 = 11.0
+    household_hours_per_day::Float64 = 3.0
+    hours_per_labour_unit::Float64 = 55.0
+    services_time_share::Float64 = 0.30
+    staff_hours_per_customer_hour::Float64 = 0.4
+    # Calibration (1 Nov, Stef): the named set of real-world anchors a run is calibrated to (`src/calibration.jl`: :belgium first,
+    # other countries as further entries), recorded in every run's output so that runs on different countries' anchors compare.
+    calibration::Symbol = :none
     # 30 Oct (Stef): land is bought for its long-term value, linked to expected rent. A person's valuation adds a premium of their own
     # (their required yield × `land_premium_factor`, so buyers and sellers differ), and a person buys only below their value by
     # `land_trade_margin` and sells only above it by the same margin — no indifference zone, so a plot bought is not resold in the
@@ -641,7 +693,7 @@ Base.@kwdef struct SimulationParameters
     land_premium_factor::Float64 = 0.3
     land_valuation_horizon::Int = 0
     land_trade_margin::Float64 = 0.0
-    posted_consumer_prices::Bool = false     # 30 Oct (Stef): bread and tickets at the producer's posted price — the consumer buys or not, no bargaining (on in the base)          # 30 Oct (Stef): a villager without bread for the month bids as if hungry; hungry villagers one level higher (on in the base)
+    posted_consumer_prices::Bool = false     # 30 Oct (Stef): bread and services at the producer's posted price — the consumer buys or not, no bargaining (on in the base)          # 30 Oct (Stef): a villager without bread for the month bids as if hungry; hungry villagers one level higher (on in the base)
     no_resale_within_month::Bool = false    # 30 Oct: land bought this month is not offered again this month — a research switch (it collapsed EB seed 6)
     liquidate_when_insolvent::Bool = true
     # Founders pay in equity at the founding equal to the firm's working reserve, from savings or a personal loan (23 Sept; a Belgian
@@ -697,10 +749,10 @@ Base.@kwdef struct SimulationParameters
     # `notice_months` > 0: a worker who has worked `notice_tenure_months` or more consecutive months for the same employer cannot
     # simply be dropped — the employer keeps hiring them, at their units of last month, for `notice_months` more months (Belgian
     # law: three months' notice after six months' service).
-    # One labour market for bakeries and theatres (16–17 October, Stef): after the grain market, bakeries and theatres hire in
-    # turns from one pool, a unit each per pass, so that neither can take the hands the other needs (the theatres had left the
+    # One labour market for bakeries and services (16–17 October, Stef): after the grain market, bakeries and services hire in
+    # turns from one pool, a unit each per pass, so that neither can take the hands the other needs (the services had left the
     # bakeries 168 short in the productive village). Farms and banks still hire before the harvest, which must precede the grain
-    # market. false = farms, banks and theatres first, bakeries after the grain market.
+    # market. false = farms, banks and services first, bakeries after the grain market.
     joint_labour_market::Bool = false
     # Labour contracts (17 October, Stef): a worker who has worked `contract_tenure_months` running for an employer gets a contract
     # if the employer still has room under `contract_share` (the share of its hands it may hold on contract; the rest are temps,
@@ -743,27 +795,27 @@ Base.@kwdef struct SimulationParameters
     # Fixed prices (26 September, Stef's question): every transaction at the starting price vector — no bargaining, no
     # adaptation; only quantities move. Does a village eat when nobody raises a price, and what does the public debt do?
     fixed_prices::Bool = false
-    # A standard of living (27 September, Stef): the tickets a month a household aims for — it offers labour to afford them and
-    # buys up to that many. 0 = the rule so far (work for a meal and the cushion; one to `max_tickets_per_person` tickets when
+    # A standard of living (27 September, Stef): the services a month a household aims for — it offers labour to afford them and
+    # buys up to that many. 0 = the rule so far (work for a meal and the cushion; one to `max_services_per_person` services when
     # there is spare cash).
-    standard_of_living_tickets::Int = 0
+    standard_of_living_services::Int = 0
     # Work as purpose (4 October, Stef; docs/future_work/design_work_as_purpose_2026-10-04.md). `minimum_labour_offer`: everyone
     # offers at least this share of their capacity for paid work, whatever their needs. `volunteer_share`: the share of labour
     # offered and not hired that a villager gives, unpaid, to the commons — a measure (volunteer hours), not a market: the idle
     # split into volunteers and the truly idle.
     minimum_labour_offer::Float64 = 0.0
     volunteer_share::Float64 = 0.0
-    # Volunteers in the theatres (4 October, Stef): a theatre hires what its tickets can pay and villagers with unhired labour staff
+    # Volunteers in the services (4 October, Stef): a services hires what its services can pay and villagers with unhired labour staff
     # the rest, unpaid — after the paid hiring, never instead of it. The volunteers' hours count as commons hours.
-    volunteers_in_theatres::Bool = false
+    volunteers_in_services::Bool = false
     # Volunteer work as a structural flag (15 October, Stef): the enterprise kinds whose shortfall of hands volunteers may fill, after
-    # the paid hiring (e.g. (:theatre,), (:bakery,)). `volunteers_in_theatres` = true adds :theatre.
+    # the paid hiring (e.g. (:services,), (:bakery,)). `volunteers_in_services` = true adds :services.
     volunteer_kinds::Tuple{Vararg{Symbol}} = ()
-    # A volunteer-run community theatre (15 October, Stef): the first `community_theatres` theatres hire nobody; volunteers staff
-    # them, and their seats sell at `community_ticket_in_breads` loaves — competing with the paid theatres.
-    community_theatres::Int = 0
-    community_ticket_in_breads::Float64 = 0.25
-    # Firms plan on their own sales (15 October, Stef — the same logic for bakeries, farms and theatres): the village's planned
+    # A volunteer-run community services (15 October, Stef): the first `community_services` services hire nobody; volunteers staff
+    # them, and their seats sell at `community_service_in_breads` loaves — competing with the paid services.
+    community_services::Int = 0
+    community_service_in_breads::Float64 = 0.25
+    # Firms plan on their own sales (15 October, Stef — the same logic for bakeries, farms and services): the village's planned
     # demand for a good is divided among its firms in proportion to what each sold last month (each keeping at least one unit),
     # not equally — a firm with stock left or empty seats stops buying and hiring for it. false = the equal split of before.
     firms_plan_on_sales::Bool = false                 # on the ladder (RULES); off by default so the reference runs stay as they were
@@ -805,7 +857,7 @@ Base.@kwdef struct SimulationParameters
     # price, and the quick rises make more of them. Off until that is understood.
     plan_window_follows_rises::Bool = false
     # Market rounds within the month (19 October, Stef): a month is long; a seller left with stock while buyers went without lowers
-    # his ask before the month is out. Bread, grain and tickets clear in up to `market_rounds` rounds; between rounds every seller
+    # his ask before the month is out. Bread, grain and services clear in up to `market_rounds` rounds; between rounds every seller
     # with stock left lowers his ask by `ask_decrease_after_partial_sale`, never below his floor, and the month's negotiations are
     # struck afresh; only buyers still short take part in later rounds; after the month each ask returns to its opening value and the
     # monthly rule adapts it (20 Oct: carried over, the lowered asks ratcheted prices down). 1 = one round, as before.
@@ -820,7 +872,7 @@ Base.@kwdef struct SimulationParameters
     premium_labour_per_loaf::Float64 = 0.5
     premium_buyer_margin_in_meals::Float64 = 2.0
     # Not working, for reasons of their own (5 October, Stef — care, illness, art, or choice; the model knows only that they do
-    # not offer paid work): `nonworking_share` of villagers offer labour only to cover a meal — no cushion, no tickets, no minimum
+    # not offer paid work): `nonworking_share` of villagers offer labour only to cover a meal — no cushion, no services, no minimum
     # offer — and give no volunteer hours; `nonworking_hungry_share` of them would rather go hungry than take paid work: they
     # offer labour only once hungry.
     nonworking_share::Float64 = 0.0
@@ -840,7 +892,7 @@ Base.@kwdef struct SimulationParameters
     # the bread price, per month, up to `bank_rate_inflation_cap` a month on top of `maximum_interest_rate`. Off = the rate
     # ignores inflation (a deeply negative real rate once prices rise, and unlimited credit to chase them).
     # A ceiling on public borrowing (26 September): when the public debt exceeds `public_debt_limit` × the village's yearly output
-    # (bread and ticket sales over the last twelve months), the government scales its spending — public jobs and the benefit —
+    # (bread and service sales over the last twelve months), the government scales its spending — public jobs and the benefit —
     # down in proportion (never below `public_spending_floor`) until the ratio is back under the ceiling. 0 = no ceiling.
     # The benefit is set in loaves at the current bread price (indexed, the rule so far). `benefit_indexed = false` (26 September):
     # the same number of loaves at the founding price — a fixed sum of money, like SuMSy's guaranteed income.
@@ -869,7 +921,7 @@ Base.@kwdef struct SimulationParameters
     refound_cooldown::Int = 3                         # at most one restart per kind in this many months (a village that cannot sustain a firm would otherwise restart one every month)
     # The reserve rule without a tax policy never scales taxes below this (25 September, review 6: at 0 they could never recover).
     tax_scale_minimum::Float64 = 0.05
-    # Market entry (25 September; docs/designs_implemented/design_market_entry_2026-09-25.md): off by default and on the ladder. A new farm, bakery or theatre
+    # Market entry (25 September; docs/designs_implemented/design_market_entry_2026-09-25.md): off by default and on the ladder. A new farm, bakery or services
     # is founded when its market has had at least `entry_unmet_share` unserved demand in each of the last `entry_unmet_months`
     # months, or its firms have averaged an operating margin above `entry_margin` over the last `entry_margin_months` months — at
     # most one per kind per `entry_cooldown` months and up to `entry_max_ratio` × the starting number. Founders are the villagers

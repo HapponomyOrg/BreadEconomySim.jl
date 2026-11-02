@@ -8,14 +8,14 @@ for (name, kd, ks) in rungs, (system, base, kw) in (("debt", BARE_DEBT, kd), ("s
     (startswith(name, "X1") && system == "debt") && continue
     (startswith(name, "X2") && system == "sumsy") && continue
     p = SimulationParameters(; base..., kw...)
-    theatres = p.entertainment ? p.number_of_theatres : 0
-    firms = p.number_of_farms + p.number_of_bakeries + theatres
-    owned = p.ownership in (:shareholders, :mixed) ? firms - (p.ownership == :mixed ? p.cooperative_farms + p.cooperative_bakeries + p.cooperative_theatres : 0) : 0
-    seats = theatres > 0 && p.shows_per_round > 0 ? ceil(Int, p.number_of_persons / theatres * (1 + p.theatre_seat_margin)) : 0
+    services = p.entertainment ? p.number_of_services : 0
+    firms = p.number_of_farms + p.number_of_bakeries + services
+    owned = p.ownership in (:shareholders, :mixed) ? firms - (p.ownership == :mixed ? p.cooperative_farms + p.cooperative_bakeries + p.cooperative_services : 0) : 0
+    seats = services > 0 && p.shows_per_round > 0 ? ceil(Int, p.number_of_persons / services * (1 + p.services_seat_margin)) : 0
     push!(rows, (; rung = name, system, villagers = p.number_of_persons, landowners = p.number_of_landowners,
-        farms = p.number_of_farms, bakeries = p.number_of_bakeries, theatres, coops = p.ownership == :mixed ? p.cooperative_farms + p.cooperative_bakeries + p.cooperative_theatres : 0,
+        farms = p.number_of_farms, bakeries = p.number_of_bakeries, services, coops = p.ownership == :mixed ? p.cooperative_farms + p.cooperative_bakeries + p.cooperative_services : 0,
         ownership = String(p.ownership), founders = owned * p.shareholder_count, share_market = p.share_market,
-        shows = p.shows_per_round, seats_per_theatre = seats,
+        shows = p.shows_per_round, seats_per_services = seats,
         wage_tax = p.wage_tax_rate, capital_tax = p.capital_tax_rate, dividend_tax = p.dividend_tax_rate, consumption_tax = p.consumption_tax_rate, wealth_tax = p.wealth_tax_rate,
         public_jobs_share = p.government_employment_share, benefit_loaves = p.unemployment_fee_in_breads, bonds = p.government_bonds,
         reserve_rounds = p.government_reserve_in_rounds, tax_policy = String(p.tax_policy), levers = p.tax_policy == :none ? "" : join(["$(f) $(get(p.tax_levers, f, 0.0))" for f in (:income, :consumption, :wealth, :profit, :parking)], ", "),
@@ -28,7 +28,7 @@ for (name, kd, ks) in rungs, (system, base, kw) in (("debt", BARE_DEBT, kd), ("s
         fiscal = String(FISCAL), surplus_rule = String(p.surplus_rule), land_levy = p.land_levy, levy_dividend = p.land_levy_dividend, surplus_per_head = p.surplus_redistribution_share, surplus_cuts_taxes = p.surplus_tax_reduction_share,
         loyalty_bonus = p.loyalty_bonus_rate, peer_loan_rate = p.peer_loan_rate, bank_spread = p.bank_spread, loan_rate_covers_deposits = p.loan_rate_covers_deposit_interest,
         price_bread = p.initial_prices[:bread] * p.initial_price_multiplier, price_grain = p.initial_prices[:grain] * p.initial_price_multiplier, price_wage = p.initial_prices[:wage] * p.initial_price_multiplier,
-        price_rent = p.initial_prices[:rent] * p.initial_price_multiplier, price_ticket = p.initial_prices[:ticket] * p.initial_price_multiplier,
+        price_rent = p.initial_prices[:rent] * p.initial_price_multiplier, price_service = p.initial_prices[:service] * p.initial_price_multiplier,
         unmet_share = p.unmet_demand_share, unsold_share = p.unsold_share, ask_floor = String(p.ask_floor), bread_ceiling = p.bread_bid_base_multiplier, planning_margin = p.planning_margin,
         greed = p.greed ? "$(round(Int, 100 * p.greed_share)) % greedy, hoarding $(p.greed_hoarding)" : ""))
 end

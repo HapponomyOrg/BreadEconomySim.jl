@@ -204,7 +204,7 @@ function make_loan!(model, lender::Enterprise, borrower::Agent, amount::Float64,
     model.money_created_this_round += amount
     model.cumulative_money_created += amount
     log_event!(model, :loan; actor = borrower.id, agent_kind = kind_of(borrower), lender = lender.id, amount = amount, rate = rate, purpose = purpose)
-    return nothing
+    return model.loans[end].id                                             # 2 Nov: the loan's id, for credit lines that track their loans
 end
 
 # ---- promises instead of payments (clearing system) ---------------------------
@@ -322,9 +322,47 @@ function settle_end_of_round!(model)
     obligations = model.end_round_obligations
     isempty(obligations) && return nothing
     for from in alive_agents(model)
-        mine = sort([pr for pr in obligations if pr.from_id == from.id]; by = pr -> pr.priority)
+        p = parameters(model)
+        is_pay(pr) = pr.income_kind in (:wage, :rent) || pr.purpose in (:wage, :rent)
+        rank(pr) = p.settlement_order == :belgian ? (is_pay(pr) ? 0 : pr.purpose == :tax || endswith(String(pr.purpose), "_tax") ? 1 : 2) : pr.priority   # 1 Nov: wages first in the Belgian order
+        mine = sort([pr for pr in obligations if pr.from_id == from.id]; by = rank)
         isempty(mine) && continue
         available = fund_from_cash!(model, from, sum(pr.amount for pr in mine))
+        if p.payroll_overdraft && from isa Enterprise
+            wages_due = sum(pr.amount for pr in mine if is_pay(pr); init = 0.0)
+            ids = get!(model.credit_line_loans, (from.id, :payroll), Int[])
+            outstanding = sum(total_due(l) for l in debtor_loans(model, from) if l.id in ids; init = 0.0)
+            room = round(p.payroll_overdraft_limit * wages_due - outstanding, digits = 4)                       # 2 Nov: a line, not a bottomless well
+            if p.overdraft_requires_cash_flow                                                                   # 2 Nov: a transitory gap only — positive operating result lately, and covered by receivables
+                eligible = length(from.operating_history) >= p.overdraft_lookback && sum(from.operating_history) > 0
+                room = eligible ? min(room, round(p.overdraft_receivables_cover * receivables(model, from), digits = 4)) : 0.0
+            end
+            short = round(min(wages_due - available, room), digits = 4)
+            if short > 1e-6                                                       # 1 Nov: the payroll overdraft — the bank lends the wage shortfall
+                bank = some_bank(model, from)                                     # bank credit under both monies (a SuMSy bank lends what it holds)
+                if bank !== nothing && (p.monetary_system == :sumsy || short <= lending_room(model, bank) + 1e-9)
+                    before = cash(from)
+                    lid = make_loan!(model, bank, from, short, :payroll; term = p.payroll_overdraft_term); lid === nothing || push!(ids, lid)
+                    model.payroll_overdraft_this_round += round(max(cash(from) - before, 0.0), digits = 4)
+                end
+                available = round(min(sum(pr.amount for pr in mine), cash(from)), digits = 4)
+            end
+        end
+        if p.expansion_credit && from isa Enterprise && any(m.unmet_demand for m in values(from.market))   # 2 Nov: proof of demand → working capital for the whole shortfall
+            total = sum(pr.amount for pr in mine)
+            ids = get!(model.credit_line_loans, (from.id, :expansion), Int[])
+            outstanding = sum(total_due(l) for l in debtor_loans(model, from) if l.id in ids; init = 0.0)
+            short = round(min(total - available, p.expansion_credit_limit * total - outstanding), digits = 4)   # 2 Nov: within the line
+            if short > 1e-6
+                bank = some_bank(model, from)
+                if bank !== nothing && (p.monetary_system == :sumsy || short <= lending_room(model, bank) + 1e-9)
+                    before = cash(from)
+                    lid = make_loan!(model, bank, from, short, :expansion; term = p.expansion_credit_term); lid === nothing || push!(ids, lid)
+                    model.expansion_credit_this_round += round(max(cash(from) - before, 0.0), digits = 4)
+                end
+                available = round(min(total, cash(from)), digits = 4)
+            end
+        end
         for pr in mine
             paid = round(min(pr.amount, available), digits = 4)
             to = model[pr.to_id]
@@ -393,21 +431,23 @@ pay!(model, from::Agent, to::Agent, amount::Float64, purpose::Symbol) = (promise
 
 """The consumption tax rate in force: the statutory rate times its scale (the fiscal policy moves the scale)."""
 consumption_tax_rate(model) = parameters(model).consumption_tax_rate * model.consumption_tax_scale
+# 1 Nov: services may carry their own VAT rate (Belgium: 21 % on most services against 6 % on bread); NaN = the same as bread
+consumption_tax_rate(model, good::Symbol) = (good == :service && !isnan(parameters(model).consumption_tax_rate_services)) ? parameters(model).consumption_tax_rate_services * model.consumption_tax_scale : consumption_tax_rate(model)
 
 """What a person pays for a consumption good priced at `price`: the price plus the consumption tax."""
-gross_price(model, buyer::Agent, price::Float64) = buyer isa Person ? round(price * (1 + consumption_tax_rate(model)), digits = 4) : price
+gross_price(model, buyer::Agent, price::Float64; good::Symbol = :bread) = buyer isa Person ? round(price * (1 + consumption_tax_rate(model, good)), digits = 4) : price
 
 """
     pay_consumption!(model, buyer, seller, price, purpose)
 
-A person buys bread or a ticket: the negotiated price goes to the seller, the consumption tax on it to the government
+A person buys bread or a service: the negotiated price goes to the seller, the consumption tax on it to the government
 (priority 3, booked as tax at settlement). Enterprises buying bread (none do) or grain are not taxed.
 """
 function pay_consumption!(model, buyer::Agent, seller::Agent, price::Float64, purpose::Symbol)
     pay!(model, buyer, seller, price, purpose)
     seller isa Enterprise && (seller.revenue_period += price; seller.revenue_this_round += price)
     buyer isa Person || return price
-    tax = round(price * consumption_tax_rate(model), digits = 4)
+    tax = round(price * consumption_tax_rate(model, purpose == :service ? :service : :bread), digits = 4)   # 1 Nov: the good's own rate
     if tax > 1e-6
         promise!(model, buyer, government(model), tax, :consumption_tax, 3, :tax)
         model.consumption_tax_this_round += tax
@@ -776,7 +816,7 @@ end
 function seize_enterprise!(model, loan::Loan)
     debtor = model[loan.debtor_id]
     p = parameters(model)
-    if p.settlement == :invoicing && debtor.kind in (:farm, :bakery, :theatre)
+    if p.settlement == :invoicing && debtor.kind in (:farm, :bakery, :services)
         return nothing              # 23 Sept: loan arrears are overdue obligations in the liquidation test; no separate seizure
     end
     if p.settlement == :invoicing && p.bank_bailout && is_bank(debtor)
@@ -828,7 +868,7 @@ of the firm's book value — or the book value is nil or negative while anything
 """
 function insolvent(model, e::Enterprise)
     p = parameters(model)
-    e.kind in (:farm, :bakery, :theatre) || return false
+    e.kind in (:farm, :bakery, :services) || return false
     if p.liquidation_test == :book
         overdue = invoices_overdue(model, e, p.liquidation_overdue_rounds)
         overdue > 1e-6 || return false
@@ -893,7 +933,7 @@ end
 """Spare cash a would-be buyer can put into a firm: above the cushion for a person, above the reserve for a producer."""
 function spare_for_purchase(model, a::Agent)
     a isa Person && return max(cash(a) - buffer_target(model, a), 0.0)
-    (a isa Enterprise && a.kind in (:farm, :bakery, :theatre) && a.alive) || return 0.0
+    (a isa Enterprise && a.kind in (:farm, :bakery, :services) && a.alive) || return 0.0
     return max(cash(a) - reserve_target(model, a), 0.0)
 end
 
@@ -913,6 +953,7 @@ function refound!(model, e::Enterprise)
     p = parameters(model)
     book = max(book_value_net(model, e), 0.0)
     price = round(max(p.liquidation_price_share * book, total_debt(model, e) - cash(e), 0.0), digits = 4)
+    p.refound_working_capital_months > 0 && !isempty(e.turnover_history) && (price = round(price + p.refound_working_capital_months * sum(e.turnover_history) / length(e.turnover_history), digits = 4))   # 2 Nov: working capital
     price <= 1e-6 && return false
     stays_coop = e.ownership == :cooperative && p.liquidated_coop_stays_coop
     pool = stays_coop ? [model[id] for id in keys(e.members) if model[id] isa Person && model[id].alive] :
@@ -1004,7 +1045,7 @@ unpaid invoices lost by the suppliers).
 """
 function liquidate_insolvent_firms!(model)
     parameters(model).settlement == :invoicing || return nothing
-    for e in [x for x in alive_agents(model) if x isa Enterprise && x.alive && x.kind in (:farm, :bakery, :theatre)]
+    for e in [x for x in alive_agents(model) if x isa Enterprise && x.alive && x.kind in (:farm, :bakery, :services)]
         insolvent(model, e) || continue
         liquidate!(model, e, :overdue_invoices)
     end
@@ -1081,13 +1122,13 @@ profit_tax_base(model, e::Enterprise) = max(e.revenue_period - parameters(model)
     tax_profits!(model)
 
 Every round the firm's interest is added to its costs for the period; at the end of each `profit_tax_period` farms,
-bakeries and theatres are charged `profit_tax_rate` × the profit family's scale × their period profit, and the period's
+bakeries and services are charged `profit_tax_rate` × the profit family's scale × their period profit, and the period's
 accounts start again. Under settlement = :invoicing the tax is an invoice to the government, payable next month; under
 the old system it is paid at once, with arrears for what cannot be paid.
 """
 function tax_profits!(model)
     p = parameters(model)
-    producers = [e for e in alive_agents(model) if e isa Enterprise && e.kind in (:farm, :bakery, :theatre)]
+    producers = [e for e in alive_agents(model) if e isa Enterprise && e.kind in (:farm, :bakery, :services)]
     for e in producers; e.materials_period += e.interest_paid; end
     if p.profit_tax_rate <= 0                                         # no profit tax: keep the period accounts from growing
         foreach(e -> (e.revenue_period = 0.0; e.materials_period = 0.0; e.labour_period = 0.0), producers)
@@ -1195,7 +1236,7 @@ function start_firm!(model, e::Enterprise, founders::Vector, ownership::Symbol)
     e.alive = true
     empty!(e.grain); empty!(e.bread); empty!(e.dividend_history); empty!(e.net_history); empty!(e.turnover_history)
     empty!(e.members); empty!(e.membership_unpaid); empty!(e.member_since); empty!(e.patronage_log); empty!(e.patronage_this_round)
-    e.production_target = e.kind == :theatre ? max(ceil(Int, p.number_of_persons * p.entertainment_propensity / p.customers_per_labour_unit / max(length(enterprises(model, :theatre)), 1)), 1) :
+    e.production_target = e.kind == :services ? max(ceil(Int, p.number_of_persons * p.entertainment_propensity / services_per_labour_unit(model) / max(length(enterprises(model, :services)), 1)), 1) :
                                                p.initial_production_target
     e.hired_labour = 0.0; e.rented_land = 0; e.land_let = 0; e.wage_bill = 0.0; e.operating_net = 0.0; e.interest_paid = 0.0
     e.share_price = 0.0; e.paid_in_capital = 0.0; e.retained_reserve = 0.0; e.land_levy_arrears = 0.0
@@ -1228,7 +1269,7 @@ founding (`pay_in_equity!`). If they raise nothing, the attempt fails and is tri
 function refound_missing_producers!(model)
     p = parameters(model)
     p.refound_minimum > 0 || return nothing
-    for kind in (p.entertainment ? (:farm, :bakery, :theatre) : (:farm, :bakery))      # 25 Sept: theatres too
+    for kind in (p.entertainment ? (:farm, :bakery, :services) : (:farm, :bakery))      # 25 Sept: services too
         length(enterprises(model, kind)) >= p.refound_minimum && continue
         current_round(model) - get(model.refound_last, kind, -10^6) >= p.refound_cooldown || continue   # a waiting period between attempts
         model.refound_last[kind] = current_round(model)
@@ -1251,7 +1292,7 @@ function refound_missing_producers!(model)
 end
 
 
-const ENTRY_GOOD = OrderedDict(:farm => :grain, :bakery => :bread, :theatre => :ticket)
+const ENTRY_GOOD = OrderedDict(:farm => :grain, :bakery => :bread, :services => :service)
 
 """A firm of `kind` to found: the most recently closed one's shell, or a new agent priced like its competitors."""
 function firm_shell!(model, kind::Symbol)
@@ -1278,7 +1319,7 @@ when unmet demand has been at least `entry_unmet_share` for `entry_unmet_months`
 function market_entry!(model)
     p = parameters(model)
     p.market_entry || return nothing
-    start = OrderedDict(:farm => p.number_of_farms, :bakery => p.number_of_bakeries, :theatre => p.entertainment ? p.number_of_theatres : 0)
+    start = OrderedDict(:farm => p.number_of_farms, :bakery => p.number_of_bakeries, :services => p.entertainment ? p.number_of_services : 0)
     for (kind, good) in ENTRY_GOOD
         firms = enterprises(model, kind)
         isempty(firms) && continue                                       # a missing kind is restarted by refound_missing_producers!
@@ -1611,7 +1652,7 @@ function tax_enterprises!(model)
     p.enterprise_tax == :none && return nothing
     gov = government(model)
     for e in alive_agents(model)
-        e isa Enterprise && e.kind in (:farm, :bakery, :theatre, :bank) || continue
+        e isa Enterprise && e.kind in (:farm, :bakery, :services, :bank) || continue
         p.enterprise_tax == :reserves && is_sumsy(model) && !is_bank(e) && continue   # 22 Oct (D8): under SuMSy a producer's cash already pays the fee — no second charge on the same money
         if p.enterprise_tax == :income
             base = is_bank(e) ? e.interest_received : max(e.operating_net - e.interest_paid, 0.0)

@@ -416,12 +416,12 @@ function volunteer!(model)
 end
 
 """
-    staff_theatres_with_volunteers!(model)
+    staff_services_with_volunteers!(model)
 
-After the labour markets: a theatre short of the hands its seats need takes villagers' unhired labour, unpaid, up to the
+After the labour markets: a services short of the hands its seats need takes villagers' unhired labour, unpaid, up to the
 shortfall — the paid hiring first, volunteers for the rest.
 """
-staff_theatres_with_volunteers!(model) = staff_with_volunteers!(model, (:theatre,))
+staff_services_with_volunteers!(model) = staff_with_volunteers!(model, (:services,))
 
 """
     staff_with_volunteers!(model, kinds)
@@ -443,7 +443,7 @@ function staff_with_volunteers!(model, kinds)
             units > 1e-9 || continue
             w.labour_available -= units; w.volunteer_hours += units
             t.volunteer_labour += units; need -= units
-            log_event!(model, :volunteer; theatre = t.id, worker = w.id, units = units)
+            log_event!(model, :volunteer; services = t.id, worker = w.id, units = units)
         end
     end
     return nothing
@@ -453,7 +453,7 @@ end
     apply_debt_ceiling!(model)
 
 `public_debt_limit`: the public debt (as recorded at the end of last month) against the village's yearly output (bread and
-ticket sales, last twelve months). Over the ceiling, spending is scaled to what the ceiling allows (proportionally, never
+service sales, last twelve months). Over the ceiling, spending is scaled to what the ceiling allows (proportionally, never
 below `public_spending_floor`); under it, full spending. Before the first year is complete there is no scaling.
 """
 function apply_debt_ceiling!(model)
@@ -461,7 +461,7 @@ function apply_debt_ceiling!(model)
     p.public_debt_limit > 0 || return nothing
     d = model.data
     length(d) >= 12 || return nothing
-    output = sum(r.bread_sold * r.price_bread + r.ticket_revenue for r in d[end-11:end]; init = 0.0)
+    output = sum(r.bread_sold * r.price_bread + r.service_revenue for r in d[end-11:end]; init = 0.0)
     debt = d[end].government_debt
     ceiling = p.public_debt_limit * output
     model.spending_scale = (ceiling > 0 && debt > ceiling) ? clamp(ceiling / debt, p.public_spending_floor, 1.0) : 1.0

@@ -281,7 +281,7 @@ end
 
 function seize_enterprise_peer!(model, l::PeerLoan)
     b = model[l.borrower_id]
-    if parameters(model).settlement == :invoicing && b isa Enterprise && b.kind in (:farm, :bakery, :theatre)
+    if parameters(model).settlement == :invoicing && b isa Enterprise && b.kind in (:farm, :bakery, :services)
         return nothing              # 23 Sept: peer-loan arrears are overdue obligations in the liquidation test; no separate seizure
     end
     borrower = model[l.borrower_id]; lender = model[l.lender_id]

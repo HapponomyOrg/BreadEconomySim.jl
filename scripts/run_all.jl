@@ -51,7 +51,7 @@ using Dates, Pkg, Distributed
 
 const ROOT = normpath(joinpath(@__DIR__, ".."))
 
-const MODEL_VERSION = "2026-11-01.0"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
+const MODEL_VERSION = "2026-11-02.1"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
 
 # ---- packages (once per session) ---------------------------------------------------------------------------------------
 const PACKAGES_READY = Ref(false)
@@ -211,26 +211,35 @@ function part_number(base::String, f::String)
     return tryparse(Int, f[length(prefix)+1:end-4])
 end
 
+# 1 Nov 2026: the theatre became the services sector (the firm kind :services, the good :service). Result folders written
+# before carry the old column names; rename them on reading so summaries of old folders keep working.
+function modernise_columns!(df)
+    for c in names(df)
+        n = replace(replace(replace(replace(String(c), "theatres" => "services"), "theatre" => "services"), "tickets" => "services"), "ticket" => "service")
+        n != String(c) && !(n in names(df)) && rename!(df, c => n)
+    end
+    return df
+end
 """Read a file written by `write_split` — the whole file, or its parts in order."""
 function read_split(path::String)
-    isfile(path) && return CSV.read(path, DataFrame)
+    isfile(path) && return modernise_columns!(CSV.read(path, DataFrame))
     base = path[1:end-4]
     parts = sort([f for f in readdir(dirname(path); join = true) if part_number(base, f) !== nothing]; by = f -> part_number(base, f))
     isempty(parts) && error("neither $(path) nor its parts exist")
-    return reduce((a, b) -> vcat(a, b; cols = :union), (CSV.read(f, DataFrame) for f in parts))
+    return reduce((a, b) -> vcat(a, b; cols = :union), (modernise_columns!(CSV.read(f, DataFrame)) for f in parts))
 end
 
 """One row per rung and village: the numbers the report quotes (means over the runs, with the worst run and the count of
 runs in which the village stayed whole, i.e. lost at most one person in sixteen)."""
 function summarise(rounds::DataFrame, N::Int)
-    # 26 Oct: the model's own GDP (bread, tickets, premium loaves, public wages, the banks' margin, stock changes) where the run has it;
-    # older runs fall back to bread and tickets only, which leaves out the government and overstates the debt ratio
-    rounds.gdp_round = hasproperty(rounds, :gdp_nominal) ? coalesce.(rounds.gdp_nominal, 0.0) : coalesce.(rounds.bread_sold .* coalesce.(rounds.price_bread, 0.0) .+ rounds.ticket_revenue, 0.0)
+    # 26 Oct: the model's own GDP (bread, services, premium loaves, public wages, the banks' margin, stock changes) where the run has it;
+    # older runs fall back to bread and services only, which leaves out the government and overstates the debt ratio
+    rounds.gdp_round = hasproperty(rounds, :gdp_nominal) ? coalesce.(rounds.gdp_nominal, 0.0) : coalesce.(rounds.bread_sold .* coalesce.(rounds.price_bread, 0.0) .+ rounds.service_revenue, 0.0)
     rounds.gdp_head_round = hasproperty(rounds, :gdp_per_head_loaves) ? coalesce.(rounds.gdp_per_head_loaves, NaN) : fill(NaN, nrow(rounds))
     last_rows = combine(groupby(sort(rounds, :round), [:rung, :system, :seed]), last)
     maxround = maximum(rounds.round)
     tail = combine(groupby(filter(r -> r.round > maxround - 12, rounds), [:rung, :system, :seed]),
-        :gdp_round => mean => :gdp, :gdp_head_round => (x -> (v = filter(isfinite, x); isempty(v) ? missing : mean(v))) => :gdp_per_head, :tickets_sold => mean => :tickets, :price_bread => (x -> mean(skipmissing(x))) => :bread_price,
+        :gdp_round => mean => :gdp, :gdp_head_round => (x -> (v = filter(isfinite, x); isempty(v) ? missing : mean(v))) => :gdp_per_head, :services_sold => mean => :services, :price_bread => (x -> mean(skipmissing(x))) => :bread_price,
         :unemployed => mean => :unemployed, :tax => mean => :revenue, :government_outlay => mean => :outlay)
     # every run is kept: a run that ended early (a village that lost its last farm or bakery) has no rows in the tail window,
     # and an inner join silently dropped it — survivorship bias (review 3). Left join; the run's last recorded row stands.
@@ -264,7 +273,7 @@ function summarise(rounds::DataFrame, N::Int)
         :persons_alive => m => :alive_at_end, :persons_alive => minimum => :alive_worst,
         [:persons_alive, :collapsed] => ((a, c) -> count(i -> !c[i] && a[i] >= N * 15 / 16, eachindex(a))) => :runs_whole,   # a collapsed village is never whole (review 5)
         [:persons_alive, :collapsed] => ((a, c) -> (v = a[.!c]; isempty(v) ? missing : mean(v))) => :alive_complete_runs,
-        :unemployed => m => :unemployed, :tickets => m => :tickets, :bread_price => m => :bread_price,
+        :unemployed => m => :unemployed, :services => m => :services, :bread_price => m => :bread_price,
         :government_debt => m => :public_debt, :debt_pct_gdp => m => :public_debt_pct_gdp, :gdp_per_head => m => :gdp_per_head_loaves, :shortfall => m => :shortfall_per_month,
         :debt_peak => m => :public_debt_peak, :debt_peak_month => m => :public_debt_peak_month,
         :owes_nothing => count => :runs_debt_repaid,   # 15 Oct: runs that owe nothing at the end (a run that never borrowed counted as unpaid before)

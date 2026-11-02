@@ -123,13 +123,13 @@ function record!(model)
     banks = enterprises(model, :bank); gov = government(model)
     r = current_round(model)
     ev = @view model.events[model.event_start:end]
-    # 26 Oct (Stef): GDP by spending, each month — final sales of bread, theatre tickets and premium loaves; public wages (government
+    # 26 Oct (Stef): GDP by spending, each month — final sales of bread, services services and premium loaves; public wages (government
     # output at cost, as the national accounts value it); the banks' margin (the month's change in retained interest plus account fees);
     # and the change in the bakeries' unsold stock at the price paid. Grain is an input to bread and is not counted again; land changes
     # hands without being produced. Public debt as a share of GDP uses the trailing twelve months (annualised while fewer).
     gdp_pb = average_price(model, :bread)
     gdp_pb = (gdp_pb isa Real && isfinite(gdp_pb) && gdp_pb > 0) ? gdp_pb : expected_price(model, :bread)
-    gdp_c = sum(t[1] * t[2] for t in model.transactions[:bread]; init = 0.0) + sum(t[1] * t[2] for t in model.transactions[:ticket]; init = 0.0) + model.premium_revenue_this_round
+    gdp_c = sum(t[1] * t[2] for t in model.transactions[:bread]; init = 0.0) + sum(t[1] * t[2] for t in model.transactions[:service]; init = 0.0) + model.premium_revenue_this_round
     gdp_g = gov.wage_bill
     gdp_retained = sum(b.retained_interest for b in banks; init = 0.0)
     gdp_b = (gdp_retained - model.gdp_prev_retained) + model.account_fees_this_round
@@ -169,7 +169,7 @@ function record!(model)
         gini_wealth_attributed = (let pool = sum(book_value(model, e) for e in model.enterprise_list if e.alive && is_producer(e) && isempty(e.shares) && isempty(e.members); init = 0.0)
             isempty(ps) ? NaN : gini([mw(w) + pool / length(ps) for w in ps]) end),
         intervention = model.intervention, intervention_months = model.intervention_months,
-        basic_income = model.basic_income_this_round, ground_rent_handout = model.ground_rent_handout_this_round, levy_dividend = model.levy_dividend_this_round, levy_paid_out = model.levy_dividend_this_round, levy_paid_out_per_head = model.levy_dividend_this_round / max(length(ps), 1), surplus_debt_repaid = model.surplus_debt_repaid_this_round, surplus_debt_repaid_total = model.surplus_debt_repaid_total, ground_rent = model.ground_rent_this_round,
+        basic_income = model.basic_income_this_round, ground_rent_handout = model.ground_rent_handout_this_round, payroll_overdraft = model.payroll_overdraft_this_round, expansion_credit = model.expansion_credit_this_round, levy_dividend = model.levy_dividend_this_round, levy_paid_out = model.levy_dividend_this_round, levy_paid_out_per_head = model.levy_dividend_this_round / max(length(ps), 1), surplus_debt_repaid = model.surplus_debt_repaid_this_round, surplus_debt_repaid_total = model.surplus_debt_repaid_total, ground_rent = model.ground_rent_this_round,
         premium_loaves = model.premium_loaves_this_round, premium_revenue = model.premium_revenue_this_round, premium_labour = model.premium_labour_this_round,
         gold_price = model.gold_price, gold_valuation = model.gold_valuation, gold_sold = model.gold_sold_this_round,
         gold_holders = count(w -> w.gold >= 1.0, ps), gold_value_in_meals = sum(gold_value(model, w) for w in ps; init = 0.0) / max(meal_price(model), 1e-9), gold_top10_share = (let g = sort([w.gold for w in ps]; rev = true), t = sum(g; init = 0.0); t > 0 ? sum(g[1:max(1, length(g) ÷ 10)]) / t : NaN end),
@@ -193,7 +193,7 @@ function record!(model)
         profit_tax = model.profit_tax_this_round, profit_tax_scale = model.profit_tax_scale, parking_tax_scale = model.parking_tax_scale,
         income_tax_accrued = sum(w.income_tax_accrued for w in ps; init = 0.0), income_tax_charged = model.income_tax_charged_this_round,
         wealth_tax_arrears = sum(w.wealth_tax_arrears for w in ps; init = 0.0),
-        consumption_tax_rate_now = consumption_tax_rate(model),
+        consumption_tax_rate_now = consumption_tax_rate(model), calibration = String(parameters(model).calibration),
         bracket_top_rate = maximum(model.bracket_rates), bracket_bottom_rate = minimum(model.bracket_rates),
         bank_retained_interest = sum(b.retained_interest for b in banks; init = 0.0),
         cumulative_interest_paid = model.cumulative_interest_paid,
@@ -213,7 +213,7 @@ function record!(model)
         fees = model.fees_this_round,
         trade_arrears = sum(pr.amount for pr in model.trade_arrears; init = 0.0),
         interest_rate = mean_or_nan([b.interest_rate for b in banks]),
-        price_bread = average_price(model, :bread), price_grain = average_price(model, :grain), price_ticket = average_price(model, :ticket),
+        price_bread = average_price(model, :bread), price_grain = average_price(model, :grain), price_service = average_price(model, :service),
         price_rent = average_price(model, :rent), price_wage = average_price(model, :wage),
         wage_bid_producers = mean_or_nan([e.bid[:wage] for e in alive if is_producer(e)]),
         bread_baked = sum(get(e, :bread, 0.0) for e in ev if e.kind == :bake; init = 0.0),
@@ -254,19 +254,19 @@ function record!(model)
         persons_income = sum(a.labour_income + a.rent_income + a.fee_received for a in ps; init = 0.0) + model.gi_this_round + model.deposit_interest_this_round - model.demurrage_persons_this_round,
         bread_bill = sum(t[1] * t[2] for t in model.transactions[:bread]; init = 0.0),
         gluttony_attempted = model.gluttony_attempted_this_round, gluttony_refused = model.gluttony_refused_this_round,
-        tickets_sold = sum(t[2] for t in model.transactions[:ticket]; init = 0.0),
+        services_sold = sum(t[2] for t in model.transactions[:service]; init = 0.0),
         n_greedy = count(w -> w.greed != :none, ps), hungry_greedy = count(w -> w.greed != :none && w.hunger > 0, ps), hungry_others = count(w -> w.greed == :none && w.hunger > 0, ps),
         cash_greedy = sum(cash(w) for w in ps if w.greed != :none; init = 0.0), land_greedy = sum(w.land for w in ps if w.greed != :none; init = 0),
         wealth_greedy = sum(mw(w) for w in ps if w.greed != :none; init = 0.0), wealth_persons = sum(mw(w) for w in ps; init = 0.0),
         bread_greedy = sum(bread_units(w) for w in ps if w.greed == :greedy; init = 0.0),
-        greedy_loaves = model.greedy_loaves_this_round, greedy_tickets = model.greedy_tickets_this_round, ration = model.ration_this_round,
+        greedy_loaves = model.greedy_loaves_this_round, greedy_services = model.greedy_services_this_round, ration = model.ration_this_round,
         tier_multiplier = mean_or_nan([e.tier_multiplier for e in alive if is_bakery(e)]), tier_sold = sum(e.tier_sold for e in alive if is_bakery(e); init = 0), tier_revenue = model.tier_revenue_this_round,
         n_consumers = count(w -> w.greed == :greedy, ps), n_hoarders = count(w -> w.greed == :greedy, ps),
         wealth_hoarders = sum(mw(w) for w in ps if w.greed == :greedy; init = 0.0), land_hoarders = sum(w.land for w in ps if w.greed == :greedy; init = 0),
         shares_hoarders = sum(get(e.shares, w.id, 0.0) for e in alive if e isa Enterprise && e.ownership == :shareholders for w in ps if w.greed == :greedy; init = 0.0),
-        greedy_land = model.greedy_land_this_round, greedy_shares = model.greedy_shares_this_round, ticket_revenue = sum(t[1] * t[2] for t in model.transactions[:ticket]; init = 0.0),
-        theatre_labour = sum(e.hired_labour for e in alive if is_theatre(e); init = 0.0), cash_theatres = sum(cash(e) for e in alive if is_theatre(e); init = 0.0),
-        theatres_open = count(is_theatre, alive),
+        greedy_land = model.greedy_land_this_round, greedy_shares = model.greedy_shares_this_round, service_revenue = sum(t[1] * t[2] for t in model.transactions[:service]; init = 0.0),
+        services_labour = sum(e.hired_labour for e in alive if is_services(e); init = 0.0), cash_services = sum(cash(e) for e in alive if is_services(e); init = 0.0),
+        services_open = count(is_services, alive),
         dividends = sum(e.dividend_history[end] for e in alive if e isa Enterprise && e.ownership != :none && !isempty(e.dividend_history); init = 0.0),
         dividend_income_persons = sum(w.dividend_income for w in ps; init = 0.0),
         share_price_mean = mean_or_nan([e.share_price for e in alive if e isa Enterprise && e.ownership == :shareholders && e.share_price > 0]),   # NaN until a share has traded
@@ -358,6 +358,7 @@ function record_and_adapt!(model)
     model.share_firms_cache = nothing
     for e in model.enterprise_list                                     # the last three months' sales, for the liquidation test
         push!(e.turnover_history, e.revenue_this_round); length(e.turnover_history) > 3 && popfirst!(e.turnover_history)
+        push!(e.operating_history, e.operating_net); length(e.operating_history) > 3 && popfirst!(e.operating_history)
         e.revenue_this_round = 0.0
     end
     roll_patronage_window!(model)

@@ -16,8 +16,8 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol; fiscal::Symb
     # four market rounds a month (19 Oct).
     # 25 Oct (Stef): heir_inherits_personal_debt and heir_inherits_firm_debt both off in the base — an heir renounces an estate whose
     # debts exceed its assets, and a bankrupt firm's debt is written off; the switches are for experiments.
-    RULES = (; ask_floor = :cost, collection_floor_in_breads = 2.0, bank_rate_cost_from_going_wage = true, bank_loans_per_labour_unit = 12, greedy_ask_on_paid_price = true, bakeries_bake_to_target = true, respond_to_turned_away = true, lost_share_capped_at_buffer = true, levy_scale_floor = 1.0, price_rise_band = true, pay_overdue_from_cash = true, liquidate_when_insolvent = false, anticipate_hunger = true, posted_consumer_prices = true, land_premium_from_yield = true, land_trade_margin = 0.05, inherit_all_assets = true, heir_inherits_personal_debt = false, heir_inherits_firm_debt = false, price_on_expected_sales = true,   # 24 Oct (Stef): prices fall only when a firm sells less than 90 % of what it expected, on the base ladder too   # 23 Oct: the banks' rate on the going wage, not on the surplus-absorbing bid (it sat at the cap)   # 22 Oct (Stef): debt collection may not take a villager below a meal (two loaves) — at one loaf it caused most of the debt village's deaths (steps 8 and 11)
-               bread_bid_base_multiplier = 1.2, ticket_max_in_breads = 2.0, employer_wage_margin = 0.20, number_of_persons = N, number_of_landowners = N ÷ 4, land_per_person = 1.5, initial_production_target = 10 * N ÷ 128, shares_per_person = 10, shareholder_count = 4, number_of_farms = 4, number_of_bakeries = 4, shows_per_round = 1, theatre_seat_margin = 0.25, unmet_demand_share = 0.05, unsold_share = 0.05, wage_threshold = true, wage_cut_maximum = 0.005, wage_floor_months = 1, joint_labour_market = true, contracts = false, contract_share = 0.8, refound_minimum = 1, uncovered_debt_sale = false, employer_loyalty = true, notice_months = 3, minimum_labour_offer = 0.5, volunteer_share = 1.0, spoilage_acceptance = 0.5, greedy_pricing = true, distress_pricing = true, distress_cost_cutting = true, plan_greedy_on_purchases = true, plan_within_capacity = true, own_market_planning = false, firms_plan_on_sales = true, market_rounds = 1, food_emergency_share = 0.9, employer_loss_tolerance = 0.10, owner_guarantee = true, interest_from_equity = true, bank_capital_ratio = 0.08, founding_equity = true, founders = :distinct, settlement = SETTLEMENT,   # 23 Sept: founders capitalise their firms
+    RULES = (; ask_floor = :cost, collection_floor_in_breads = 2.0, bank_rate_cost_from_going_wage = true, bank_loans_per_labour_unit = 12, greedy_ask_on_paid_price = true, bakeries_bake_to_target = true, respond_to_turned_away = true, lost_share_capped_at_buffer = true, levy_scale_floor = 1.0, price_rise_band = true, pay_overdue_from_cash = true, liquidate_when_insolvent = false, settlement_order = :belgian, payroll_overdraft = true, overdraft_requires_cash_flow = true, refound_working_capital_months = 1.0, expansion_credit = true, market_entry = true, entry_coop_share = 0.0, anticipate_hunger = true, posted_consumer_prices = true, land_premium_from_yield = true, land_trade_margin = 0.05, calibrated(:belgium)..., inherit_all_assets = true, heir_inherits_personal_debt = false, heir_inherits_firm_debt = false, price_on_expected_sales = true,   # 24 Oct (Stef): prices fall only when a firm sells less than 90 % of what it expected, on the base ladder too   # 23 Oct: the banks' rate on the going wage, not on the surplus-absorbing bid (it sat at the cap)   # 22 Oct (Stef): debt collection may not take a villager below a meal (two loaves) — at one loaf it caused most of the debt village's deaths (steps 8 and 11)
+               bread_bid_base_multiplier = 1.2, service_max_in_breads = 2.0, employer_wage_margin = 0.20, number_of_persons = N, number_of_landowners = N ÷ 4, land_per_person = 1.5, initial_production_target = 10 * N ÷ 128, shares_per_person = 10, shareholder_count = 4, number_of_farms = 4, number_of_bakeries = 4, shows_per_round = 0, services_seat_margin = 0.25, unmet_demand_share = 0.05, unsold_share = 0.05, wage_threshold = true, wage_cut_maximum = 0.005, wage_floor_months = 1, joint_labour_market = true, contracts = false, contract_share = 0.8, refound_minimum = 1, uncovered_debt_sale = false, employer_loyalty = true, notice_months = 3, minimum_labour_offer = 0.5, volunteer_share = 1.0, spoilage_acceptance = 0.5, greedy_pricing = true, distress_pricing = true, distress_cost_cutting = true, plan_greedy_on_purchases = true, plan_within_capacity = true, own_market_planning = false, firms_plan_on_sales = true, market_rounds = 1, food_emergency_share = 0.9, employer_loss_tolerance = 0.10, owner_guarantee = true, interest_from_equity = true, bank_capital_ratio = 0.08, founding_equity = true, founders = :distinct, settlement = SETTLEMENT,   # 23 Sept: founders capitalise their firms
            # 22 September: :invoicing = the settlement design (cash at the counter, wages at month end, invoices between firms, clearing among banks)
              initial_interest_rate = 0.005, maximum_interest_rate = 0.015,   # a month: 6 % a year to start, at most about 20 %; the rate itself covers the banks' costs (one staff unit per bank: staff scaled with customers bankrupted the banks at 512, 22 Sept)
               demand_based_targets = true, wage_ceiling_from_own_ask = true, expected_price_from_asks = true, ask_increase_only_on_unmet_demand = true,
@@ -26,7 +26,7 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol; fiscal::Symb
               wage_reservation_net_of_tax = true, initial_endowment = :norm, startup_loan_term = 60, land_sales = :reservation,
               gluttony_probability = 0.1, plan_for_gluttony = true, maximum_rounds = rounds, stop_when_half_dead = false, stop_when_stationary = false,
               land_pricing = :market, instalment_purchases = true, stop_without_producers = false)   # 24 Sept: land prices discovered by the money logic, seller credit on both sides, villages run on
-    # Bare bones: no government activity, no benefit, no interest on deposits, no theatre, no margin.
+    # Bare bones: no government activity, no benefit, no interest on deposits, no services, no margin.
     BARE_DEBT = (; RULES..., wage_tax_rate = 0.0, capital_tax_rate = 0.0, unemployment_fee_in_breads = 0.0, minimum_fee_in_breads = 0.0,
                   partial_unemployment_fee = false, government_employment_share = 0.0, account_fee_person = 0.0, account_fee_enterprise = 0.0)
     BARE_SUMSY = (; BARE_DEBT..., monetary_system = :sumsy, dividend_tax_rate = 0.0, guaranteed_income = 5.0, demurrage_free_buffer = 30.0, demurrage_rate = 0.02,
@@ -44,8 +44,8 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol; fiscal::Symb
     # co-op side rung; rungs 10–12 add, cumulatively on rung 8, the price rules, the government reserve and the fiscal policy.
     #   julia --project=. -O1 scripts/ladder2.jl <nseeds> <rounds> all <N> [rung prefix]
     # Resumable: each run is appended to results/ladder2_<N>_rounds.csv; finished (rung, system, seed) triples are skipped.
-    V8_DEBT  = (; planning_margin = 0.1, GOV_DEBT..., DEP..., entertainment = true, government_bonds = true, number_of_theatres = 4, ownership = :shareholders, share_market = true, forward_valuation = true, required_yield_dispersion = 0.002)
-    V8_SUMSY = (; planning_margin = 0.1, GOV_SUMSY..., entertainment = true, number_of_theatres = 4, ownership = :shareholders, share_market = true, forward_valuation = true, required_yield_dispersion = 0.002)
+    V8_DEBT  = (; planning_margin = 0.1, GOV_DEBT..., DEP..., entertainment = true, government_bonds = true, number_of_services = 4, ownership = :shareholders, share_market = true, forward_valuation = true, required_yield_dispersion = 0.002)
+    V8_SUMSY = (; planning_margin = 0.1, GOV_SUMSY..., entertainment = true, number_of_services = 4, ownership = :shareholders, share_market = true, forward_valuation = true, required_yield_dispersion = 0.002)
     # 4 Oct (Stef): the land levy paid out to everyone — Gesell's rule — is the SuMSy village's standard from step 8, where land is owned and traded
     V8_SUMSY = (; V8_SUMSY..., land_levy = true, government_reserve_in_rounds = 3, surplus_tax_reduction_share = 0.0, surplus_redistribution_share = 1.0)
     CHARGE   = (; enterprise_tax = :reserves, enterprise_reserve_tax_rate = 0.02, reserve_tax_exempts_standard_reserve = true)
@@ -63,8 +63,8 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol; fiscal::Symb
     DEMTAX15 = (; wage_tax_rate = 0.0, capital_tax_rate = 0.0, dividend_tax_rate = 0.0, demurrage_tax_rate = 0.015, demurrage_free_buffer = 30.0)   # 14 Oct: a demurrage tax instead of income tax, on debt money
     # 23 Oct (Stef): at least two customers per unit of labour (was 1.0 — one unit per customer); the base has 2.5. 24 Oct: this comment
     # sat mid-line and swallowed the initial prices — the 18 October mistake again; every V8 run of 23–24 Oct (.8, .0, .4, base and realistic) is void.
-    PRODUCTIVE = (; breads_per_grain = 4, customers_per_labour_unit = 2.0, initial_prices = OrderedDict(:bread => 3.0, :grain => 5.2, :rent => 0.75, :wage => 3.92, :ticket => 5.0),
-                  shows_per_round = 2, standard_of_living_tickets = 2, refound_minimum = 4)   # 15 Oct: prices free (Stef: the productive village is for full employment; fixed prices are the test, V8-P)
+    PRODUCTIVE = (; breads_per_grain = 4, customers_per_labour_unit = 2.0, initial_prices = OrderedDict(:bread => 3.0, :grain => 5.2, :rent => 0.75, :wage => 3.92, :service => 5.0),
+                  shows_per_round = 0, standard_of_living_services = 2, refound_minimum = 4)   # 1 Nov: capacity from labour, no seat cap   # 15 Oct: prices free (Stef: the productive village is for full employment; fixed prices are the test, V8-P)
     PRICES   = (;)   # 25 Sept: the realistic price rules are base rules from step 0 (see RULES); the old step 10 is gone
     RESERVE  = (; government_reserve_in_rounds = 3, surplus_tax_reduction_share = 1.0)                                # rung 11: a public reserve, the surplus returned as a tax cut
     FISCAL   = (; tax_policy = :scale, tax_response_coverage = 0.5, tax_response_step = 0.02, tax_scale_maximum = 2.0,
@@ -76,16 +76,15 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol; fiscal::Symb
         ("1 + planning margin",             (; planning_margin = 0.1, bank_bailout = false), (; planning_margin = 0.1, bank_bailout = false)),
         ("2 + government",                  (; planning_margin = 0.1, GOV_DEBT...), (; planning_margin = 0.1, GOV_SUMSY...)),
         ("3 + interest on deposits",        (; planning_margin = 0.1, GOV_DEBT..., DEP...), (; planning_margin = 0.1, GOV_SUMSY...)),
-        ("4 + theatres",                    (; planning_margin = 0.1, GOV_DEBT..., DEP..., entertainment = true, number_of_theatres = 2), (; planning_margin = 0.1, GOV_SUMSY..., entertainment = true, number_of_theatres = 2)),
-        ("5 + government bonds",            (; planning_margin = 0.1, GOV_DEBT..., DEP..., entertainment = true, number_of_theatres = 2, government_bonds = true), (; planning_margin = 0.1, GOV_SUMSY..., entertainment = true, number_of_theatres = 2)),
+        ("4 + services",                    (; planning_margin = 0.1, GOV_DEBT..., DEP..., entertainment = true, number_of_services = 2), (; planning_margin = 0.1, GOV_SUMSY..., entertainment = true, number_of_services = 2)),
+        ("5 + government bonds",            (; planning_margin = 0.1, GOV_DEBT..., DEP..., entertainment = true, number_of_services = 2, government_bonds = true), (; planning_margin = 0.1, GOV_SUMSY..., entertainment = true, number_of_services = 2)),
         # 21 September: the 15 September rung charged 10 % a round on all enterprise cash (`enterprise_reserve_tax_rate` default); at ten seeds every debt
         # village lost its last bakery by round 31–51. The charge now mirrors the demurrage: 2 % a round on cash above the working reserve.
-        ("6 + charge on balances",          (; planning_margin = 0.1, GOV_DEBT..., DEP..., entertainment = true, number_of_theatres = 2, government_bonds = true, CHARGE...), (; planning_margin = 0.1, GOV_SUMSY..., entertainment = true, number_of_theatres = 2, CHARGE...)),
-        ("7 + two more theatres",           (; planning_margin = 0.1, GOV_DEBT..., DEP..., entertainment = true, government_bonds = true, number_of_theatres = 4), (; planning_margin = 0.1, GOV_SUMSY..., entertainment = true, number_of_theatres = 4)),
+        ("6 + charge on balances",          (; planning_margin = 0.1, GOV_DEBT..., DEP..., entertainment = true, number_of_services = 2, government_bonds = true, CHARGE...), (; planning_margin = 0.1, GOV_SUMSY..., entertainment = true, number_of_services = 2, CHARGE...)),
+        ("7 + two more services",           (; planning_margin = 0.1, GOV_DEBT..., DEP..., entertainment = true, government_bonds = true, number_of_services = 4), (; planning_margin = 0.1, GOV_SUMSY..., entertainment = true, number_of_services = 4)),
         ("8 + shareholders & share market", V8_DEBT, V8_SUMSY),
-        # The co-op side rung changes ownership only: two of the four farms, bakeries and theatres become cooperatives.
-        ("9 co-ops (side rung)",            (; V8_DEBT..., cooperative_theatres = 2, ownership = :mixed), (; V8_SUMSY..., cooperative_theatres = 2, ownership = :mixed)),
-        ("10 + government reserve",         (; V8_DEBT..., PRICES..., RESERVE...), (; V8_SUMSY..., PRICES..., RESERVE...)),
+        # The co-op side rung changes ownership only: two of the four farms, bakeries and services become cooperatives.
+        ("9 co-ops (side rung)",            (; V8_DEBT..., cooperative_services = 2, ownership = :mixed), (; V8_SUMSY..., cooperative_services = 2, ownership = :mixed)),
         ("11 + fiscal policy and VAT",      (; V8_DEBT..., PRICES..., RESERVE..., FISCAL...), (; V8_SUMSY..., PRICES..., RESERVE..., FISCAL...)),
         # Stress tests (21 September): greed on the best cases — rung 11 (best surviving) and rung 12 (least indebted), both systems
         ("S1 step 10 + greedy quarter",     (; V8_DEBT..., PRICES..., RESERVE..., GREEDY_Q...), (; V8_SUMSY..., PRICES..., RESERVE..., GREEDY_Q...)),
@@ -95,19 +94,18 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol; fiscal::Symb
         # The best SuMSy village (21 September): SuMSy has no debt to minimise, so its endpoint is chosen on its own measures —
         # no hunger and the most evenly spread money — under the realistic price rules (they are behaviour, not policy): the
         # co-op village of side rung 9 with rung 10's prices and rung 11's public reserve. Run on both sides for the mirror.
-        ("B best SuMSy village: co-ops + reserve", (; V8_DEBT..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE...), (; V8_SUMSY..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE...)),
-        ("B-nodiv best village, the land tax kept as revenue", (; V8_DEBT..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE...), (; V8_SUMSY..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE...)),   # 24 Oct (the talk chat): rung B with the levy as ordinary revenue — no dividend, no meal; the benefit on both sides (apply_fiscal_package sets it)
-        ("BG best village, with gold", (; V8_DEBT..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE..., gold_grams_per_villager = 100.0), (; V8_SUMSY..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE..., gold_grams_per_villager = 100.0)),   # 23 Oct (the talk chat): rung B with the gold holders of R8, for the inequality slide
-        ("10G step 10 with gold", (; V8_DEBT..., PRICES..., RESERVE..., gold_grams_per_villager = 100.0), (; V8_SUMSY..., PRICES..., RESERVE..., gold_grams_per_villager = 100.0)),   # 25 Oct (the talk chat): BG without the co-ops
-        ("10-nodiv step 10, the land tax kept as revenue", (; V8_DEBT..., PRICES..., RESERVE...), (; V8_SUMSY..., PRICES..., RESERVE...)),   # 25 Oct (the talk chat): B-nodiv without the co-ops; the levy kept as revenue is set by name in apply_fiscal_package
-        ("SB1 best SuMSy + greedy quarter", (; V8_DEBT..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE..., GREEDY_Q...), (; V8_SUMSY..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE..., GREEDY_Q...)),
-        ("SB2 best SuMSy + everyone greedy", (; V8_DEBT..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE..., GREEDY_A...), (; V8_SUMSY..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE..., GREEDY_A...)),
+        ("B best SuMSy village: co-ops + reserve", (; V8_DEBT..., cooperative_services = 2, ownership = :mixed, PRICES..., RESERVE...), (; V8_SUMSY..., cooperative_services = 2, ownership = :mixed, PRICES..., RESERVE...)),
+        ("B-nodiv best village, the land tax kept as revenue", (; V8_DEBT..., cooperative_services = 2, ownership = :mixed, PRICES..., RESERVE...), (; V8_SUMSY..., cooperative_services = 2, ownership = :mixed, PRICES..., RESERVE...)),   # 24 Oct (the talk chat): rung B with the levy as ordinary revenue — no dividend, no meal; the benefit on both sides (apply_fiscal_package sets it)
+        ("BG best village, with gold", (; V8_DEBT..., cooperative_services = 2, ownership = :mixed, PRICES..., RESERVE..., gold_grams_per_villager = 100.0), (; V8_SUMSY..., cooperative_services = 2, ownership = :mixed, PRICES..., RESERVE..., gold_grams_per_villager = 100.0)),   # 23 Oct (the talk chat): rung B with the gold holders of R8, for the inequality slide
+        ("8G step 8 with gold", (; V8_DEBT..., PRICES..., gold_grams_per_villager = 100.0), (; V8_SUMSY..., PRICES..., gold_grams_per_villager = 100.0)),   # 25 Oct (the talk chat): BG without the co-ops
+        ("8-nodiv step 8, the land tax kept as revenue", (; V8_DEBT..., PRICES...), (; V8_SUMSY..., PRICES...)),   # 25 Oct (the talk chat): B-nodiv without the co-ops; the levy kept as revenue is set by name in apply_fiscal_package
+        ("SB1 best SuMSy + greedy quarter", (; V8_DEBT..., cooperative_services = 2, ownership = :mixed, PRICES..., RESERVE..., GREEDY_Q...), (; V8_SUMSY..., cooperative_services = 2, ownership = :mixed, PRICES..., RESERVE..., GREEDY_Q...)),
+        ("SB2 best SuMSy + everyone greedy", (; V8_DEBT..., cooperative_services = 2, ownership = :mixed, PRICES..., RESERVE..., GREEDY_A...), (; V8_SUMSY..., cooperative_services = 2, ownership = :mixed, PRICES..., RESERVE..., GREEDY_A...)),
         # Full money stock (23 September): SuMSy villages started at their equilibrium money stock, set against the same steps
         # started with everyone at the cushion — the startup public debt of a filling-up village should disappear. SuMSy side only.
         ("E2 + government, full money stock", (;), (; planning_margin = 0.1, GOV_SUMSY..., EQ...)),
         ("E8 + shareholders & share market, full money stock", (;), (; V8_SUMSY..., EQ...)),
-        ("E10 + government reserve, full money stock", (;), (; V8_SUMSY..., PRICES..., RESERVE..., EQ...)),
-        ("EB best SuMSy village, full money stock", (;), (; V8_SUMSY..., cooperative_theatres = 2, ownership = :mixed, PRICES..., RESERVE..., EQ...)),
+        ("EB best SuMSy village, full money stock", (;), (; V8_SUMSY..., cooperative_services = 2, ownership = :mixed, PRICES..., RESERVE..., EQ...)),
         # Land levy variants (24 September, Gesell's Freiland): the key SuMSy steps with a levy on land equal to the cost of holding money
         # plus a margin, so that land is no better a store of value than money. Without it, under SuMSy land beats money at any price.
         ("L2 + government, land levy", (;), (; planning_margin = 0.1, GOV_SUMSY..., RESERVE..., land_levy = true)),   # the reserve rule scales the levy down when revenue exceeds need (24 Sept)
@@ -119,24 +117,17 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol; fiscal::Symb
         ("G8-30 step 8, public employment 30 %", (; V8_DEBT..., government_employment_share = 0.3), (; V8_SUMSY..., government_employment_share = 0.3)),
         ("G8-40 step 8, public employment 40 %", (; V8_DEBT..., government_employment_share = 0.4), (; V8_SUMSY..., government_employment_share = 0.4)),
         ("G8-50 step 8, public employment 50 %", (; V8_DEBT..., government_employment_share = 0.5), (; V8_SUMSY..., government_employment_share = 0.5)),
-        ("G10-20 step 10, public employment 20 %", (; V8_DEBT..., PRICES..., RESERVE..., government_employment_share = 0.2), (; V8_SUMSY..., PRICES..., RESERVE..., government_employment_share = 0.2)),
-        ("G10-30 step 10, public employment 30 %", (; V8_DEBT..., PRICES..., RESERVE..., government_employment_share = 0.3), (; V8_SUMSY..., PRICES..., RESERVE..., government_employment_share = 0.3)),
-        ("G10-40 step 10, public employment 40 %", (; V8_DEBT..., PRICES..., RESERVE..., government_employment_share = 0.4), (; V8_SUMSY..., PRICES..., RESERVE..., government_employment_share = 0.4)),
-        ("G10-50 step 10, public employment 50 %", (; V8_DEBT..., PRICES..., RESERVE..., government_employment_share = 0.5), (; V8_SUMSY..., PRICES..., RESERVE..., government_employment_share = 0.5)),
         # The 2×2 (review 2, §4.4): the monetary system crossed with the fiscal package, on the rung-11 village. X1 = SuMSy money
         # with the debt village's taxes and benefit; X2 = debt money with the SuMSy village's surcharge and no benefit. Together
         # with rungs 11 debt and 11 SuMSy they separate what the money does from what the fiscal package does. Only the named
         # side of each X rung is run.
         # Market entry twins (25 September, design_market_entry_2026-09-25.md): the key steps with entry on and no cooperative entrants,
         # set against the same steps without it (the ladder keeps entry off, one institution per step).
-        ("N8 step 8, market entry", (; V8_DEBT..., ENTRY...), (; V8_SUMSY..., ENTRY...)),
-        ("N10 step 10, market entry", (; V8_DEBT..., RESERVE..., ENTRY...), (; V8_SUMSY..., RESERVE..., ENTRY...)),
-        ("NB co-op village, market entry", (; V8_DEBT..., cooperative_theatres = 2, ownership = :mixed, RESERVE..., ENTRY...), (; V8_SUMSY..., cooperative_theatres = 2, ownership = :mixed, RESERVE..., ENTRY...)),
+        ("NB co-op village, market entry", (; V8_DEBT..., cooperative_services = 2, ownership = :mixed, RESERVE..., ENTRY...), (; V8_SUMSY..., cooperative_services = 2, ownership = :mixed, RESERVE..., ENTRY...)),
         # Fixed prices (26 September, Stef's question): every transaction at the starting price vector, only quantities move — the
         # reference case against which the price choices are measured. Both villages.
         ("P2 step 2, fixed prices", (; planning_margin = 0.1, GOV_DEBT..., fixed_prices = true), (; planning_margin = 0.1, GOV_SUMSY..., fixed_prices = true)),
         ("P8 step 8, fixed prices", (; V8_DEBT..., fixed_prices = true), (; V8_SUMSY..., fixed_prices = true)),
-        ("P10 step 10, fixed prices", (; V8_DEBT..., RESERVE..., fixed_prices = true), (; V8_SUMSY..., RESERVE..., fixed_prices = true)),
         # Full employment at fixed prices (26 September, for policy makers): 40 % public jobs bring unemployment to a few percent;
         # U8 keeps taxes as they are (the deficit is then visible as debt), UP8 lets each government raise its own taxes until the
         # budget balances (the debt village its income and capital taxes, the SuMSy village its parking tax). Both villages.
@@ -153,8 +144,8 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol; fiscal::Symb
         ("W2-20 step 2, buyers overpay up to 2x (panic buying)", (; planning_margin = 0.1, GOV_DEBT..., bread_bid_base_multiplier = 2.0), (;)),
         ("W8-20 step 8, buyers overpay up to 2x (panic buying)", (; V8_DEBT..., bread_bid_base_multiplier = 2.0), (;)),
         ("W8-13 step 8, buyers overpay up to 1.3x", (; V8_DEBT..., bread_bid_base_multiplier = 1.3), (;)),
-        # The productive village (27 September, for policy makers): cheap bread (four loaves a grain, bread at 3), theatres that need
-        # a worker per customer at a ticket price that covers the wage, households aiming for two tickets a month, failed theatres
+        # The productive village (27 September, for policy makers): cheap bread (four loaves a grain, bread at 3), services that need
+        # a worker per customer at a service price that covers the wage, households aiming for two services a month, failed services
         # restarted while fewer than four are open, prices fixed, 10 % public jobs. Employment then rises to what the villagers'
         # wants allow (~85 %); the question is what the public debt does. Both villages.
         ("V8 productive village, standard of living", (; V8_DEBT..., PRODUCTIVE...), (; V8_SUMSY..., PRODUCTIVE...)),
@@ -162,13 +153,11 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol; fiscal::Symb
         # Austerity (30 September, Stef): the benefit tapers from two loaves to one over six months from month 60 and stays there.
         # Debt side only (SuMSy has no benefit to cut).
         ("A8 step 8, austerity from month 60", (; V8_DEBT..., austerity_start = 60), (;)),
-        ("A10 step 10, austerity from month 60", (; V8_DEBT..., RESERVE..., austerity_start = 60), (;)),
         # The 1 % hoarders (30 September, Stef): one villager in a hundred greedy, hoarding half the surplus. Both villages.
         ("H8 step 8, the richest 1 % greedy (they spend or invest every surplus)", (; V8_DEBT..., greed = true, greed_share = 0.01, greed_hoarding = 0.5, greed_month = 12), (; V8_SUMSY..., greed = true, greed_month = 12, greed_share = 0.01, greed_hoarding = 0.5)),
         # A public investment (3 October, Stef — public transport): five years of building with 5 % of the village's capacity and
         # nothing coming back, then fares of half a loaf a ride, one ride a month per villager who can afford it. Both villages.
         ("T8 step 8, public transport project", (; V8_DEBT..., public_project_start = 1), (; V8_SUMSY..., public_project_start = 1)),
-        ("T10 step 10, public transport project", (; V8_DEBT..., RESERVE..., public_project_start = 1), (; V8_SUMSY..., RESERVE..., public_project_start = 1)),
         # The labour-market sweep (3 October): how long a worker holds a wage after losing a job, and whether employers keep their
         # workers before taking strangers — the two channels through which a slack market lowers wages. Both villages, step 8.
         ("Y8-floor3 step 8, wage floor outlasts a job by 3 months", (; V8_DEBT..., wage_floor_months = 3), (; V8_SUMSY..., wage_floor_months = 3)),
@@ -176,8 +165,8 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol; fiscal::Symb
         ("Y8-nonotice step 8, no notice period", (; V8_DEBT..., notice_months = 0), (; V8_SUMSY..., notice_months = 0)),
         # The SuMSy village without the land levy (4 October): the Gesell runaway, kept as the comparison. SuMSy only.
         ("Z8 step 8, SuMSy without the land levy", (;), (; V8_SUMSY..., land_levy = false, surplus_redistribution_share = 0.0)),
-        # Volunteers in the theatres (4 October, Stef): paid hiring first, villagers' unhired labour for the rest. Both villages.
-        ("C8 step 8, volunteers staff the theatres", (; V8_DEBT..., volunteers_in_theatres = true), (; V8_SUMSY..., volunteers_in_theatres = true)),
+        # Volunteers in the services (4 October, Stef): paid hiring first, villagers' unhired labour for the rest. Both villages.
+        ("C8 step 8, volunteers staff the services", (; V8_DEBT..., volunteers_in_services = true), (; V8_SUMSY..., volunteers_in_services = true)),
         # Not working, for reasons of their own (5 October, Stef): 5 % of villagers take paid work only to eat, a third of them only
         # once hungry; none gives volunteer hours. Both villages.
         ("Q8 step 8, 5 % not working for reasons of their own", (; V8_DEBT..., nonworking_share = 0.05), (; V8_SUMSY..., nonworking_share = 0.05)),
@@ -224,9 +213,9 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol; fiscal::Symb
         # Cash hoarders (15 October, Stef): the richest 1 % keep every surplus as money and spend nothing beyond their bread. Both moneys.
         ("HC8 step 8, 1 % cash hoarders (those holding the most money at month 12)", (; V8_DEBT..., cash_hoarder_share = 0.01, cash_hoarder_month = 12), (; V8_SUMSY..., cash_hoarder_share = 0.01, cash_hoarder_month = 12)),
         ("HC8-10 step 8, 10 % cash hoarders (those holding the most money at month 12)", (; V8_DEBT..., cash_hoarder_share = 0.10, cash_hoarder_month = 12), (; V8_SUMSY..., cash_hoarder_share = 0.10, cash_hoarder_month = 12)),
-        # A volunteer-run community theatre (15 October, Stef): one of the four theatres hires nobody, volunteers staff it, seats at a
+        # A volunteer-run community services (15 October, Stef): one of the four services hires nobody, volunteers staff it, seats at a
         # quarter of a loaf. Both moneys.
-        ("CT8 step 8, a volunteer-run community theatre", (; V8_DEBT..., community_theatres = 1), (; V8_SUMSY..., community_theatres = 1)),
+        ("CT8 step 8, a volunteer-run community services", (; V8_DEBT..., community_services = 1), (; V8_SUMSY..., community_services = 1)),
         # Gesell's objection to George (15 October): landowners pass the levy on to their tenants (the farms). SuMSy, where the levy
         # stands; and the debt-money twin with the levy (DDL8).
         ("LPT8 step 8, landowners pass the levy on to their tenants", (;), (; V8_SUMSY..., levy_pass_through = true)),
@@ -253,7 +242,7 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol; fiscal::Symb
         ("XP8 step 8, experience", (; V8_DEBT..., experience = true), (; V8_SUMSY..., experience = true)),
         ("XPN8 step 8, experience, no contracts", (; V8_DEBT..., experience = true, contracts = false), (; V8_SUMSY..., experience = true, contracts = false)),
         # Public land (18 October, Stef — close to Gesell's Freiland): the government owns the land; farms pay a loaf a plot a month,
-        # bakeries and theatres two loaves a month, every villager a quarter loaf a month for the ground they live on; the rents
+        # bakeries and services two loaves a month, every villager a quarter loaf a month for the ground they live on; the rents
         # follow the tax levers. No land market, no levy. Both moneys (the SuMSy side without its levy and dividend of step 8).
         ("PL8 step 8, public land: ground rents of 1 loaf a plot, 2 a firm, 1/4 a villager", (; V8_DEBT..., land_pricing = :multiple, public_land = true, public_land_farm_rent_in_breads = 1.0, public_land_firm_rent_in_breads = 2.0, public_land_dwelling_rent_in_breads = 0.25), (; V8_SUMSY..., land_pricing = :multiple, land_levy = false, public_land = true, public_land_farm_rent_in_breads = 1.0, public_land_firm_rent_in_breads = 2.0, public_land_dwelling_rent_in_breads = 0.25)),
         ("PL8-D step 8, public land, the ground rents handed out to everyone", (; V8_DEBT..., land_pricing = :multiple, public_land = true, public_land_farm_rent_in_breads = 1.0, public_land_firm_rent_in_breads = 2.0, public_land_dwelling_rent_in_breads = 0.25, public_land_rent_handout_share = 1.0), (; V8_SUMSY..., land_pricing = :multiple, land_levy = false, public_land = true, public_land_farm_rent_in_breads = 1.0, public_land_firm_rent_in_breads = 2.0, public_land_dwelling_rent_in_breads = 0.25, public_land_rent_handout_share = 1.0)),   # 31 Oct (Stef): PL8 with the rents returned per head, the Georgist form
@@ -270,7 +259,6 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol; fiscal::Symb
         # separates the money system from the indexation of the transfer. Debt side only.
         ("I2 step 2, benefit fixed in money", (; planning_margin = 0.1, GOV_DEBT..., benefit_indexed = false), (;)),
         ("I8 step 8, benefit fixed in money", (; V8_DEBT..., benefit_indexed = false), (;)),
-        ("I10 step 10, benefit fixed in money", (; V8_DEBT..., RESERVE..., benefit_indexed = false), (;)),
         # A ceiling on public borrowing (26 September): the debt village with its public debt capped at a multiple of yearly output;
         # over it, public jobs and the benefit are scaled down. Debt side only.
         ("D2-100 step 2, public debt ceiling 1 x yearly output", (; planning_margin = 0.1, GOV_DEBT..., public_debt_limit = 1.0), (;)),
@@ -283,8 +271,6 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol; fiscal::Symb
         ("EU8 debt money, basic income 5, public debt ceiling 0.6 x yearly output", (; V8_DEBT..., basic_income = 5.0, public_debt_limit = 0.6), (;)),
         # The income reversed (15 October): cut to half from month 60, in each money — the cost of undoing it.
         ("RV8 step 8, the income halved from month 60", (; V8_DEBT..., basic_income = 5.0, income_cut_start = 60), (; V8_SUMSY..., income_cut_start = 60)),
-        ("D10-100 step 10, public debt ceiling 1 x yearly output", (; V8_DEBT..., RESERVE..., public_debt_limit = 1.0), (;)),
-        ("D10-50 step 10, public debt ceiling 0.5 x yearly output", (; V8_DEBT..., RESERVE..., public_debt_limit = 0.5), (;)),
         # The parking fee as monetary policy (25 September): a higher fee lowers the money stock each villager settles at
         # (cushion + guaranteed income ÷ (fee + parking tax)); with starting prices scaled to that level, prices follow the money and
         # the guaranteed income buys more. Full money stock at step 8 (F8) and filling up at step 8 (FF8); F8-2 is the control
@@ -296,10 +282,10 @@ function ladder_definition(N::Int, rounds::Int, SETTLEMENT::Symbol; fiscal::Symb
         ("FF8-4 step 8, filling up, fee 4 %", (;), (; V8_SUMSY..., demurrage_rate = 0.04)),
         # The fair SuMSy test of a large public sector (25 September): the same shares with a policy that raises the parking tax
         # (and lowers it on a surplus) to close the whole gap, up to ten times its rate. SuMSy side only.
-        ("GP10-20 step 10, public employment 20 %, parking tax policy", (;), (; V8_SUMSY..., RESERVE..., PARKPOLICY..., government_employment_share = 0.2)),
-        ("GP10-30 step 10, public employment 30 %, parking tax policy", (;), (; V8_SUMSY..., RESERVE..., PARKPOLICY..., government_employment_share = 0.3)),
-        ("GP10-40 step 10, public employment 40 %, parking tax policy", (;), (; V8_SUMSY..., RESERVE..., PARKPOLICY..., government_employment_share = 0.4)),
-        ("GP10-50 step 10, public employment 50 %, parking tax policy", (;), (; V8_SUMSY..., RESERVE..., PARKPOLICY..., government_employment_share = 0.5)),
+        ("GP8-20 step 8, public employment 20 %, parking tax policy", (;), (; V8_SUMSY..., PARKPOLICY..., government_employment_share = 0.2)),
+        ("GP8-30 step 8, public employment 30 %, parking tax policy", (;), (; V8_SUMSY..., PARKPOLICY..., government_employment_share = 0.3)),
+        ("GP8-40 step 8, public employment 40 %, parking tax policy", (;), (; V8_SUMSY..., PARKPOLICY..., government_employment_share = 0.4)),
+        ("GP8-50 step 8, public employment 50 %, parking tax policy", (;), (; V8_SUMSY..., PARKPOLICY..., government_employment_share = 0.5)),
         ("X1 SuMSy money, debt fiscal package (comparison)", (;), (; V8_SUMSY..., PRICES..., RESERVE..., wage_tax_rate = 0.15, capital_tax_rate = 0.15, dividend_tax_rate = 0.30, unemployment_fee_in_breads = 2.0, minimum_fee_in_breads = 2.0, demurrage_tax_rate = 0.0)),
         ("X2 debt money, SuMSy fiscal package (comparison)", (; V8_DEBT..., PRICES..., RESERVE..., wage_tax_rate = 0.0, capital_tax_rate = 0.0, dividend_tax_rate = 0.0, unemployment_fee_in_breads = 0.0, minimum_fee_in_breads = 0.0), (;)),
     ]
@@ -373,7 +359,7 @@ function apply_fiscal_package(rungs, fiscal::Symbol; surplus_rule::Symbol = :deb
         gov = has_government(kd) || has_government(ks); levy = has_levy(kd) || has_levy(ks); charge = has_charge(kd) || has_charge(ks)
         kd2 = isempty(kd) ? kd : (; kd..., fiscal_package(fiscal, gov, levy, charge, :debt; surplus_rule)...)
         ks2 = isempty(ks) ? ks : (; ks..., fiscal_package(fiscal, gov, levy, charge, :sumsy; surplus_rule)...)
-        if startswith(name, "B-nodiv") || startswith(name, "10-nodiv")                                        # 24 Oct (the talk chat §2): the land tax as ordinary revenue on both sides —
+        if startswith(name, "B-nodiv") || startswith(name, "8-nodiv")                                        # 24 Oct (the talk chat §2): the land tax as ordinary revenue on both sides —
             nodiv = (; land_levy = true, land_levy_dividend = false, levy_dividend_target_in_breads = 0.0,   # no dividend, no levy lever,
                        basic_income_target_in_breads = 0.0, unemployment_fee_in_breads = 2.0, minimum_fee_in_breads = 2.0)   # no meal under P, the benefit back on at two loaves
             kd2 = isempty(kd2) ? kd2 : (; kd2..., nodiv...); ks2 = isempty(ks2) ? ks2 : (; ks2..., nodiv...)

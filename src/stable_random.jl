@@ -28,7 +28,10 @@ function splitmix64(x::UInt64)
 end
 
 """The seed of a subsystem's stream: the run seed and the stream's name, combined by a fixed rule."""
-stream_seed(seed::Integer, name::Symbol) = splitmix64(fnv1a(String(name)) ⊻ splitmix64(UInt64(seed)))
+# 1 Nov 2026: the theatre became the services sector; its stream (:tickets before) is called :services but keeps hashing as "tickets", so every
+# run and golden value made before the rename reproduces bit for bit.
+const STREAM_SEED_NAMES = Dict{Symbol, String}(:services => "tickets")
+stream_seed(seed::Integer, name::Symbol) = splitmix64(fnv1a(get(STREAM_SEED_NAMES, name, String(name))) ⊻ splitmix64(UInt64(seed)))
 
 """A uniform index in 1:n from a single `rand(rng)` draw."""
 stable_index(rng, n::Integer) = min(floor(Int, rand(rng) * n) + 1, n)

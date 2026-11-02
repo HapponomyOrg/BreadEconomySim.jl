@@ -8,12 +8,12 @@ extra = label == "lastmonth" ? (; plan_window = 1) : label == "average" ? (;) : 
 (_, _, ks) = only(r for r in def.rungs if startswith(r[1], "8 "))
 p = SimulationParameters(; seed = 1, def.BARE_SUMSY..., ks..., REALISTIC_LABOUR..., extra...)
 m = create_bread_economy(p)
-soldout = Dict(:bread => 0, :grain => 0, :ticket => 0); firm_months = Dict(:bread => 0, :grain => 0, :ticket => 0)
-short = Dict(:bread => 0, :grain => 0, :ticket => 0)   # months a kind as a whole offered less than was wanted
+soldout = Dict(:bread => 0, :grain => 0, :service => 0); firm_months = Dict(:bread => 0, :grain => 0, :service => 0)
+short = Dict(:bread => 0, :grain => 0, :service => 0)   # months a kind as a whole offered less than was wanted
 up = 0; down = 0
 for r in 1:120
     B.econo_step!(m, 1)
-    for (good, kind) in ((:bread, :bakery), (:grain, :farm), (:ticket, :theatre))
+    for (good, kind) in ((:bread, :bakery), (:grain, :farm), (:service, :services))
         es = B.enterprises(m, kind); isempty(es) && continue
         for e in es
             mk = e.market[good]; mk.offered > 1e-9 || continue
@@ -25,4 +25,4 @@ for r in 1:120
 end
 d = round_data(m)
 inf(c) = round(100 * ((d[end, c] / d[12, c])^(1 / 9) - 1), digits = 1)
-println(label, " — bread ", inf(:price_bread), " %/yr; sold-out firm-months: bread ", soldout[:bread], "/", firm_months[:bread], ", grain ", soldout[:grain], "/", firm_months[:grain], ", tickets ", soldout[:ticket], "/", firm_months[:ticket], "; months with turned-away customers: bread ", short[:bread], ", grain ", short[:grain], ", tickets ", short[:ticket])
+println(label, " — bread ", inf(:price_bread), " %/yr; sold-out firm-months: bread ", soldout[:bread], "/", firm_months[:bread], ", grain ", soldout[:grain], "/", firm_months[:grain], ", services ", soldout[:service], "/", firm_months[:service], "; months with turned-away customers: bread ", short[:bread], ", grain ", short[:grain], ", services ", short[:service])

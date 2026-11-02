@@ -34,7 +34,7 @@ for key, pre, s_ in KEYS:
         repaid=float(sum(1 for f in fs if f.government_debt.iloc[-1] < 1)), repaid_month=m(fs, rep), bailouts=g('bank_bailouts'), writeoff=g('bad_debt'), liq=g('liquidations'), restarted=g('new_firms'),
         gap=g('wealth_gap_meals'), bottom=g('wealth_bottom10_meals'), money=g('money_in_circulation'), land=g('land_price_traded'), rent=g('price_rent'), grain=g('price_grain'), hh=g('land_households_share'),
         tax12=m(fs, lambda f: f.tax.tail(12).sum()), outlay12=m(fs, lambda f: f.government_outlay.tail(12).sum()), hungry_peak=m(fs, lambda f: f.hungry.max()), hungry_after60=m(fs, lambda f: f.hungry.iloc[60:].max() if len(f) > 60 else np.nan),
-        tickets=g('tickets_sold'), proj_cost=g('project_cost'), proj_rev=g('project_revenue'), rides=g('rides'), rides_un=g('rides_unaffordable'), gold=g('gold_price'), premium=g('premium_loaves'), dividend=g('surplus_redistributed'),
+        services=g('services_sold'), proj_cost=g('project_cost'), proj_rev=g('project_revenue'), rides=g('rides'), rides_un=g('rides_unaffordable'), gold=g('gold_price'), premium=g('premium_loaves'), dividend=g('surplus_redistributed'),
         levy_div=g('levy_dividend'), basic=g('basic_income'), hoard_cash=g('cash_hoarders'), death_month=m(fs, lambda f: float(len(f)) if f.persons_alive.iloc[-1] == 0 else np.nan),
         debt_in_bread=m(fs, lambda f: (f.government_debt.iloc[-1] / f.price_bread.iloc[-1]) / max(f.government_debt.iloc[11] / f.price_bread.iloc[11], 1e-9) if f.price_bread.iloc[-1] == f.price_bread.iloc[-1] else np.nan),
         spending_scale=g('spending_scale'))

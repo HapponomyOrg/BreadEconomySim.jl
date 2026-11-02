@@ -14,8 +14,8 @@ runs = [
     ("debt_balance_tax",  (; BEH..., enterprise_tax = :reserves, enterprise_reserve_tax_rate = 0.05, reserve_tax_exempts_standard_reserve = true)),
     ("sumsy_gi1",         (; BEH..., SUMSY..., guaranteed_income = 5.0, demurrage_free_buffer = 30.0)),
     ("sumsy_gi05_savings",(; BEH..., SUMSY..., guaranteed_income = 2.5, demurrage_free_buffer = 15.0, wage_reservation_net_of_gi = true, wage_reservation_includes_savings = true, savings_build_rounds = 3)),
-    ("debt_theatre",      (; BEH..., partial_unemployment_fee = false, entertainment = true, planning_margin = 0.1, deposit_interest_period = 12, deposit_interest_rate = 0.01, loyalty_bonus_rate = 0.02)),
-    ("sumsy_theatre",     (; BEH..., SUMSY..., guaranteed_income = 5.0, demurrage_free_buffer = 30.0, entertainment = true, planning_margin = 0.1)),
+    ("debt_services",      (; BEH..., partial_unemployment_fee = false, entertainment = true, planning_margin = 0.1, deposit_interest_period = 12, deposit_interest_rate = 0.01, loyalty_bonus_rate = 0.02)),
+    ("sumsy_services",     (; BEH..., SUMSY..., guaranteed_income = 5.0, demurrage_free_buffer = 30.0, entertainment = true, planning_margin = 0.1)),
 ]
 out = DataFrame[]
 for (name, kw) in runs, s in 1:6
