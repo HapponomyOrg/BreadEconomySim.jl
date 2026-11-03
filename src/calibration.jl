@@ -40,6 +40,7 @@ const CALIBRATIONS = Dict{Symbol, NamedTuple}(
         services_consumption_hours_per_day = Anchor(1.25, "hours a day", "HETUS 2010: entertainment and culture 10–20 min, social life about 1 h, eating out inside eating; a ceiling of 1–1.5 h a day for purchased services; approx."; confirm = true),
         staff_hours_per_customer_hour = Anchor(0.4, "staff-hours per customer-hour", "sector average: restaurants about 0.5, cinemas and theatres far less, hairdressing 1; to confirm against Belgian hospitality labour productivity"; confirm = true),
         # labour and prices
+        minimum_wage_share_of_median = Anchor(0.50, "share of the median gross wage", "the GMMI (national minimum wage), about EUR 2,070 a month in 2024, indexed; roughly half the median — the model's floor for a newcomer is the reservation wage of a meal a month; approx."; confirm = true),
         unemployment_rate = Anchor(0.056, "share of the labour force", "Statbel, LFS 2023, 15–64; approx."; confirm = true),
         inflation_target = Anchor(0.02, "a year", "ECB, the symmetric 2 % target"),
         # wealth

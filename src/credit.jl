@@ -348,7 +348,8 @@ function settle_end_of_round!(model)
                 available = round(min(sum(pr.amount for pr in mine), cash(from)), digits = 4)
             end
         end
-        if p.expansion_credit && from isa Enterprise && any(m.unmet_demand for m in values(from.market))   # 2 Nov: proof of demand → working capital for the whole shortfall
+        healthy = !p.expansion_requires_cash_flow || (length(from.operating_history) >= p.overdraft_lookback && sum(from.operating_history) > 0)   # 3 Nov
+        if p.expansion_credit && healthy && from isa Enterprise && any(m.unmet_demand for m in values(from.market))   # 2 Nov: proof of demand → working capital for the whole shortfall
             total = sum(pr.amount for pr in mine)
             ids = get!(model.credit_line_loans, (from.id, :expansion), Int[])
             outstanding = sum(total_due(l) for l in debtor_loans(model, from) if l.id in ids; init = 0.0)

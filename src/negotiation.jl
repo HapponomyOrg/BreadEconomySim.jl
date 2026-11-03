@@ -176,7 +176,8 @@ function negotiate(model, seller::Agent, buyer::Agent, good::Symbol; age::Int = 
     p.fixed_prices && return p.initial_prices[good] * p.initial_price_multiplier     # 26 Sept: the starting price, always
     seller_floor = seller_reservation(model, seller, good; age = age)
     if good == :wage && seller isa Person && p.wage_cut_maximum < 1 && seller.last_wage_rate > 0 && current_round(model) - seller.last_wage_round <= p.wage_floor_months && !food_emergency(model)
-        seller_floor = max(seller_floor, seller.last_wage_rate * (1 - p.wage_cut_maximum))   # 27 Sept: what a worker in work will accept; out of work, the floor is gone
+        index = (p.wage_indexation && seller.bread_price_at_last_wage > 0) ? max(expected_price(model, :bread) / seller.bread_price_at_last_wage, 1.0) : 1.0   # 3 Nov: indexed, never down
+        seller_floor = max(seller_floor, seller.last_wage_rate * index * (1 - p.wage_cut_maximum))   # 27 Sept: what a worker in work will accept; out of work, the floor is gone
     end
     buyer_ceiling = buyer_reservation(model, buyer, good)
     ask = max(seller.ask[good], seller_floor)
@@ -466,7 +467,8 @@ function own_plan!(model, e::Enterprise, good::Symbol, per_unit::Float64, cap::I
     end
     if p.plan_nets_stock                                                    # the stock that will still be good next month
         items = good == :bread ? e.bread : good == :grain ? e.grain : StockItem[]
-        usable = sum(i.units for i in items if i.age < p.spoilage_age_in_rounds - 1; init = 0.0)
+        life = (good == :grain && p.grain_spoilage_age_in_rounds > 0) ? p.grain_spoilage_age_in_rounds : p.spoilage_age_in_rounds   # 3 Nov
+        usable = sum(i.units for i in items if i.age < life - 1; init = 0.0)
         expected = max(expected - usable, 0.0)
     end
     desired = expected / per_unit
@@ -482,6 +484,7 @@ function own_plan!(model, e::Enterprise, good::Symbol, per_unit::Float64, cap::I
             target = current + min(abs(e.share_trend), p.plan_adjustment_months) / p.plan_adjustment_months * gap
         end
     end
+    p.plan_adjustment_share < 1 && e.production_target > 0 && (target = e.production_target + p.plan_adjustment_share * (target - e.production_target))   # 3 Nov: partial adjustment — part of the way to the plan each month
     e.production_target = clamp(ceil(Int, target - 1e-9), 1, cap)
     return nothing
 end
@@ -571,8 +574,16 @@ function plan_targets!(model)
         for b in bakeries; b.production_target = min(b.production_target, cap_each); end
     end
     grain_demand = sum(max(b.production_target - floor(Int, grain_units(b) + 1e-9), 0) for b in bakeries; init = 0)
+    p.supply_contracts && sign_supply_contracts!(model, bakeries, farms)         # 3 Nov: committed volumes before the farms plan
     if own
-        for f in farms; own_plan!(model, f, :grain, 1.0, typemax(Int) ÷ 2, length(farms)); end
+        for f in farms
+            committed = contracted_units(model, f)
+            if p.supply_contracts && committed > 0
+                f.production_target = max(ceil(Int, committed / p.supply_contract_share * (1 + p.supply_contract_margin) - 1e-9), 1)   # 3 Nov: plan on the orders
+            else
+                own_plan!(model, f, :grain, 1.0, typemax(Int) ÷ 2, length(farms))
+            end
+        end
     else
         isempty(farms) || by_sales!(grain_demand, farms, :grain)
     end
@@ -670,6 +681,32 @@ function absorb_surplus!(model)
                 log_event!(model, :surplus_to_wages; actor = e.id, agent_kind = e.kind, surplus = funds - standard, wage_bid = e.bid[:wage])
             end
         end
+    end
+    return nothing
+end
+
+# ---- supply contracts (3 Nov 2026, Stef) ---------------------------------------------------------------------------
+"""Units a month the farm has committed to deliver under live contracts."""
+contracted_units(model, f::Enterprise) = sum(v[1] for (k, v) in model.supply_contracts if k[2] == f.id && v[2] >= current_round(model); init = 0.0)
+"""Units a month the bakery has committed to buy from this farm (0 without a contract)."""
+contracted_with(model, b::Enterprise, f::Enterprise) = (v = get(model.supply_contracts, (b.id, f.id), nothing); v === nothing || v[2] < current_round(model) ? 0.0 : v[1])
+"""Expire old contracts; a bakery without live ones commits `supply_contract_share` of its planned grain need for
+`supply_contract_months` months, spread over the live farms in proportion to what each offered last month (equal if none offered)."""
+function sign_supply_contracts!(model, bakeries, farms)
+    p = parameters(model); t = current_round(model)
+    filter!(kv -> kv[2][2] >= t && model[kv[1][1]].alive && model[kv[1][2]].alive, model.supply_contracts)
+    live = [f for f in farms if f.alive]; isempty(live) && return nothing
+    weights = [f.market[:grain].offered + 1.0 for f in live]; total = sum(weights)
+    for b in bakeries
+        b.alive || continue
+        any(k[1] == b.id for k in keys(model.supply_contracts)) && continue
+        need = p.supply_contract_share * max(b.production_target, 0)
+        need > 0 || continue
+        for (f, w) in zip(live, weights)
+            units = round(need * w / total, digits = 2); units > 0 || continue
+            model.supply_contracts[(b.id, f.id)] = (units, t + p.supply_contract_months - 1)
+        end
+        log_event!(model, :supply_contract; actor = b.id, agent_kind = :bakery, units = need, months = p.supply_contract_months)
     end
     return nothing
 end

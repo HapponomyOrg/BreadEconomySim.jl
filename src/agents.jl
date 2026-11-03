@@ -91,6 +91,7 @@ end
     labour_sold::Float64 = 0.0
     labour_income::Float64 = 0.0        # net labour income this round
     last_wage_income::Float64 = 0.0     # last positive net labour income
+    bread_price_at_last_wage::Float64 = 0.0   # 3 Nov: for the indexation of the wage floor
     last_wage_rate::Float64 = 0.0       # the wage per unit last agreed (downward wage rigidity, 27 Sept)
     last_wage_round::Int = -1           # the month of that wage — the floor holds only for the continuously employed
     rent_income::Float64 = 0.0

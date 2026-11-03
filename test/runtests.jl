@@ -19,7 +19,8 @@ const SUM = (; monetary_system = :sumsy, dividend_tax_rate = 0.0, wage_tax_rate 
               minimum_fee_in_breads = 0.0, partial_unemployment_fee = false, government_employment_share = 0.0,
               account_fee_person = 0.5, account_fee_enterprise = 1.5, demurrage_rate = 0.02,
               instalment_purchases = true, land_price_rent_multiple = 50.0)
-run(; kw...) = run_simulation(SimulationParameters(; kw...))
+const PIN = (; wage_cut_maximum = 1.0, wage_indexation = false)   # 3 Nov: the golden runs keep the wage rules they were made with
+run(; kw...) = run_simulation(SimulationParameters(; PIN..., kw...))
 const TH = (; BEH..., entertainment = true, planning_margin = 0.1, plan_for_gluttony = true)
 const OWN = (; TH..., ownership = :mixed, number_of_farms = 4, number_of_bakeries = 4, share_market = true, startup_financing = :paid_in_capital)
 const SUMSY_OWN = (; OWN..., SUM..., government_employment_share = 0.1, demurrage_tax_rate = 0.01)
@@ -66,7 +67,7 @@ end
 end
 
 @testset "ownership: dividends only above the reserve, co-ops per member, founders per share" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, OWN...))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, OWN...))
     coop = first(e for e in B.enterprises(m, :farm) if e.ownership == :cooperative); firm = first(e for e in B.enterprises(m, :farm) if e.ownership == :shareholders)
     @test isempty(coop.members) && sum(values(firm.shares)) ≈ 100.0      # paid-in founding: no members yet, founders hold all shares
     # a firm exactly at its reserve pays nothing; one above it pays out over dividend_build_rounds
@@ -86,7 +87,7 @@ end
 end
 
 @testset "paid-in founding: businesses start empty, founders carry the debt, capital arrives" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, OWN...))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, OWN...))
     @test all(B.cash(e) ≈ 0 for e in B.alive_agents(m) if B.is_producer(e))
     founders = [w for w in B.persons(m) if any(e -> e isa Enterprise && e.ownership == :shareholders && haskey(e.shares, w.id), B.alive_agents(m))]
     @test length(founders) == 2 && all(B.debt_of(f) > 0 for f in founders)                       # they borrowed the villagers' starting cash
@@ -99,7 +100,7 @@ end
 end
 
 @testset "cooperative membership: join at par above the buffer, redeem at par in distress" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, SUMSY_OWN..., cooperative_join_probability = 1.0))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, SUMSY_OWN..., cooperative_join_probability = 1.0))
     coop = first(e for e in B.alive_agents(m) if e isa Enterprise && e.ownership == :cooperative)
     w = B.persons(m)[1]; B.book_asset!(w.balance, B.DEPOSIT, 100.0); c0 = B.cash(w); cap0 = B.cash(coop)
     B.join_cooperatives!(m)
@@ -129,11 +130,11 @@ end
 end
 
 @testset "greed: assignment to the rich, the slider, caps, most-profitable-first capital" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, OWN..., greed = true, greed_share = 0.25))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, OWN..., greed = true, greed_share = 0.25))
     g = [w for w in B.persons(m) if w.greed == :greedy]
     @test length(g) == 4
     @test all(w.initial_landowner || any(e -> e isa Enterprise && haskey(e.shares, w.id), B.alive_agents(m)) for w in g)   # the rich
-    m2 = create_bread_economy(SimulationParameters(; seed = 1, OWN..., greed = true, greed_share = 1.0, greed_hoarding = 0.0, greedy_max_breads_per_round = 4))
+    m2 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, OWN..., greed = true, greed_share = 1.0, greed_hoarding = 0.0, greedy_max_breads_per_round = 4))
     w = first(B.persons(m2)); B.book_asset!(w.balance, B.DEPOSIT, 500.0)
     for f in B.ROUND_BEHAVIORS[1:findfirst(f -> f === B.greed_spending!, B.ROUND_BEHAVIORS)]; f(m2); end
     @test B.bread_units(w) <= 4                                           # greedy cap respected
@@ -144,14 +145,14 @@ end
     d0 = round_data(run(; seed = 1, maximum_rounds = 12, OWN..., greed = true, greed_share = 1.0, greed_hoarding = 0.0))
     @test sum(d0.greedy_land) + sum(d0.greedy_shares) == 0 && sum(d0.greedy_loaves) + sum(d0.greedy_services) > 0
     # capital yields: under SuMSy cash yields −demurrage and is never chosen while land or shares are on offer and affordable
-    ms = create_bread_economy(SimulationParameters(; seed = 1, SUMSY_OWN..., greed = true, greed_share = 1.0, greed_hoarding = 1.0))
+    ms = create_bread_economy(SimulationParameters(; PIN..., seed = 1, SUMSY_OWN..., greed = true, greed_share = 1.0, greed_hoarding = 1.0))
     w = first(B.persons(ms)); B.book_asset!(w.balance, B.DEPOSIT, 1000.0)
     bought = B.greedy_capital_act!(ms, w, B.cash(w) - B.buffer_target(ms, w))
     @test !bought                                                          # land is on offer at exactly its value to the buyer: not a purchase; cash is the fallthrough
 end
 
 @testset "land_per_person" begin
-    p = SimulationParameters(; number_of_persons = 16, number_of_landowners = 4, land_per_person = 2.0)
+    p = SimulationParameters(; PIN..., number_of_persons = 16, number_of_landowners = 4, land_per_person = 2.0)
     @test B.land_units_per_landowner(p) * 4 == 32                         # four loaves a head on the land side
     m = create_bread_economy(p); @test sum(w.land for w in B.persons(m)) == 32
 end
@@ -159,7 +160,7 @@ end
 @testset "rationing and tiered price" begin
     d = round_data(run(; seed = 1, maximum_rounds = 12, OWN..., greed = true, greed_share = 1.0, greed_hoarding = 0.0, bread_rationing = true))
     @test all(2 .<= d.ration .<= 4)                                       # never below a meal, never above the ration
-    m = create_bread_economy(SimulationParameters(; seed = 1, OWN..., greed = true, greed_share = 1.0, greed_hoarding = 0.0, tiered_bread_price = true))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, OWN..., greed = true, greed_share = 1.0, greed_hoarding = 0.0, tiered_bread_price = true))
     B.econo_step!(m, 1)                                                   # a round of trading, so the bakery has a market record
     e = first(B.enterprises(m, :bakery)); e.tier_multiplier = 1.0; e.tier_unmet = true
     p0 = B.expected_price(m, :bread); B.adapt_prices!(m)
@@ -174,18 +175,18 @@ end
 @testset "random streams are isolated per subsystem (18 September 2026)" begin
     # Burning draws from a stream that the run never uses must leave the run untouched...
     a = round_data(run(; seed = 5, maximum_rounds = 12, BEH...))
-    m = create_bread_economy(SimulationParameters(; seed = 5, maximum_rounds = 12, BEH...))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 5, maximum_rounds = 12, BEH...))
     rand(B.stream(m, :cooperatives), 1_000); rand(B.stream(m, :shares), 1_000)      # no co-ops, no share market in BEH
     b = round_data(B.run_simulation!(m))
     @test a.money_in_circulation == b.money_in_circulation && a.price_bread == b.price_bread && a.price_wage == b.price_wage
     # ...and burning draws from a stream it does use must change it (so the test above is not vacuous)
-    m2 = create_bread_economy(SimulationParameters(; seed = 5, maximum_rounds = 12, BEH...))
+    m2 = create_bread_economy(SimulationParameters(; PIN..., seed = 5, maximum_rounds = 12, BEH...))
     rand(B.stream(m2, :negotiation), 1)
     c = round_data(B.run_simulation!(m2))
     @test c.price_bread != a.price_bread || c.price_wage != a.price_wage
     # with the single shared stream, the unrelated draws do change the run: this is the defect the streams remove
     s0 = round_data(run(; seed = 5, maximum_rounds = 12, BEH..., random_streams = false))
-    m3 = create_bread_economy(SimulationParameters(; seed = 5, maximum_rounds = 12, BEH..., random_streams = false))
+    m3 = create_bread_economy(SimulationParameters(; PIN..., seed = 5, maximum_rounds = 12, BEH..., random_streams = false))
     rand(B.stream(m3, :cooperatives), 1_000)
     s1 = round_data(B.run_simulation!(m3))
     @test s0.price_bread != s1.price_bread || s0.price_wage != s1.price_wage
@@ -196,7 +197,7 @@ end
     @test g0.money_in_circulation == g1.money_in_circulation && g0.price_bread == g1.price_bread
     # every stream exists and is seeded from the run seed and its own name
     @test Set(keys(m.streams)) == Set(B.RANDOM_STREAMS)
-    x = create_bread_economy(SimulationParameters(; seed = 5, BEH...)); y = create_bread_economy(SimulationParameters(; seed = 6, BEH...))
+    x = create_bread_economy(SimulationParameters(; PIN..., seed = 5, BEH...)); y = create_bread_economy(SimulationParameters(; PIN..., seed = 6, BEH...))
     @test rand(B.stream(x, :labour)) != rand(B.stream(y, :labour))
     @test rand(B.stream(x, :labour)) != rand(B.stream(x, :land))
 end
@@ -223,7 +224,7 @@ end
 
 @testset "endowment at norm terminates and sums for awkward village sizes" begin
     for n in (16, 100, 400)
-        m = create_bread_economy(SimulationParameters(; seed = 1, initial_endowment = :norm, number_of_persons = n, number_of_landowners = max(n ÷ 10, 2),
+        m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, initial_endowment = :norm, number_of_persons = n, number_of_landowners = max(n ÷ 10, 2),
                                                         land_units_per_landowner_override = 12, initial_production_target = max(n ÷ 4, 6),
                                                         number_of_farms = 5, number_of_bakeries = 4, number_of_banks = 3))
         @test all(isapprox(B.cash(w), B.savings_buffer(m); atol = 1e-3) for w in B.persons(m))
@@ -239,7 +240,7 @@ end
 end
 
 @testset "demand-based planning allots exactly the population's meals" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH...))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH...))
     B.plan_targets!(m)
     bakeries = B.enterprises(m, :bakery)
     need_grain = ceil(Int, (sum(max(2 - B.bread_units(w), 0.0) for w in B.persons(m)) - sum(B.bread_units(b) for b in bakeries)) / 2)
@@ -248,16 +249,16 @@ end
 end
 
 @testset "gluttons eat three loaves, others two, stock ages" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1))
     w = first(B.persons(m)); empty!(w.bread); push!(w.bread, B.StockItem(5.0, 0))
     w.glutton = true; B.eat!(m); @test B.bread_units(w) == 2.0 && w.ate_this_round == :whole
-    m = create_bread_economy(SimulationParameters(; seed = 1))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1))
     w = first(B.persons(m)); empty!(w.bread); push!(w.bread, B.StockItem(5.0, 0))
     w.glutton = false; B.eat!(m); @test B.bread_units(w) == 3.0
 end
 
 @testset "Belgian income tax schedule" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, income_tax_schedule = :belgian, maximum_capacity = 4.0))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, income_tax_schedule = :belgian, maximum_capacity = 4.0))
     ref = 4.0 * B.expected_price(m, :wage)
     eff(x) = B.wage_tax_amount(m, x * ref) / (x * ref)
     @test 0.25 < eff(0.5) < 0.27          # half-time worker: 13 % contributions plus ≈ 13 % income tax
@@ -276,7 +277,7 @@ end
 end
 
 @testset "peer loan servicing: negative interest, spread, arrears" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., SUM...))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., SUM...))
     lender = B.persons(m)[1]; borrower = B.persons(m)[2]; bank = first(B.enterprises(m, :bank))
     c0 = (B.cash(lender), B.cash(borrower), B.cash(bank))
     l = B.PeerLoan(1, lender.id, borrower.id, bank.id, 100.0, 100.0, 10.0, -0.01, -0.015, false, 0, 0, false, false, 0.0)
@@ -299,7 +300,7 @@ end
 end
 
 @testset "buffer pool conserves the demurrage exemption" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., SUM..., buffer_lending = true, buffer_lending_participation = 1.0))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., SUM..., buffer_lending = true, buffer_lending_participation = 1.0))
     B.begin_round!(m); B.pay_guaranteed_income!(m); B.manage_buffer_pool!(m)
     p = B.parameters(m)
     exempt = sum(B.demurrage_buffer(m, a) for a in B.alive_agents(m))
@@ -359,7 +360,7 @@ end
 
 @testset "share market: forward valuation, yield spread, control floor, debt retirement" begin
     MK = (; OWN..., forward_valuation = true)
-    m = create_bread_economy(SimulationParameters(; seed = 1, MK...))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, MK...))
     e = first(x for x in B.enterprises(m, :farm) if x.ownership == :shareholders)
     @test B.forward_value_per_unit(m, e, 0.01) >= 0                       # never negative, even for a firm in debt
     for _ in 1:12; B.econo_step!(m, 1); end
@@ -380,7 +381,7 @@ end
         @test abs(money_identity_gap(m2)) < 1e-6
     end
     # the control floor: one market call with a keen, cash-rich buyer and founders above the floor sells down to 51 and no further
-    m4 = create_bread_economy(SimulationParameters(; seed = 4, MK..., required_yield_dispersion = 0.003)); for _ in 1:20; B.econo_step!(m4, 1); end
+    m4 = create_bread_economy(SimulationParameters(; PIN..., seed = 4, MK..., required_yield_dispersion = 0.003)); for _ in 1:20; B.econo_step!(m4, 1); end
     firms4 = [x for x in B.alive_agents(m4) if x isa Enterprise && x.ownership == :shareholders && B.forward_value_per_unit(m4, x, 0.01) > 0]
     e4 = firms4[argmax([B.forward_value_per_unit(m4, x, 0.01) for x in firms4])]     # the firm worth the most: a keen buyer will want it
     for f in e4.founder_ids; e4.shares[f] = 50.0; end; for k in collect(keys(e4.shares)); k in e4.founder_ids || delete!(e4.shares, k); end   # founders back at 100 for a clean test
@@ -389,7 +390,7 @@ end
     @test 51 - 1e-6 <= B.founders_stake(e4) < 100                        # sold, but never below the floor
     B.share_market!(m4); @test B.founders_stake(e4) >= 51 - 1e-6           # and a second call adds nothing below it
     # yields are drawn only when a spread exists, so the random stream of a run without one is untouched
-    m3 = create_bread_economy(SimulationParameters(; seed = 5, MK...)); @test all(w.required_yield == 0.01 for w in B.persons(m3))
+    m3 = create_bread_economy(SimulationParameters(; PIN..., seed = 5, MK...)); @test all(w.required_yield == 0.01 for w in B.persons(m3))
 end
 
 @testset "deferred share payment: contract, collateral, seizure" begin
@@ -399,7 +400,7 @@ end
     @test all(haskey(m.share_collateral, l.id) for l in m.peer_loans if !l.settled && haskey(m.share_collateral, l.id))
     @test abs(money_identity_gap(m)) < 1e-6                               # no money is created by a deferred purchase
     # a hand-built contract in default: the pledged shares return to the seller in proportion to what is owed
-    m2 = create_bread_economy(SimulationParameters(; seed = 1, DP...))
+    m2 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, DP...))
     e = first(x for x in B.enterprises(m2, :farm) if x.ownership == :shareholders)
     seller = B.persons(m2)[1]; buyer = B.persons(m2)[5]; bank = first(B.enterprises(m2, :bank))
     e.shares[seller.id] = 60.0; e.shares[buyer.id] = 40.0
@@ -410,7 +411,7 @@ end
     @test !haskey(m2.share_collateral, l.id)
     # the rate: −1 % under SuMSy, +0.5 % under debt money unless set
     @test B.deferred_rate(m2) == 0.005
-    ms = create_bread_economy(SimulationParameters(; seed = 1, DP..., SUM...)); @test B.deferred_rate(ms) == -0.01
+    ms = create_bread_economy(SimulationParameters(; PIN..., seed = 1, DP..., SUM...)); @test B.deferred_rate(ms) == -0.01
 end
 
 
@@ -418,7 +419,7 @@ end
 @testset "shares scaled to the population; a 64-person village" begin
     V64 = (; BEH..., number_of_persons = 64, number_of_landowners = 16, land_per_person = 1.5, initial_production_target = 10, shares_per_person = 10,
              ownership = :shareholders, share_market = true, forward_valuation = true, required_yield_dispersion = 0.002, startup_financing = :paid_in_capital, shareholder_count = 4)
-    m = create_bread_economy(SimulationParameters(; seed = 1, V64...))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, V64...))
     @test B.total_share_units(m) == 640 && sum(w.land for w in B.persons(m)) == 96
     firms = [x for x in B.alive_agents(m) if x isa Enterprise && x.ownership == :shareholders]
     @test all(abs(sum(values(x.shares)) - 640) < 1e-6 for x in firms) && all(B.founders_stake(x) == 640 for x in firms)
@@ -432,7 +433,7 @@ end
 @testset "unmet demand: a threshold, not a single miss (19 September 2026)" begin
     # a helper that builds a bakery market state directly
     function bakery_state(; share, sold, unmet)
-        m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., unmet_demand_share = share, maximum_rounds = 1))
+        m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., unmet_demand_share = share, maximum_rounds = 1))
         bs = B.enterprises(m, :bakery)
         for b in bs
             b.market[:bread].offered = sold / length(bs); b.market[:bread].sold = sold / length(bs)   # sold out
@@ -474,16 +475,16 @@ end
 
 @testset "services capacity: shows and seats (20 September 2026)" begin
     ENT = (; BEH..., entertainment = true, number_of_services = 2)
-    m = create_bread_economy(SimulationParameters(; seed = 1, ENT..., maximum_rounds = 1))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, ENT..., maximum_rounds = 1))
     t = first(B.enterprises(m, :services))
     @test B.service_capacity(m, t) == Inf                                   # default: unlimited, as before
-    m1 = create_bread_economy(SimulationParameters(; seed = 1, ENT..., shows_per_round = 1, maximum_rounds = 1))
+    m1 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, ENT..., shows_per_round = 1, maximum_rounds = 1))
     t1 = first(B.enterprises(m1, :services))
     @test B.service_capacity(m1, t1) == 10.0                                # one show; two services seat 16 × 1.25 = 20 between them, 10 each
     @test B.services_labour_cap(m1, t1) == ceil(10 / B.parameters(m1).customers_per_labour_unit)
-    m1b = create_bread_economy(SimulationParameters(; seed = 1, ENT..., shows_per_round = 1, services_seat_margin = 0.0, maximum_rounds = 1))
+    m1b = create_bread_economy(SimulationParameters(; PIN..., seed = 1, ENT..., shows_per_round = 1, services_seat_margin = 0.0, maximum_rounds = 1))
     @test B.service_capacity(m1b, first(B.enterprises(m1b, :services))) == 8.0   # no margin: exactly the village, shared
-    m2 = create_bread_economy(SimulationParameters(; seed = 1, ENT..., shows_per_round = 3, seats_per_show = 10, maximum_rounds = 1))
+    m2 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, ENT..., shows_per_round = 3, seats_per_show = 10, maximum_rounds = 1))
     @test B.service_capacity(m2, first(B.enterprises(m2, :services))) == 30.0
     # in a run the cap binds: no services ever offers more services or plans more labour than its seats take
     m3 = run(; seed = 1, maximum_rounds = 30, ENT..., shows_per_round = 1, greed = true, greed_share = 1.0, greed_hoarding = 0.5)
@@ -503,7 +504,7 @@ end
 
 @testset "ask floor at cost and the unsold share (20 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., ask_floor = :cost, maximum_rounds = 1))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., ask_floor = :cost, maximum_rounds = 1))
     b = first(B.enterprises(m, :bakery))
     cost = B.seller_reservation(m, b, :bread)
     @test cost > 0
@@ -524,7 +525,7 @@ end
     @test abs(money_identity_gap(mr)) < 1e-6
     # unsold share: two loaves of two hundred no longer cut the ask at 5 %; twenty do
     function bakery_unsold(share, offered, sold)
-        mm = create_bread_economy(SimulationParameters(; seed = 1, BEH..., unsold_share = share, maximum_rounds = 1))
+        mm = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., unsold_share = share, maximum_rounds = 1))
         bb = first(B.enterprises(mm, :bakery)); give!(bb, 10_000.0)
         bb.market[:bread].offered = offered; bb.market[:bread].sold = sold
         a0 = bb.ask[:bread]; B.adapt_prices!(mm); return bb.ask[:bread] / a0
@@ -542,7 +543,7 @@ end
 
 @testset "equilibrium start: the stock begins inside its bounds and stays there (20 September 2026)" begin
     SU = (; BEH..., SUM..., demurrage_tax_rate = 0.01)
-    p = SimulationParameters(; seed = 1, SU..., start_at_saturation = :equilibrium, initial_price_multiplier = 1.35, maximum_rounds = 40)
+    p = SimulationParameters(; PIN..., seed = 1, SU..., start_at_saturation = :equilibrium, initial_price_multiplier = 1.35, maximum_rounds = 40)
     m = create_bread_economy(p)
     per = p.demurrage_free_buffer + p.guaranteed_income / (p.demurrage_rate + p.demurrage_tax_rate)
     @test all(B.cash(w) >= per - 1e-6 for w in B.persons(m)) && allequal(round.(B.cash(w) for w in B.persons(m); digits = 6))
@@ -553,7 +554,7 @@ end
     @test dn.money_in_circulation[end] > 1.5 * dn.money_in_circulation[1]
     @test abs(money_identity_gap(m)) < 1e-6
     # the equilibrium stock is below :upper, above :lower
-    mu = create_bread_economy(SimulationParameters(; seed = 1, SU..., start_at_saturation = :upper, maximum_rounds = 1))
+    mu = create_bread_economy(SimulationParameters(; PIN..., seed = 1, SU..., start_at_saturation = :upper, maximum_rounds = 1))
     @test sum(B.cash(w) for w in B.persons(m)) < sum(B.cash(w) for w in B.persons(mu))
 end
 
@@ -579,7 +580,7 @@ end
     d3 = round_data(run(; seed = 1, maximum_rounds = 60, SU..., government_reserve_in_rounds = 3, surplus_redistribution_share = 0.5, surplus_tax_reduction_share = 0.5))
     @test late(d3) < late(d0) && sum(d3.surplus_redistributed) > 0 && minimum(d3.tax_scale) < 1.0
     # the mechanics on a prepared state: 100 above target, half redistributed equally to the living
-    m = create_bread_economy(SimulationParameters(; seed = 1, SU..., government_reserve_in_rounds = 1, surplus_redistribution_share = 0.5, maximum_rounds = 1))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, SU..., government_reserve_in_rounds = 1, surplus_redistribution_share = 0.5, maximum_rounds = 1))
     gov = B.government(m); B.book_asset!(gov.balance, B.DEPOSIT, 100.0)
     m.government_outlay_this_round = 0.0                                # no spending on record: target 0, surplus 100
     before = [B.cash(w) for w in B.persons(m)]
@@ -588,7 +589,7 @@ end
     @test isapprox(sum(gains), 50.0; atol = 1e-3) && allequal(round.(gains; digits = 4))
     @test isapprox(B.cash(gov), 50.0; atol = 1e-3)
     # the scale lowers every tax: wage, capital and demurrage tax
-    md = create_bread_economy(SimulationParameters(; seed = 1, BEH..., wage_tax_rate = 0.2, capital_tax_rate = 0.2, maximum_rounds = 1))
+    md = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., wage_tax_rate = 0.2, capital_tax_rate = 0.2, maximum_rounds = 1))
     @test isapprox(B.wage_tax_amount(md, 100.0), 20.0; atol = 1e-9)
     md.tax_scale = 0.5
     @test isapprox(B.wage_tax_amount(md, 100.0), 10.0; atol = 1e-9)
@@ -605,23 +606,23 @@ end
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     POL = (; BEH..., government_employment_share = 0.1, government_reserve_in_rounds = 3, surplus_tax_reduction_share = 1.0)
     # a prepared state: revenue 50 a round against outlays 100 and no reserve → a shortfall; the scale rises, by at most the step
-    m = create_bread_economy(SimulationParameters(; seed = 1, POL..., tax_policy = :scale, tax_response_coverage = 1.0, tax_response_step = 0.02, maximum_rounds = 1))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, POL..., tax_policy = :scale, tax_response_coverage = 1.0, tax_response_step = 0.02, maximum_rounds = 1))
     m.government_outlay_this_round = 100.0; m.tax_this_round = 50.0
     B.manage_government_reserve!(m)
     @test isapprox(m.tax_scale, 1.02; atol = 1e-9)                        # wanted +100 % of revenue, allowed 2 %
     @test m.tax_shortfall > 0 && m.tax_policy_step == 0.02
     # a surplus cuts, also step-limited
-    m2 = create_bread_economy(SimulationParameters(; seed = 1, POL..., tax_policy = :scale, tax_response_step = 0.05, maximum_rounds = 1))
+    m2 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, POL..., tax_policy = :scale, tax_response_step = 0.05, maximum_rounds = 1))
     give!(B.government(m2), 5_000.0); m2.government_outlay_this_round = 10.0; m2.tax_this_round = 10.0
     B.manage_government_reserve!(m2)
     @test isapprox(m2.tax_scale, 0.95; atol = 1e-9) && m2.tax_policy_step == -0.05
     # coverage sizes the raise when the step does not bind
-    m3 = create_bread_economy(SimulationParameters(; seed = 1, POL..., tax_policy = :scale, tax_response_coverage = 0.5, tax_response_step = 1.0, maximum_rounds = 1))
+    m3 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, POL..., tax_policy = :scale, tax_response_coverage = 0.5, tax_response_step = 1.0, maximum_rounds = 1))
     m3.government_outlay_this_round = 100.0; m3.tax_this_round = 80.0      # shortfall 20 + reserve gap 300/3 = 120; half = 60 = 75 % of revenue
     B.manage_government_reserve!(m3)
     @test isapprox(m3.tax_scale, 1.75; atol = 1e-6)
     # brackets: proportional, so the 50 % bracket moves five times the 10 % one; plus the fixed points
-    mb = create_bread_economy(SimulationParameters(; seed = 1, POL..., income_tax_schedule = :progressive, tax_bracket_rates = [0.10, 0.20, 0.50],
+    mb = create_bread_economy(SimulationParameters(; PIN..., seed = 1, POL..., income_tax_schedule = :progressive, tax_bracket_rates = [0.10, 0.20, 0.50],
                                                     tax_policy = :brackets, tax_response_coverage = 1.0, tax_response_step = 0.10, bracket_fixed_rise = 0.01, maximum_rounds = 1))
     mb.government_outlay_this_round = 100.0; mb.tax_this_round = 50.0
     B.manage_government_reserve!(mb)
@@ -629,7 +630,7 @@ end
     @test isapprox(mb.bracket_rates[3] - 0.50 - 0.01, 5 * (mb.bracket_rates[1] - 0.10 - 0.01); atol = 1e-9)
     # ... and the schedule is not scaled a second time under :brackets: the scale moved, the wage tax follows the brackets only
     @test mb.tax_scale > 1.0
-    mb_ref = create_bread_economy(SimulationParameters(; seed = 1, POL..., income_tax_schedule = :progressive, tax_bracket_rates = copy(mb.bracket_rates), maximum_rounds = 1))
+    mb_ref = create_bread_economy(SimulationParameters(; PIN..., seed = 1, POL..., income_tax_schedule = :progressive, tax_bracket_rates = copy(mb.bracket_rates), maximum_rounds = 1))
     @test isapprox(B.wage_tax_amount(mb, 100.0), B.wage_tax_amount(mb_ref, 100.0); rtol = 1e-9)
     # a cut moves the brackets down, never below zero, and the statutory rates are untouched
     mb.tax_this_round = 10.0; mb.government_outlay_this_round = 0.0; give!(B.government(mb), 5_000.0)
@@ -637,7 +638,7 @@ end
     @test all(mb.bracket_rates .< before) && all(mb.bracket_rates .>= 0.0)
     @test B.parameters(mb).tax_bracket_rates == [0.10, 0.20, 0.50]
     # the multiplier reaches the wage tax withheld at source (flat schedule) and the effective rate workers reason with
-    mf = create_bread_economy(SimulationParameters(; seed = 1, BEH..., wage_tax_rate = 0.15, clearing = false, maximum_rounds = 1))   # immediate settlement: the tax is booked at once
+    mf = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., wage_tax_rate = 0.15, clearing = false, maximum_rounds = 1))   # immediate settlement: the tax is booked at once
     e = first(B.enterprises(mf, :bakery)); w = first(B.persons(mf)); B.book_asset!(e.balance, B.DEPOSIT, 1_000.0)
     t0 = B.government(mf).tax_collected; B.pay_income!(mf, e, w, 100.0, :wage); t1 = B.government(mf).tax_collected
     mf.tax_scale = 2.0; w2 = B.persons(mf)[2]
@@ -673,7 +674,7 @@ end
 @testset "consumption tax: paid by the buyer, booked as revenue, scaled by the policy, mixed by share (20 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     # the buyer pays price plus tax; the seller gets the price; the government the tax (immediate settlement to see it at once)
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., consumption_tax_rate = 0.06, clearing = false, maximum_rounds = 1))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., consumption_tax_rate = 0.06, clearing = false, maximum_rounds = 1))
     w = first(B.persons(m)); s = first(B.enterprises(m, :bakery)); gov = B.government(m)
     give!(w, 100.0); c0 = (B.cash(w), B.cash(s), B.cash(gov), gov.tax_collected)
     paid = B.pay_consumption!(m, w, s, 10.0, :bread)
@@ -685,10 +686,10 @@ end
     @test B.pay_consumption!(m, b, f, 10.0, :grain) == 10.0
     @test B.gross_price(m, w, 10.0) == 10.6 && B.gross_price(m, b, 10.0) == 10.0
     # willingness to pay is gross: the ceiling handed to the seller is divided by 1 + rate
-    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., maximum_rounds = 1))
+    m0 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., maximum_rounds = 1))
     @test isapprox(B.buyer_reservation(m, w, :bread), B.buyer_reservation(m0, first(B.persons(m0)), :bread); rtol = 1e-9)   # 28 Oct: VAT cancels from the net ceiling (the expected price is net)
     # the policy scales it with the same triggers; without a mix target it follows the income scale
-    mp = create_bread_economy(SimulationParameters(; seed = 1, BEH..., consumption_tax_rate = 0.06, government_reserve_in_rounds = 3,
+    mp = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., consumption_tax_rate = 0.06, government_reserve_in_rounds = 3,
                                                     tax_policy = :scale, tax_response_coverage = 1.0, tax_response_step = 0.02, maximum_rounds = 1))
     mp.government_outlay_this_round = 100.0; mp.tax_this_round = 50.0; mp.consumption_tax_this_round = 10.0
     B.manage_government_reserve!(mp)
@@ -696,7 +697,7 @@ end
     @test isapprox(B.consumption_tax_rate(mp), 0.06 * 1.02; atol = 1e-9)
     # the mix: shift by r × lever, then move by r. Revenue 50, outlay 100 → r = +0.02 (step)
     function mix_state(levers)
-        mm = create_bread_economy(SimulationParameters(; seed = 1, BEH..., consumption_tax_rate = 0.06, wealth_tax_rate = 0.05, government_reserve_in_rounds = 3,
+        mm = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., consumption_tax_rate = 0.06, wealth_tax_rate = 0.05, government_reserve_in_rounds = 3,
                                                         tax_policy = :scale, tax_response_coverage = 1.0, tax_response_step = 0.02, tax_levers = levers, maximum_rounds = 1))
         mm.government_outlay_this_round = 100.0; mm.tax_this_round = 50.0; mm.consumption_tax_this_round = 10.0; mm.wealth_tax_this_round = 5.0
         B.manage_government_reserve!(mm); return mm
@@ -711,14 +712,14 @@ end
     @test isapprox(ms.tax_scale, 0.96 * 1.02; atol = 1e-9) && isapprox(ms.consumption_tax_scale, 1.02 * 1.02; atol = 1e-9) && isapprox(ms.wealth_tax_scale, 1.02; atol = 1e-9)
     @test ms.tax_scale < 1.0 < ms.consumption_tax_scale
     # on a surplus the policy cuts; the lever is a standing preference, so (−2, +1, 0) now cuts income hardest and consumption least
-    mc = create_bread_economy(SimulationParameters(; seed = 1, BEH..., consumption_tax_rate = 0.06, wealth_tax_rate = 0.05, government_reserve_in_rounds = 3, surplus_tax_reduction_share = 1.0,
+    mc = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., consumption_tax_rate = 0.06, wealth_tax_rate = 0.05, government_reserve_in_rounds = 3, surplus_tax_reduction_share = 1.0,
                                                     tax_policy = :scale, tax_response_step = 0.02, tax_levers = (income = -2.0, consumption = 1.0, wealth = 0.0), maximum_rounds = 1))
     give!(B.government(mc), 5_000.0); mc.government_outlay_this_round = 10.0; mc.tax_this_round = 50.0; mc.consumption_tax_this_round = 10.0; mc.wealth_tax_this_round = 5.0
     B.manage_government_reserve!(mc)
     @test mc.tax_policy_step == -0.02 && isapprox(mc.tax_scale, 0.96 * 0.98; atol = 1e-9) && isapprox(mc.consumption_tax_scale, 1.02 * 0.98; atol = 1e-9) && isapprox(mc.wealth_tax_scale, 0.98; atol = 1e-9)
     @test_throws ArgumentError run(; seed = 1, maximum_rounds = 1, BEH..., tax_levers = (income = NaN, consumption = 0.0, wealth = 0.0))
     # the wealth tax follows its own scale
-    mwt = create_bread_economy(SimulationParameters(; seed = 1, BEH..., ownership = :shareholders, share_market = true, startup_financing = :paid_in_capital, wealth_tax_rate = 0.12, maximum_rounds = 1))
+    mwt = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., ownership = :shareholders, share_market = true, startup_financing = :paid_in_capital, wealth_tax_rate = 0.12, maximum_rounds = 1))
     for w in B.persons(mwt); give!(w, 1_000.0); end
     mwt.wealth_tax_scale = 2.0; base = sum(B.taxable_wealth(mwt, w) for w in B.persons(mwt)); g0 = B.cash(B.government(mwt))
     B.collect_wealth_tax!(mwt)
@@ -738,7 +739,7 @@ end
 @testset "wealth tax on land and shares at book value (20 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     MK = (; BEH..., ownership = :shareholders, share_market = true, startup_financing = :paid_in_capital)
-    m = create_bread_economy(SimulationParameters(; seed = 1, MK..., wealth_tax_rate = 0.12, maximum_rounds = 1))   # 1 % a round
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, MK..., wealth_tax_rate = 0.12, maximum_rounds = 1))   # 1 % a round
     holder = first(w for w in B.persons(m) if any(e -> e isa Enterprise && e.ownership == :shareholders && get(e.shares, w.id, 0.0) > 0, B.alive_agents(m)))
     landowner = first(w for w in B.persons(m) if w.land > 0)
     # the base is land at the land price plus shares at book value per unit
@@ -756,14 +757,14 @@ end
     @test isapprox(B.cash(gov) - g0, 0.01 * base; rtol = 1e-6) && isapprox(m.wealth_tax_this_round, 0.01 * base; rtol = 1e-6)
     @test all(w.wealth_tax_arrears == 0.0 for w in B.persons(m))
     # arrears: a person without cash owes it next round and pays it first when cash arrives
-    m2 = create_bread_economy(SimulationParameters(; seed = 1, MK..., wealth_tax_rate = 0.12, maximum_rounds = 1))
+    m2 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, MK..., wealth_tax_rate = 0.12, maximum_rounds = 1))
     w2 = first(w for w in B.persons(m2) if w.land > 0); give!(w2, -B.cash(w2))
     B.collect_wealth_tax!(m2)
     owed = w2.wealth_tax_arrears; @test owed > 0
     give!(w2, 1_000.0); B.collect_wealth_tax!(m2)
     @test w2.wealth_tax_arrears == 0.0
     # the income scale does not move it; only its own scale does (see the mix tests)
-    m3 = create_bread_economy(SimulationParameters(; seed = 1, MK..., wealth_tax_rate = 0.12, maximum_rounds = 1))
+    m3 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, MK..., wealth_tax_rate = 0.12, maximum_rounds = 1))
     for w in B.persons(m3); give!(w, 1_000.0); end
     m3.tax_scale = 2.0; base3 = sum(B.taxable_wealth(m3, w) for w in B.persons(m3)); g3 = B.cash(B.government(m3))
     B.collect_wealth_tax!(m3)
@@ -781,7 +782,7 @@ end
 @testset "settlement ways: cash, end-of-round wages and rent, invoices, clearing among banks (22 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     W = (; BEH..., settlement = :invoicing)
-    m = create_bread_economy(SimulationParameters(; seed = 1, W..., maximum_rounds = 1))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, W..., maximum_rounds = 1))
     w = first(B.persons(m)); b = first(B.enterprises(m, :bakery)); f = first(B.enterprises(m, :farm)); bank = first(B.enterprises(m, :bank)); gov = B.government(m)
     # the router
     @test B.settlement_way(m, w, b, :bread, :none) == :cash                  # a person is party: cash
@@ -791,7 +792,7 @@ end
     @test B.settlement_way(m, b, bank, :account_fee, :none) == :invoice      # a bakery may invoice a bank
     @test B.settlement_way(m, bank, bank, :x, :none) == :clearing            # banks clear among themselves
     @test B.settlement_way(m, gov, w, :unemployment_fee, :fee) == :clearing  # the government keeps its financing at clearing
-    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., maximum_rounds = 1))
+    m0 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., maximum_rounds = 1))
     @test B.settlement_way(m0, b, f, :grain, :none) == :clearing             # the old rule: everything clears
     # a grain sale is an invoice: nothing moves at the sale, the bill is open, it is paid at the end of the next round
     give!(b, 1_000.0); give!(f, 0.0); fc = B.cash(f)
@@ -824,7 +825,7 @@ end
     round_data_money(m) = sum(B.cash(a) for a in B.alive_agents(m) if !B.is_bank(a); init = 0.0)   # deposits held by everyone but the banks
     W = (; BEH..., settlement = :invoicing, ownership = :shareholders, share_market = true, startup_financing = :paid_in_capital, liquidation_test = :book)
     function prepared()
-        m = create_bread_economy(SimulationParameters(; seed = 1, W..., maximum_rounds = 1))
+        m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, W..., maximum_rounds = 1))
         b = first(B.enterprises(m, :bakery)); f = first(B.enterprises(m, :farm))
         return m, b, f
     end
@@ -875,7 +876,7 @@ end
     @test B.parameters(m2).bank_bailout
     # peer-loan insurance under SuMSy: a struck peer loan is covered from the pool up to the pool
     SU = (; BEH..., SUM..., settlement = :invoicing, government_employment_share = 0.1, demurrage_tax_rate = 0.01, peer_loan_insurance = true)
-    ms = create_bread_economy(SimulationParameters(; seed = 1, SU..., maximum_rounds = 1))
+    ms = create_bread_economy(SimulationParameters(; PIN..., seed = 1, SU..., maximum_rounds = 1))
     bs = first(B.enterprises(ms, :bakery)); fs = first(B.enterprises(ms, :farm)); banks = first(B.enterprises(ms, :bank)); lender = B.persons(ms)[1]
     give!(lender, 500.0); give!(banks, 30.0); banks.insurance_premiums = 30.0
     push!(ms.peer_loans, B.PeerLoan(length(ms.peer_loans) + 1, lender.id, bs.id, banks.id, 100.0, 100.0, 10.0, 0.0, 0.0, false, B.current_round(ms) - 1, 0, false, false, 0.0))
@@ -897,7 +898,7 @@ end
 @testset "tax families: profit tax, collection periods, five scales and levers (22 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     # profit base: revenue − materials × 1.0 − labour × 0.5, never below zero
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., profit_tax_rate = 0.10, maximum_rounds = 1))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., profit_tax_rate = 0.10, maximum_rounds = 1))
     b = first(B.enterprises(m, :bakery))
     b.revenue_period = 100.0; b.materials_period = 30.0; b.labour_period = 40.0
     @test isapprox(B.profit_tax_base(m, b), 100 - 30 - 20; atol = 1e-9)
@@ -908,7 +909,7 @@ end
     d12 = round_data(run(; seed = 1, maximum_rounds = 24, BEH..., profit_tax_rate = 0.10, profit_tax_period = 12))
     @test all(d12.profit_tax[[r for r in 1:24 if r % 12 != 0]] .== 0.0) && d12.profit_tax[12] > 0
     # income tax accrued through the year and charged in round 12; the worker is paid gross meanwhile
-    mi = create_bread_economy(SimulationParameters(; seed = 1, BEH..., wage_tax_rate = 0.2, income_tax_period = 12, clearing = false, maximum_rounds = 1))
+    mi = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., wage_tax_rate = 0.2, income_tax_period = 12, clearing = false, maximum_rounds = 1))
     e = first(B.enterprises(mi, :bakery)); w = first(B.persons(mi)); give!(e, 1_000.0)
     c0 = B.cash(w); B.pay_income!(mi, e, w, 100.0, :wage)
     @test isapprox(B.cash(w) - c0, 100.0; atol = 1e-6) && isapprox(w.income_tax_accrued, 20.0; atol = 1e-6)
@@ -916,7 +917,7 @@ end
     @test all(di.income_tax_charged[[r for r in 1:24 if r % 12 != 0]] .== 0.0) && di.income_tax_charged[12] > 0
     # five families: a lever on each moves its own scale; the parking fee is never touched
     function levered(levers)
-        mm = create_bread_economy(SimulationParameters(; seed = 1, BEH..., government_reserve_in_rounds = 3, tax_policy = :scale, tax_response_coverage = 1.0, tax_response_step = 0.02, tax_levers = levers, maximum_rounds = 1))
+        mm = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., government_reserve_in_rounds = 3, tax_policy = :scale, tax_response_coverage = 1.0, tax_response_step = 0.02, tax_levers = levers, maximum_rounds = 1))
         mm.government_outlay_this_round = 100.0; mm.tax_this_round = 50.0
         B.manage_government_reserve!(mm); return mm
     end
@@ -926,7 +927,7 @@ end
     @test isapprox(levered((income = -3.0,)).tax_scale, 0.94 * 1.02; atol = 1e-9)        # a partial tuple: the others are 0
     @test_throws ArgumentError run(; seed = 1, maximum_rounds = 1, BEH..., tax_levers = (river = 1.0,))
     # the parking tax follows its own scale under SuMSy
-    ms = create_bread_economy(SimulationParameters(; seed = 1, BEH..., SUM..., demurrage_tax_rate = 0.01, maximum_rounds = 1))
+    ms = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., SUM..., demurrage_tax_rate = 0.01, maximum_rounds = 1))
     for w in B.persons(ms); give!(w, 200.0); end
     ms.parking_tax_scale = 0.0; g0 = B.cash(B.government(ms)); B.apply_demurrage!(ms)
     @test B.cash(B.government(ms)) == g0                                                   # parking tax scaled to zero: nothing collected
@@ -941,17 +942,17 @@ end
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     W = (; BEH..., settlement = :invoicing, ownership = :shareholders, share_market = true, startup_financing = :paid_in_capital)
     # a loan covered by 80 % of the firm's receivables is affordable even with no income to speak of
-    m = create_bread_economy(SimulationParameters(; seed = 1, W..., maximum_rounds = 1))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, W..., maximum_rounds = 1))
     f = first(B.enterprises(m, :farm)); b = first(B.enterprises(m, :bakery)); f.production_target = 0
     push!(m.invoices, B.Invoice(b.id, f.id, 100.0, 100.0, :grain, :none, B.current_round(m)))
     @test B.receivables(m, f) == 100.0
     @test B.affordable(m, f, 80.0, 0.01) && !B.affordable(m, f, 81.0, 0.01)
-    m0 = create_bread_economy(SimulationParameters(; seed = 1, W..., receivables_advance_rate = 0.0, maximum_rounds = 1))
+    m0 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, W..., receivables_advance_rate = 0.0, maximum_rounds = 1))
     f0 = first(B.enterprises(m0, :farm)); b0 = first(B.enterprises(m0, :bakery)); f0.production_target = 0
     push!(m0.invoices, B.Invoice(b0.id, f0.id, 100.0, 100.0, :grain, :none, B.current_round(m0)))
     @test !B.affordable(m0, f0, 80.0, 0.01)                                                 # switched off: the income test alone
     # loan-arrears seizure goes through the same procedure: offered for sale first
-    m2 = create_bread_economy(SimulationParameters(; seed = 1, W..., maximum_rounds = 1))
+    m2 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, W..., maximum_rounds = 1))
     b2 = first(B.enterprises(m2, :bakery)); bank = first(B.enterprises(m2, :bank))
     for w in B.persons(m2); give!(w, -B.cash(w)); end
     give!(B.persons(m2)[1], 5_000.0)
@@ -980,7 +981,7 @@ end
 
 @testset "banks do not fail: interbank arrears are recapitalised, and settled loans are skipped (22 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., settlement = :invoicing, maximum_rounds = 1))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., settlement = :invoicing, maximum_rounds = 1))
     a, b = B.enterprises(m, :bank)[1:2]
     B.make_loan!(m, b, a, 100.0, :test); loan = last(m.loans)
     give!(a, -B.cash(a)); loan.in_arrears = true; loan.arrears_rounds = 9
@@ -988,7 +989,7 @@ end
     @test a.alive && m.cumulative_bailouts > 0 && !loan.in_arrears
     @test any(pr -> pr.purpose == :bank_bailout && pr.to_id == a.id, vcat(m.promises, m.trade_arrears))
     # a loan paid off outside its schedule is closed by the service loop instead of crashing EconoSim
-    m2 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., maximum_rounds = 3))
+    m2 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., maximum_rounds = 3))
     f = first(B.enterprises(m2, :farm)); bank = first(B.enterprises(m2, :bank))
     B.make_loan!(m2, bank, f, 50.0, :test); l2 = last(m2.loans); l2.created = -1
     B.repay_extra!(m2, l2, B.total_due(l2))
@@ -1002,7 +1003,7 @@ end
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     W = (; BEH..., settlement = :invoicing, ownership = :shareholders, share_market = true, startup_financing = :paid_in_capital)
     function late_payer(; overdue, turnover, receivables = 0.0)
-        m = create_bread_economy(SimulationParameters(; seed = 1, W..., maximum_rounds = 1))
+        m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, W..., maximum_rounds = 1))
         b = first(B.enterprises(m, :bakery)); f = first(B.enterprises(m, :farm)); f2 = B.enterprises(m, :farm)[2]
         give!(b, -B.cash(b)); b.production_target = 0
         b.turnover_history = [turnover, turnover, turnover]
@@ -1029,12 +1030,12 @@ end
     B.make_loan!(m, first(B.enterprises(m, :bank)), b, 300.0, :test); l = last(m.loans); l.in_arrears = true; l.arrears_rounds = 3
     @test B.obligations_overdue(m, b, 3) > 0 && B.insolvent(m, b)
     # founding equity: every shareholder firm starts with its working reserve, paid in by its founders
-    me = create_bread_economy(SimulationParameters(; seed = 1, W..., founding_equity = true, maximum_rounds = 1))
+    me = create_bread_economy(SimulationParameters(; PIN..., seed = 1, W..., founding_equity = true, maximum_rounds = 1))
     firms = [e for e in B.alive_agents(me) if B.is_producer(e) && e.ownership == :shareholders]
     @test all(e -> B.cash(e) <= B.reserve_target(me, e) * (1 + 1e-3) && e.paid_in_capital >= 0, firms)   # at most the reserve: founders put in what they can afford (24 Sept)
     @test any(e -> e.paid_in_capital > 0, firms)
     # a cooperative has founding members who pay in its reserve and become its first members
-    mc = create_bread_economy(SimulationParameters(; seed = 1, BEH..., settlement = :invoicing, ownership = :mixed, number_of_farms = 4, number_of_bakeries = 4, startup_financing = :paid_in_capital, founding_equity = true, maximum_rounds = 1))
+    mc = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., settlement = :invoicing, ownership = :mixed, number_of_farms = 4, number_of_bakeries = 4, startup_financing = :paid_in_capital, founding_equity = true, maximum_rounds = 1))
     coops = [e for e in B.alive_agents(mc) if B.is_producer(e) && e.ownership == :cooperative]
     @test !isempty(coops) && all(e -> length(e.members) == B.parameters(mc).shareholder_count && B.cash(e) <= B.reserve_target(mc, e) * (1 + 1e-3), coops)
     @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 20, W..., founding_equity = true))) < 1e-6
@@ -1044,7 +1045,7 @@ end
 
 @testset "a failing cooperative is refounded as a shareholder firm (24 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., settlement = :invoicing, ownership = :mixed, number_of_farms = 4, number_of_bakeries = 4, founding_equity = true, maximum_rounds = 1))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., settlement = :invoicing, ownership = :mixed, number_of_farms = 4, number_of_bakeries = 4, founding_equity = true, maximum_rounds = 1))
     c = first(e for e in B.alive_agents(m) if B.is_producer(e) && e.ownership == :cooperative)
     f = first(e for e in B.alive_agents(m) if B.is_producer(e) && e !== c && e.kind == :farm)
     for a in B.alive_agents(m); a === c || give!(a, -B.cash(a)); end
@@ -1056,11 +1057,11 @@ end
 
 
 @testset "every firm has its own founders (24 September 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., ownership = :shareholders, number_of_persons = 64, number_of_farms = 4, number_of_bakeries = 4, entertainment = true, number_of_services = 4, founders = :distinct, maximum_rounds = 1))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., ownership = :shareholders, number_of_persons = 64, number_of_farms = 4, number_of_bakeries = 4, entertainment = true, number_of_services = 4, founders = :distinct, maximum_rounds = 1))
     fs = [Set(keys(e.shares)) for e in m.enterprise_list if B.is_producer(e)]; k = B.parameters(m).shareholder_count
     @test length(fs) == 12 && all(length(f) == k for f in fs)
     @test length(union(fs...)) == 12k                                                      # every firm its own founders
-    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., ownership = :shareholders, maximum_rounds = 1))
+    m0 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., ownership = :shareholders, maximum_rounds = 1))
     @test length(union([Set(keys(e.shares)) for e in m0.enterprise_list if B.is_producer(e)]...)) == B.parameters(m0).shareholder_count   # the old rule
 end
 
@@ -1068,7 +1069,7 @@ end
 @testset "founding loans on business terms and the protected minimum (24 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     W = (; BEH..., settlement = :invoicing, ownership = :shareholders, founders = :distinct, founding_equity = true)
-    m = create_bread_economy(SimulationParameters(; seed = 1, W..., maximum_rounds = 1))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, W..., maximum_rounds = 1))
     for l in m.loans
         l.debtor_id in (w.id for w in B.persons(m)) || continue
         @test length(l.debt.installments) == B.parameters(m).founding_loan_term                    # five-year founding loans
@@ -1076,7 +1077,7 @@ end
         @test B.next_payment(l) + B.living_cost(m, w) <= B.parameters(m).affordability_ratio * B.expected_income(m, w) + 1e-6
     end
     # the protected minimum: a payment that would leave less than one loaf is missed, not taken
-    m2 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., maximum_rounds = 3))
+    m2 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., maximum_rounds = 3))
     w = first(B.persons(m2)); bank = first(B.enterprises(m2, :bank))
     B.make_loan!(m2, bank, w, 100.0, :test); l = last(m2.loans); l.created = -1
     give!(w, B.next_payment(l) + 0.5 * B.collection_floor(m2) - B.cash(w))                      # enough for the payment, not for the floor too
@@ -1095,16 +1096,16 @@ end
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     LM = (; BEH..., land_pricing = :market, land_sales = :reservation, instalment_purchases = true, unmet_demand_share = 0.05, unsold_share = 0.05)
     DEPOSITS = (; deposit_interest_rate = 0.01, loyalty_bonus_rate = 0.02, deposit_interest_period = 12)
-    md = create_bread_economy(SimulationParameters(; seed = 1, LM..., DEPOSITS..., land_loans = true, maximum_rounds = 1))   # farms may buy on credit, so their demand counts
+    md = create_bread_economy(SimulationParameters(; PIN..., seed = 1, LM..., DEPOSITS..., land_loans = true, maximum_rounds = 1))   # farms may buy on credit, so their demand counts
     @test B.money_return_rate(md) ≈ 0.0025
     w = first(B.persons(md))
     @test B.land_reservation(md, w) ≈ B.expected_price(md, :rent) / 0.0025                 # debt money: rent over what idle money earns
     @test 0.0025 < B.instalment_rate(md, w) < B.buyer_alternative(md, w)                   # seller credit between deposit and loan rate
-    ms = create_bread_economy(SimulationParameters(; seed = 1, LM..., SUM..., demurrage_tax_rate = 0.01, maximum_rounds = 1))
+    ms = create_bread_economy(SimulationParameters(; PIN..., seed = 1, LM..., SUM..., demurrage_tax_rate = 0.01, maximum_rounds = 1))
     @test B.money_return_rate(ms) ≈ -0.03                                                    # SuMSy: idle money loses the parking fee and tax
     @test B.land_reservation(ms, first(B.persons(ms))) == Inf                                 # without a levy nobody sells land to hold such money
     @test B.instalment_rate(ms, first(B.persons(ms))) < 0                                     # seller credit at a negative market rate
-    ml = create_bread_economy(SimulationParameters(; seed = 1, LM..., SUM..., demurrage_tax_rate = 0.01, land_levy = true, maximum_rounds = 1))
+    ml = create_bread_economy(SimulationParameters(; PIN..., seed = 1, LM..., SUM..., demurrage_tax_rate = 0.01, land_levy = true, maximum_rounds = 1))
     @test B.land_levy_rate(ml) ≈ 0.0325 && B.land_reservation(ml, first(B.persons(ml))) ≈ B.expected_price(ml, :rent) / (0.0325 + max(-0.03, B.parameters(ml).peer_loan_rate - B.parameters(ml).bank_spread))
     g0 = B.cash(B.government(ml)); B.collect_land_levy!(ml)
     @test B.cash(B.government(ml)) > g0                                                       # the levy goes to the government
@@ -1115,7 +1116,7 @@ end
     B.land_market!(md)
     @test B.land_price(md) ≈ p0 * 1.06
     # excess supply lowers the price: under debt money, the price far above every reservation, no farm wanting land, nobody able to buy
-    mx = create_bread_economy(SimulationParameters(; seed = 1, LM..., DEPOSITS..., maximum_rounds = 1))
+    mx = create_bread_economy(SimulationParameters(; PIN..., seed = 1, LM..., DEPOSITS..., maximum_rounds = 1))
     mx.land_price_current = 10 * B.land_reservation(mx, first(B.persons(mx)))
     for f in B.enterprises(mx, :farm); f.production_target = f.land; end
     for w in B.persons(mx); give!(w, -B.cash(w)); end
@@ -1126,7 +1127,7 @@ end
     inst = [l for l in mi.peer_loans if B.is_person(mi[l.borrower_id]) || B.is_producer(mi[l.borrower_id])]
     @test !isempty(inst) && all(l -> 0.0025 < l.rate <= B.parameters(mi).maximum_interest_rate, inst)   # between the deposit rate and the banks' ceiling
     # a village without bakeries runs on when the stopping rule is off
-    mr = create_bread_economy(SimulationParameters(; seed = 1, BEH..., stop_without_producers = false, maximum_rounds = 8))
+    mr = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., stop_without_producers = false, maximum_rounds = 8))
     for b in B.enterprises(mr, :bakery); B.close_enterprise!(mr, b, :test); end
     run_simulation!(mr)
     @test mr.termination_reason in ("everyone is dead", "maximum rounds reached")               # the village runs on and starves visibly, no silent stop
@@ -1140,7 +1141,7 @@ end
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     LM = (; BEH..., land_pricing = :market, land_sales = :reservation, instalment_purchases = true, unmet_demand_share = 0.05, unsold_share = 0.05,
           deposit_interest_rate = 0.01, loyalty_bonus_rate = 0.02, deposit_interest_period = 12, land_loans = true)
-    m = create_bread_economy(SimulationParameters(; seed = 1, LM..., maximum_rounds = 1))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, LM..., maximum_rounds = 1))
     for f in B.enterprises(m, :farm); f.production_target = f.land + 5; give!(f, 10_000.0); end
     for w in B.persons(m); give!(w, -B.cash(w)); end                                        # only farms can buy, on credit
     cap = maximum(B.land_buyer_reservation(m, f, :cash) for f in B.enterprises(m, :farm))    # they have the cash, so they bid with it
@@ -1150,7 +1151,7 @@ end
     B.land_market!(m)
     @test B.land_price(m) <= cap + 1e-9
     # wealth values land at the price last paid, not the quote
-    m2 = create_bread_economy(SimulationParameters(; seed = 1, LM..., maximum_rounds = 1))
+    m2 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, LM..., maximum_rounds = 1))
     w = first(o for o in B.persons(m2) if o.land > 0)
     base = B.land_valuation_price(m2)
     m2.land_price_current = 100 * base
@@ -1163,7 +1164,7 @@ end
 
 @testset "the land levy is a tax family under the levers (24 September 2026)" begin
     L = (; BEH..., SUM..., demurrage_tax_rate = 0.01, land_pricing = :market, land_levy = true, government_reserve_in_rounds = 3, surplus_tax_reduction_share = 1.0)
-    m = create_bread_economy(SimulationParameters(; seed = 1, L..., maximum_rounds = 1))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, L..., maximum_rounds = 1))
     r0 = B.land_levy_rate(m)
     m.tax_this_round = 1_000.0; m.government_outlay_this_round = 10.0                      # a large surplus
     B.book_asset!(B.government(m).balance, B.DEPOSIT, 5_000.0)
@@ -1176,7 +1177,7 @@ end
 
 @testset "a village that has lost its last bakery tries to start one (24 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., founders = :distinct, maximum_rounds = 3))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., founders = :distinct, maximum_rounds = 3))
     for b in B.enterprises(m, :bakery); B.close_enterprise!(m, b, :test); end
     @test isempty(B.enterprises(m, :bakery))
     rich = B.persons(m)[end]; give!(rich, 2_000.0)
@@ -1185,13 +1186,13 @@ end
     @test length(nb) == 1 && haskey(nb[1].shares, rich.id) && B.cash(nb[1]) > 0 && m.new_firms == 1
     @test isempty(nb[1].bread) && B.debt_of(nb[1]) == 0
     # nobody can raise anything: the attempt fails and nothing opens
-    m2 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., SUM..., maximum_rounds = 3))
+    m2 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., SUM..., maximum_rounds = 3))
     for b in B.enterprises(m2, :bakery); B.close_enterprise!(m2, b, :test); end
     for a in B.alive_agents(m2); give!(a, -B.cash(a)); end
     B.refound_missing_producers!(m2)
     @test isempty(B.enterprises(m2, :bakery)) && m2.new_firms == 0
     # switched off
-    m3 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., refound_minimum = 0, maximum_rounds = 3))
+    m3 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., refound_minimum = 0, maximum_rounds = 3))
     for b in B.enterprises(m3, :bakery); B.close_enterprise!(m3, b, :test); end
     B.refound_missing_producers!(m3)
     @test isempty(B.enterprises(m3, :bakery))
@@ -1200,7 +1201,7 @@ end
 
 
 @testset "a village whose banks have all closed (24 September 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., land_pricing = :market, instalment_purchases = true, founders = :distinct, maximum_rounds = 3))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., land_pricing = :market, instalment_purchases = true, founders = :distinct, maximum_rounds = 3))
     for b in B.enterprises(m, :bank); B.close_enterprise!(m, b, :test); end
     w = first(B.persons(m))
     @test B.some_bank(m, w) === nothing && B.buyer_alternative(m, w) == Inf
@@ -1214,7 +1215,7 @@ end
 @testset "market entry (25 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     function village(; kw...)
-        m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., ownership = :shareholders, founders = :distinct, market_entry = true, kw..., maximum_rounds = 1))
+        m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., ownership = :shareholders, founders = :distinct, market_entry = true, kw..., maximum_rounds = 1))
         give!(B.persons(m)[end], 3_000.0)                                                   # someone with spare cash to found it
         return m
     end
@@ -1248,7 +1249,7 @@ end
 @testset "review 6: the tax scale recovers from a surplus, services restart with a waiting period (25 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     R = (; BEH..., SUM..., demurrage_tax_rate = 0.01, government_reserve_in_rounds = 3, surplus_tax_reduction_share = 1.0)
-    m = create_bread_economy(SimulationParameters(; seed = 1, R..., maximum_rounds = 1))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, R..., maximum_rounds = 1))
     give!(B.government(m), 50_000.0)
     m.tax_this_round = 100.0; m.government_outlay_this_round = 1.0
     for _ in 1:20; B.manage_government_reserve!(m); end                                   # a long surplus
@@ -1259,7 +1260,7 @@ end
     B.manage_government_reserve!(m)
     @test m.tax_scale > s0                                                                  # and it climbs back
     # services restart, but at most once per waiting period
-    mt = create_bread_economy(SimulationParameters(; seed = 1, BEH..., entertainment = true, number_of_services = 2, founders = :distinct, maximum_rounds = 3))
+    mt = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., entertainment = true, number_of_services = 2, founders = :distinct, maximum_rounds = 3))
     give!(B.persons(mt)[end], 3_000.0)
     for t in B.enterprises(mt, :services); B.close_enterprise!(mt, t, :test); end
     B.refound_missing_producers!(mt)
@@ -1273,7 +1274,7 @@ end
 @testset "land: forced and life-event sales at the best bid (25 September 2026)" begin
     give!(a, amount) = B.book_asset!(a.balance, B.DEPOSIT, amount)
     LM = (; BEH..., land_pricing = :market, land_sales = :reservation, distress_land_sales = true, deposit_interest_rate = 0.01, loyalty_bonus_rate = 0.02, deposit_interest_period = 12)
-    m = create_bread_economy(SimulationParameters(; seed = 1, LM..., land_life_event_rate = 0.0, maximum_rounds = 1))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, LM..., land_life_event_rate = 0.0, maximum_rounds = 1))
     for f in B.enterprises(m, :farm); f.production_target = f.land; end
     o = first(w for w in B.persons(m) if w.land > 0); give!(o, -B.cash(o)); o.hunger = 1       # a landowner in distress
     buyer = first(w for w in B.persons(m) if w.land == 0); give!(buyer, 100.0)
@@ -1294,17 +1295,17 @@ end
     for (name, kd, ks) in def.rungs
         startswith(name, "0 ") || startswith(name, "1 ") || continue
         for (base, kw) in ((def.BARE_DEBT, kd), (def.BARE_SUMSY, ks))
-            @test !SimulationParameters(; base..., kw...).bank_bailout
+            @test !SimulationParameters(; PIN..., base..., kw...).bank_bailout
         end
     end
-    @test SimulationParameters(; def.BARE_DEBT..., only(r for r in def.rungs if startswith(r[1], "2 "))[2]...).bank_bailout   # from step 2 on
+    @test SimulationParameters(; PIN..., def.BARE_DEBT..., only(r for r in def.rungs if startswith(r[1], "2 "))[2]...).bank_bailout   # from step 2 on
     d = round_data(run(; seed = 1, maximum_rounds = 30, def.BARE_DEBT..., bank_bailout = false))
     @test all(d.bank_bailouts .== 0.0)
 end
 
 
 @testset "wages rise on a real labour shortage only (25 September 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., unmet_demand_share = 0.05, wage_threshold = true, maximum_rounds = 1))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., unmet_demand_share = 0.05, wage_threshold = true, maximum_rounds = 1))
     for x in B.persons(m); x.market[:wage].sold = 3.0; end                                  # a month's worth of hired labour
     w = first(B.persons(m)); r = w.market[:wage]
     sold = sum(e.market[:wage].sold for e in B.alive_agents(m) if :wage in B.sells(e); init = 0.0)
@@ -1312,14 +1313,14 @@ end
     @test !B.demand_unmet(m, w, :wage)
     r.unmet_units = 0.2 * max(sold, 10.0)                                                     # a real shortage
     @test B.demand_unmet(m, w, :wage)
-    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., unmet_demand_share = 0.05, maximum_rounds = 1))
+    m0 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., unmet_demand_share = 0.05, maximum_rounds = 1))
     w0 = first(B.persons(m0)); w0.market[:wage].unmet_demand = true; w0.market[:wage].unmet_units = 0.01
     @test B.demand_unmet(m0, w0, :wage)                                                       # the old rule, off by default
 end
 
 
 @testset "a ceiling on public borrowing (26 September 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., government_employment_share = 0.1, unemployment_fee_in_breads = 2.0, public_debt_limit = 1.0, maximum_rounds = 14))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., government_employment_share = 0.1, unemployment_fee_in_breads = 2.0, public_debt_limit = 1.0, maximum_rounds = 14))
     run_simulation!(m)
     @test 0.25 <= m.spending_scale <= 1.0
     # over the ceiling: spending scaled to what the ceiling allows
@@ -1329,7 +1330,7 @@ end
     for _ in 1:12; push!(m.data, merge(m.data[end], (; government_debt = 1_000.0))); end
     B.apply_debt_ceiling!(m)
     @test m.spending_scale == 1.0                                                          # back under it: full spending
-    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., maximum_rounds = 3)); run_simulation!(m0)
+    m0 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., maximum_rounds = 3)); run_simulation!(m0)
     @test m0.spending_scale == 1.0                                                         # no ceiling: never scaled
 end
 
@@ -1344,10 +1345,10 @@ end
 
 
 @testset "a standard of living (27 September 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., entertainment = true, number_of_services = 2, standard_of_living_services = 2, maximum_rounds = 1))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., entertainment = true, number_of_services = 2, standard_of_living_services = 2, maximum_rounds = 1))
     w = first(B.persons(m)); give!(a, x) = B.book_asset!(a.balance, B.DEPOSIT, x)
     give!(w, -B.cash(w))
-    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., entertainment = true, number_of_services = 2, maximum_rounds = 1))
+    m0 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., entertainment = true, number_of_services = 2, maximum_rounds = 1))
     w0 = first(B.persons(m0)); give!(w0, -B.cash(w0))
     @test B.labour_supply(m, w) >= B.labour_supply(m0, w0)                                  # works to afford the services
     @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 24, BEH..., entertainment = true, number_of_services = 2, standard_of_living_services = 2))) < 1e-6
@@ -1355,7 +1356,7 @@ end
 
 
 @testset "downward wage rigidity (27 September 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., wage_cut_maximum = 0.005, maximum_rounds = 1))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., wage_cut_maximum = 0.005, maximum_rounds = 1))
     w = first(B.persons(m)); w.ask[:wage] = 4.0
     w.market[:wage].offered = 3.0; w.market[:wage].sold = 0.0; w.market[:wage].idle_rounds = 2      # idle for months: the old rule cuts 45 %
     B.adapt_prices!(m)
@@ -1374,7 +1375,7 @@ end
 
 @testset "owners' guarantee and interest from equity (28 September 2026)" begin
     give!(a, x) = B.book_asset!(a.balance, B.DEPOSIT, x)
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., ownership = :shareholders, founders = :distinct, owner_guarantee = true, maximum_rounds = 3))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., ownership = :shareholders, founders = :distinct, owner_guarantee = true, maximum_rounds = 3))
     e = first(b for b in B.enterprises(m, :bakery)); bank = first(B.enterprises(m, :bank))
     B.make_loan!(m, bank, e, 200.0, :test)
     give!(e, -B.cash(e))                                                                    # nothing in the estate
@@ -1392,7 +1393,7 @@ end
     for k in 1:7; B.service_debt!(m); end                                                  # seven missed months
     @test l.settled && l.write_off > 0
     # interest only from equity: a bank under water pays none
-    mi = create_bread_economy(SimulationParameters(; seed = 1, BEH..., deposit_interest_rate = 0.05, deposit_interest_period = 1, interest_from_equity = true, maximum_rounds = 2))
+    mi = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., deposit_interest_rate = 0.05, deposit_interest_period = 1, interest_from_equity = true, maximum_rounds = 2))
     for bk in B.enterprises(mi, :bank)                                                       # every bank: a large loss, net worth below zero
         bk.retained_interest = 1_000.0; B.book_asset!(bk.balance, B.DEBT, -1_000.0; skip_check = true)
     end
@@ -1402,7 +1403,7 @@ end
 
 
 @testset "a capital requirement (28 September 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., bank_capital_ratio = 0.08, capital_constrains_lending = true, maximum_rounds = 3))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., bank_capital_ratio = 0.08, capital_constrains_lending = true, maximum_rounds = 3))
     bank = first(B.enterprises(m, :bank)); w = first(B.persons(m))
     B.book_asset!(bank.balance, B.DEBT, -B.net_wealth(m, bank); skip_check = true)          # net worth to zero: no room at all
     @test B.lending_room(m, bank) == 0.0 && !B.credit_eligible(m, w, 10.0)
@@ -1410,26 +1411,26 @@ end
     @test isapprox(B.lending_room(m, bank), 1_000.0 - B.required_capital(m, bank) / 0.08; atol = 1e-6)
     gov = B.government(m)
     @test B.credit_eligible(m, gov, 1e6) || true                                              # the government is never rationed (its own test is elsewhere)
-    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., bank_capital_ratio = 0.08, maximum_rounds = 3))
+    m0 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., bank_capital_ratio = 0.08, maximum_rounds = 3))
     @test B.lending_room(m0, first(B.enterprises(m0, :bank))) == Inf                          # without the switch: no rationing
 end
 
 
 @testset "the price of leisure is bounded (28 September 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., entertainment = true, number_of_services = 2, service_max_in_breads = 2.0, employer_wage_margin = 0.25, maximum_rounds = 1))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., entertainment = true, number_of_services = 2, service_max_in_breads = 2.0, employer_wage_margin = 0.25, maximum_rounds = 1))
     w = first(B.persons(m)); t = first(B.enterprises(m, :services))
     m.expected_prices[:service] = 100.0                                                     # a runaway service price
     @test B.buyer_reservation(m, w, :service) <= 2.0 * B.expected_price(m, :bread) + 1e-9   # worth at most two loaves
     t.ask[:service] = 100.0
     @test B.buyer_reservation(m, t, :wage) <= 1.25 * B.going_wage(m) + 1e-9                # bids at most a quarter above the going (paid) wage
-    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., entertainment = true, number_of_services = 2, maximum_rounds = 1))
+    m0 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., entertainment = true, number_of_services = 2, maximum_rounds = 1))
     t0 = first(B.enterprises(m0, :services)); t0.ask[:service] = 100.0
     @test B.buyer_reservation(m0, t0, :wage) > 10 * B.expected_price(m0, :wage)            # without the limits: revenue per worker
 end
 
 
 @testset "the food emergency (30 September 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., wage_cut_maximum = 0.005, food_emergency_share = 0.9, employer_loss_tolerance = 0.1, maximum_rounds = 3))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., wage_cut_maximum = 0.005, food_emergency_share = 0.9, employer_loss_tolerance = 0.1, maximum_rounds = 3))
     w = first(B.persons(m)); e = first(B.enterprises(m, :bakery)); B.book_asset!(e.balance, B.DEPOSIT, 1_000.0)
     w.last_wage_rate = 4.0; w.last_wage_round = B.current_round(m); w.ask[:wage] = 2.0; e.bid[:wage] = 2.0
     B.econo_step!(m, 1); empty!(w.negotiated); empty!(e.negotiated); w.last_wage_round = B.current_round(m)
@@ -1445,19 +1446,19 @@ end
 
 
 @testset "a public investment (3 October 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., government_employment_share = 0.1, public_project_start = 1, public_project_build_months = 3, maximum_rounds = 6))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., government_employment_share = 0.1, public_project_start = 1, public_project_build_months = 3, maximum_rounds = 6))
     run_simulation!(m); d = round_data(m)
     @test all(d.project_labour[1:3] .> 0) && d.project_cost[3] > 0 && d.project_revenue[3] == 0.0       # building: cost, no revenue
     @test d.rides[6] + d.rides_unaffordable[6] == d.persons_alive[6] && d.project_revenue[6] > 0        # running: everyone wants a ride
     @test abs(money_identity_gap(m)) < 1e-6
-    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., maximum_rounds = 3)); run_simulation!(m0)
+    m0 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., maximum_rounds = 3)); run_simulation!(m0)
     @test all(round_data(m0).project_labour .== 0)                                                      # no project: nothing hired
 end
 
 
 @testset "notice and loyalty (3 October 2026)" begin
     give!(a, x) = B.book_asset!(a.balance, B.DEPOSIT, x)
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., employer_loyalty = true, notice_tenure_months = 2, notice_months = 3, maximum_rounds = 1))   # loyalty makes tenure accrue
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., employer_loyalty = true, notice_tenure_months = 2, notice_months = 3, maximum_rounds = 1))   # loyalty makes tenure accrue
     e = first(B.enterprises(m, :farm)); give!(e, 5_000.0)                                      # farms hire first each month
     for _ in 1:4; B.econo_step!(m, 1); end
     kept = [w for w in B.persons(m) if get(w.tenure, e.id, 0) >= 2 && e.id in w.worked_for]   # with the farm for three months running
@@ -1466,7 +1467,7 @@ end
     for f in B.alive_agents(m); f isa B.Enterprise && B.is_producer(f) && (f.production_target = 0); end   # nobody wants labour this month
     B.econo_step!(m, 1); units_last = w.units_last[e.id]
     @test get(w.units_for, e.id, 0.0) >= units_last - 1e-9 && w.notice[e.id] == 2             # kept at last month's units; two months of notice left
-    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., employer_loyalty = true, maximum_rounds = 1))
+    m0 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., employer_loyalty = true, maximum_rounds = 1))
     e0 = first(B.enterprises(m0, :farm)); give!(e0, 5_000.0)
     for _ in 1:4; B.econo_step!(m0, 1); end
     for f in B.alive_agents(m0); f isa B.Enterprise && B.is_producer(f) && (f.production_target = 0); end
@@ -1478,10 +1479,10 @@ end
 
 @testset "work as purpose (4 October 2026)" begin
     give!(a, x) = B.book_asset!(a.balance, B.DEPOSIT, x)
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., offer_full_capacity = false, minimum_labour_offer = 0.5, volunteer_share = 1.0, maximum_rounds = 1))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., offer_full_capacity = false, minimum_labour_offer = 0.5, volunteer_share = 1.0, maximum_rounds = 1))
     w = first(B.persons(m)); give!(w, 10_000.0)                                               # needs nothing
     @test B.labour_supply(m, w) >= 0.5 * w.effective_capacity - 1e-9                           # offers half anyway
-    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., offer_full_capacity = false, maximum_rounds = 1))
+    m0 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., offer_full_capacity = false, maximum_rounds = 1))
     w0 = first(B.persons(m0)); give!(w0, 10_000.0)
     @test B.labour_supply(m0, w0) == 0.0                                                      # without the rule: nothing
     d = round_data(run(; seed = 1, maximum_rounds = 12, BEH..., minimum_labour_offer = 0.5, volunteer_share = 1.0))
@@ -1491,7 +1492,7 @@ end
 
 
 @testset "volunteers staff the services (4 October 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., entertainment = true, number_of_services = 2, volunteers_in_services = true, volunteer_share = 1.0, maximum_rounds = 1))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., entertainment = true, number_of_services = 2, volunteers_in_services = true, volunteer_share = 1.0, maximum_rounds = 1))
     t = first(B.enterprises(m, :services)); B.book_asset!(t.balance, B.DEPOSIT, -B.cash(t))      # a services that can pay nobody
     t.production_target = 10; push!(t.turnover_history, 0.0)                                   # and earned nothing last month: paid hiring is nil
     for f in B.ROUND_BEHAVIORS
@@ -1505,7 +1506,7 @@ end
 
 @testset "not working for reasons of their own, and gold (5 October 2026)" begin
     give!(a, x) = B.book_asset!(a.balance, B.DEPOSIT, x)
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., offer_full_capacity = false, nonworking_share = 0.25, minimum_labour_offer = 0.5, volunteer_share = 1.0, gold_grams_per_villager = 100.0, maximum_rounds = 1))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., offer_full_capacity = false, nonworking_share = 0.25, minimum_labour_offer = 0.5, volunteer_share = 1.0, gold_grams_per_villager = 100.0, maximum_rounds = 1))
     nw = [w for w in B.persons(m) if w.nonworking != :none]
     @test length(nw) == 4 && count(w -> w.nonworking == :nonworking_hungry, nw) == 1
     w = first(x for x in nw if x.nonworking == :nonworking); give!(w, 1_000.0)
@@ -1527,7 +1528,7 @@ end
 
 @testset "a premium loaf (11 October 2026)" begin
     give!(a, x) = B.book_asset!(a.balance, B.DEPOSIT, x)
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., maximum_capacity = 6.0, premium_markup = 5.0, premium_labour_per_loaf = 0.5, maximum_rounds = 2))   # hands to spare for the extra work; bread is bought from month 2
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., maximum_capacity = 6.0, premium_markup = 5.0, premium_labour_per_loaf = 0.5, maximum_rounds = 2))   # hands to spare for the extra work; bread is bought from month 2
     rich = first(B.persons(m)); give!(rich, 1_000.0)
     d = round_data(run_simulation!(m))
     @test d.premium_loaves[2] > 0 && d.premium_revenue[2] > 4 * d.premium_loaves[2] * 5.0 && d.premium_labour[2] >= 0.5 * d.premium_loaves[2] - 1e-9   # the rich villager ate premium; hands were hired for it
@@ -1538,7 +1539,7 @@ end
 
 
 @testset "labour for the village's bread (12 October 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., offer_full_capacity = false, labour_for_bread = true, labour_for_bread_margin = 0.1, maximum_rounds = 3))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., offer_full_capacity = false, labour_for_bread = true, labour_for_bread_margin = 0.1, maximum_rounds = 3))
     run_simulation!(m); d = round_data(m)
     w = first(B.persons(m)); B.book_asset!(w.balance, B.DEPOSIT, 10_000.0)                     # needs nothing, still offers the shared part
     @test B.labour_supply(m, w) >= min(w.effective_capacity, B.shared_labour(m)) - 1e-9 && B.shared_labour(m) > 0
@@ -1549,26 +1550,26 @@ end
 
 
 @testset "the levy is never cut when its surplus is paid out (12 October 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., land_pricing = :market, land_levy = true, government_reserve_in_rounds = 3, surplus_tax_reduction_share = 0.0, surplus_redistribution_share = 1.0, tax_policy = :scale, tax_levers = (income = 0.0, consumption = 0.0, wealth = 0.0, profit = 0.0, parking = 1.0, land = 1.0), demurrage_tax_rate = 0.01, monetary_system = :sumsy, guaranteed_income = 5.0, maximum_rounds = 36))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., land_pricing = :market, land_levy = true, government_reserve_in_rounds = 3, surplus_tax_reduction_share = 0.0, surplus_redistribution_share = 1.0, tax_policy = :scale, tax_levers = (income = 0.0, consumption = 0.0, wealth = 0.0, profit = 0.0, parking = 1.0, land = 1.0), demurrage_tax_rate = 0.01, monetary_system = :sumsy, guaranteed_income = 5.0, maximum_rounds = 36))
     d = round_data(run_simulation!(m))
     @test all(d.land_levy_scale .== 1.0)                                                       # a surplus pays the dividend; it never scales the levy
 end
 
 
 @testset "spoilage acceptance (13 October 2026)" begin
-    p = SimulationParameters(; BEH..., greed = true, greed_share = 1.0, spoilage_acceptance = 0.5)
+    p = SimulationParameters(; PIN..., BEH..., greed = true, greed_share = 1.0, spoilage_acceptance = 0.5)
     @test B.greedy_bread_cap(p) == p.breads_per_meal * p.spoilage_age_in_rounds * 1.5         # 2 × 3 × 1.5 = 9 loaves
-    @test B.greedy_bread_cap(SimulationParameters(; BEH..., greed = true, greed_share = 1.0)) == 10.0   # NaN: the old cap
+    @test B.greedy_bread_cap(SimulationParameters(; PIN..., BEH..., greed = true, greed_share = 1.0)) == 10.0   # NaN: the old cap
     d = round_data(run(; seed = 1, maximum_rounds = 12, BEH..., greed = true, greed_share = 1.0, greed_hoarding = 0.0, spoilage_acceptance = 0.1))
     @test all(d.greedy_loaves .>= 0) && abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., greed = true, greed_share = 1.0, spoilage_acceptance = 0.1))) < 1e-6
 end
 
 
 @testset "greedy pricing and distress pricing (13 October 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., greed = true, greed_share = 1.0, greedy_pricing = true, distress_pricing = true, maximum_rounds = 2))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., greed = true, greed_share = 1.0, greedy_pricing = true, distress_pricing = true, maximum_rounds = 2))
     b = first(B.enterprises(m, :bakery))
     @test B.greedy_firm(m, b)                                                                  # everyone greedy: a greedy village's firms are greedy
-    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., greed = true, greed_share = 0.25, maximum_rounds = 2))
+    m0 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., greed = true, greed_share = 0.25, maximum_rounds = 2))
     @test !B.greedy_firm(m0, first(B.enterprises(m0, :bakery)))
     B.econo_step!(m, 1)
     b.market[:bread].offered = 10.0; b.market[:bread].sold = 10.0; b.ask[:bread] = 1.0        # a sell-out
@@ -1581,11 +1582,11 @@ end
 
 
 @testset "bakers plan on purchases, within capacity (14 October 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., greed = true, greed_share = 1.0, plan_for_gluttony = true, plan_greedy_on_purchases = true, plan_within_capacity = true, maximum_rounds = 3))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., greed = true, greed_share = 1.0, plan_for_gluttony = true, plan_greedy_on_purchases = true, plan_within_capacity = true, maximum_rounds = 3))
     run_simulation!(m)
     cap = B.bakery_capacity_loaves(m) / B.parameters(m).breads_per_grain
     @test all(b.production_target <= ceil(cap) + 1 for b in B.enterprises(m, :bakery))        # no bakery targets more grain than its ovens bake
-    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., greed = true, greed_share = 1.0, plan_for_gluttony = true, maximum_rounds = 3))
+    m0 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., greed = true, greed_share = 1.0, plan_for_gluttony = true, maximum_rounds = 3))
     run_simulation!(m0)
     @test maximum(b.production_target for b in B.enterprises(m0, :bakery)) >= maximum(b.production_target for b in B.enterprises(m, :bakery))   # the cash estimate plans at least as much
     @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 24, BEH..., greed = true, greed_share = 1.0, plan_greedy_on_purchases = true, plan_within_capacity = true))) < 1e-6
@@ -1593,7 +1594,7 @@ end
 
 
 @testset "cost cutting under distress (14 October 2026; 15 Oct: distress set up deliberately)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., distress_pricing = true, distress_cost_cutting = true, liquidation_test = :cash_flow, maximum_rounds = 6))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., distress_pricing = true, distress_cost_cutting = true, liquidation_test = :cash_flow, maximum_rounds = 6))
     for _ in 1:3; B.econo_step!(m, 1); end
     b = first(B.enterprises(m, :bakery)); p = B.parameters(m)
     supplier = first(B.enterprises(m, :farm))
@@ -1616,7 +1617,7 @@ end
 
 
 @testset "SuMSy's fiscal arrangement on debt money (14 October 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., land_pricing = :market, wage_tax_rate = 0.0, capital_tax_rate = 0.0, demurrage_tax_rate = 0.015, demurrage_free_buffer = 30.0, land_levy = true, land_levy_dividend = true, basic_income = 5.0, maximum_rounds = 6))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., land_pricing = :market, wage_tax_rate = 0.0, capital_tax_rate = 0.0, demurrage_tax_rate = 0.015, demurrage_free_buffer = 30.0, land_levy = true, land_levy_dividend = true, basic_income = 5.0, maximum_rounds = 6))
     @test B.money_return_rate(m) < 0 && B.land_levy_rate(m) > 0.01                              # holding cash costs; the levy follows
     run_simulation!(m); d = round_data(m)
     @test all(d.basic_income[2:end] .≈ 5.0 .* d.persons_alive[2:end])                          # everyone, every month
@@ -1638,14 +1639,14 @@ end
 
 @testset "cash hoarders, volunteers anywhere, community services, services planning on sales (15 October 2026)" begin
     give!(a, x) = B.book_asset!(a.balance, B.DEPOSIT, x)
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., cash_hoarder_share = 0.25, land_pricing = :market, maximum_rounds = 3))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., cash_hoarder_share = 0.25, land_pricing = :market, maximum_rounds = 3))
     hs = [w for w in B.persons(m) if B.hoards_cash(w)]
     @test length(hs) == 4
     h = first(hs); give!(h, 5_000.0)
     run_simulation!(m)
     @test isempty([e for e in m.events if e.kind in (:land_sale, :share_sale) && get(e, :buyer, 0) == h.id])   # buys no land, no shares
     @test round_data(m).n_cash_hoarders[end] == 4
-    m2 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., volunteer_kinds = (:bakery,), maximum_rounds = 3))
+    m2 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., volunteer_kinds = (:bakery,), maximum_rounds = 3))
     b = first(B.enterprises(m2, :bakery)); B.book_asset!(b.balance, B.DEPOSIT, -B.cash(b)); b.production_target = 6; push!(b.turnover_history, 0.0)
     for f in B.ROUND_BEHAVIORS; f(m2); occursin("bake!", string(f)) && break; end
     @test b.volunteer_labour > 0                                                                 # volunteers staffed the bakery the market could not pay for
@@ -1654,7 +1655,7 @@ end
     @test c.hired_labour == 0
     @test isapprox(c.ask[:service], 0.25 * B.expected_price(m3, :bread); atol = 0.05)               # a quarter of a loaf
     @test abs(money_identity_gap(m3)) < 1e-6
-    m4 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., entertainment = true, number_of_services = 2, firms_plan_on_sales = true, maximum_rounds = 3))
+    m4 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., entertainment = true, number_of_services = 2, firms_plan_on_sales = true, maximum_rounds = 3))
     run_simulation!(m4)
     t1, t2 = B.enterprises(m4, :services)[1:2]
     targets = Int[]
@@ -1667,7 +1668,7 @@ end
 
 
 @testset "cash hoarders chosen by money at a month (15 October 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., cash_hoarder_share = 0.25, cash_hoarder_month = 3, maximum_rounds = 4))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., cash_hoarder_share = 0.25, cash_hoarder_month = 3, maximum_rounds = 4))
     @test count(B.hoards_cash, B.persons(m)) == 0                                                 # nobody at the founding
     for _ in 1:2; B.econo_step!(m, 1); end
     rich = sort(B.persons(m); by = w -> -B.cash(w))[1:4]
@@ -1677,16 +1678,16 @@ end
 
 
 @testset "firms plan on sales, greed chosen later, the levy passed on (15 October 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., firms_plan_on_sales = true, maximum_rounds = 3))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., firms_plan_on_sales = true, maximum_rounds = 3))
     run_simulation!(m)
     bs = B.enterprises(m, :bakery); for (k, b) in enumerate(bs); b.market[:bread].sold = k == 1 ? 100.0 : 0.0; end
     B.plan_targets!(m)
     @test bs[1].production_target > maximum(b.production_target for b in bs[2:end]) && all(b.production_target >= 1 for b in bs[2:end])
-    g = create_bread_economy(SimulationParameters(; seed = 1, BEH..., greed = true, greed_share = 0.25, greed_month = 2, maximum_rounds = 3))
+    g = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., greed = true, greed_share = 0.25, greed_month = 2, maximum_rounds = 3))
     @test count(w -> w.greed == :greedy, B.persons(g)) == 0
     for _ in 1:2; B.econo_step!(g, 1); end
     @test count(w -> w.greed == :greedy, B.persons(g)) == 4
-    s = create_bread_economy(SimulationParameters(; seed = 1, BEH..., land_pricing = :market, land_levy = true, levy_pass_through = true, monetary_system = :sumsy, guaranteed_income = 5.0, demurrage_rate = 0.02, demurrage_free_buffer = 30.0, maximum_rounds = 2))
+    s = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., land_pricing = :market, land_levy = true, levy_pass_through = true, monetary_system = :sumsy, guaranteed_income = 5.0, demurrage_rate = 0.02, demurrage_free_buffer = 30.0, maximum_rounds = 2))
     owner = first(w for w in B.persons(s) if w.land > 0)
     B.econo_step!(s, 1)
     @test owner.ask[:rent] >= B.expected_price(s, :rent) + B.land_levy_rate(s) * B.land_valuation_price(s) - 1e-6   # the levy asked on top
@@ -1694,7 +1695,7 @@ end
 
 
 @testset "a sales shift followed gradually (16 October 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., firms_plan_on_sales = true, maximum_rounds = 3))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., firms_plan_on_sales = true, maximum_rounds = 3))
     run_simulation!(m)
     bs = B.enterprises(m, :bakery); n = length(bs)
     for b in bs; b.plan_share = 1 / n; b.share_trend = 0; end
@@ -1709,7 +1710,7 @@ end
 
 
 @testset "one labour market for bakeries and services (16–17 October 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., entertainment = true, number_of_services = 2, joint_labour_market = true, maximum_rounds = 3))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., entertainment = true, number_of_services = 2, joint_labour_market = true, maximum_rounds = 3))
     run_simulation!(m); d = round_data(m)
     @test all(d.bread_baked[2:end] .> 0)                                                        # the bakeries are staffed and bake
     @test sum(t.hired_labour for t in B.enterprises(m, :services)) > 0                               # and the services hire in the same market
@@ -1718,13 +1719,13 @@ end
 
 
 @testset "contracts and experience (17 October 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., employer_loyalty = true, contracts = true, contract_share = 1.0, contract_tenure_months = 2, maximum_rounds = 6))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., employer_loyalty = true, contracts = true, contract_share = 1.0, contract_tenure_months = 2, maximum_rounds = 6))
     run_simulation!(m); d = round_data(m)
     @test d.contracted[end] > 0                                                                 # temps with the tenure got contracts
     w = first(x for x in B.persons(m) if x.contract > 0); e = m[w.contract]
     @test get(w.units_for, e.id, 0.0) >= w.contract_units - 1e-9 || !e.alive                       # and are hired for the contracted units
     @test abs(money_identity_gap(m)) < 1e-6
-    m2 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., experience = true, experience_months = (2, 4), maximum_rounds = 3))
+    m2 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., experience = true, experience_months = (2, 4), maximum_rounds = 3))
     B.econo_step!(m2, 1)
     x = first(B.persons(m2)); b = first(B.enterprises(m2, :bakery))
     for _ in 1:3                                                                                # three months running at the bakery
@@ -1739,8 +1740,8 @@ end
 
 
 @testset "public land (18 October 2026)" begin
-    @test_throws ArgumentError create_bread_economy(SimulationParameters(; seed = 1, BEH..., public_land = true, land_pricing = :market))
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., public_land = true, public_land_farm_rent_in_breads = 1.0, public_land_firm_rent_in_breads = 2.0, public_land_dwelling_rent_in_breads = 0.25, maximum_rounds = 4))
+    @test_throws ArgumentError create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., public_land = true, land_pricing = :market))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., public_land = true, public_land_farm_rent_in_breads = 1.0, public_land_firm_rent_in_breads = 2.0, public_land_dwelling_rent_in_breads = 0.25, maximum_rounds = 4))
     @test all(w.land == 0 for w in B.persons(m)) && m.public_land_total > 0                  # nobody owns land; the stock is the government's
     run_simulation!(m); d = round_data(m)
     @test all(d.ground_rent[2:end] .> 0) && d.tax[end] >= d.ground_rent[end] - 1e-6               # the rents are paid, as tax
@@ -1751,16 +1752,16 @@ end
 
 @testset "the dwelling rent and the benefit (18 October 2026)" begin
     base = (; seed = 1, BEH..., public_land = true, public_land_dwelling_rent_in_breads = 0.25, maximum_rounds = 4)
-    a = round_data(run_simulation(SimulationParameters(; base...)))
-    x = round_data(run_simulation(SimulationParameters(; base..., public_land_dwelling_exempt_benefit = true)))
-    b = round_data(run_simulation(SimulationParameters(; base..., public_land_dwelling_in_benefit = true)))
+    a = round_data(run_simulation(SimulationParameters(; PIN..., base...)))
+    x = round_data(run_simulation(SimulationParameters(; PIN..., base..., public_land_dwelling_exempt_benefit = true)))
+    b = round_data(run_simulation(SimulationParameters(; PIN..., base..., public_land_dwelling_in_benefit = true)))
     @test x.ground_rent[end] <= a.ground_rent[end] + 1e-9                                        # the exempt pay less
     @test b.fees[end] >= a.fees[end] - 1e-9 || b.government_outlay[end] >= a.government_outlay[end] - 1e-9   # the benefit carries the rent
 end
 
 
 @testset "own-market planning and the emergency rule (19 October 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., own_market_planning = true, plan_within_capacity = true, plan_window = 1, plan_nets_stock = false, maximum_rounds = 4))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., own_market_planning = true, plan_within_capacity = true, plan_window = 1, plan_nets_stock = false, maximum_rounds = 4))
     for _ in 1:3; B.econo_step!(m, 1); end
     b = first(B.enterprises(m, :bakery)); p = B.parameters(m)
     b.production_target = 20; b.share_trend = 0
@@ -1784,7 +1785,7 @@ end
 
 
 @testset "market rounds within the month (19 October 2026)" begin
-    mk(r) = create_bread_economy(SimulationParameters(; seed = 1, BEH..., market_rounds = r, maximum_rounds = 4))
+    mk(r) = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., market_rounds = r, maximum_rounds = 4))
     for r in (1, 4)
         m = mk(r); for _ in 1:2; B.econo_step!(m, 1); end
         for b in B.enterprises(m, :bakery); b.ask[:bread] = 1000.0; end                      # every baker asks far above any bid
@@ -1816,7 +1817,7 @@ end
 
 
 @testset "bonds in the wealth measures (20 October 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., ownership = :shareholders, maximum_rounds = 2))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., ownership = :shareholders, maximum_rounds = 2))
     B.econo_step!(m, 1)
     e = first(x for x in m.enterprise_list if x.alive && !isempty(x.shares)); owner = first(keys(e.shares))
     push!(m.bonds, B.Bond(length(m.bonds) + 1, e.id, 100.0, 0.005, 1, 60, false))
@@ -1829,7 +1830,7 @@ end
 
 
 @testset "own-market planning on a three-month average, net of stock (21 October 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., own_market_planning = true, plan_window = 3, plan_nets_stock = true, maximum_rounds = 4))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., own_market_planning = true, plan_window = 3, plan_nets_stock = true, maximum_rounds = 4))
     for _ in 1:3; B.econo_step!(m, 1); end
     f = first(B.enterprises(m, :farm)); empty!(f.sales_history); empty!(f.grain); f.production_target = 30
     for sold in (30.0, 30.0)
@@ -1846,41 +1847,41 @@ end
 
 
 @testset "pricing on a target margin (21 October 2026)" begin
-    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., maximum_rounds = 2))
-    m1 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., pricing_target_bakery = :margin, pricing_target_farm = :margin, pricing_target_services = :margin, maximum_rounds = 2))
+    m0 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., maximum_rounds = 2))
+    m1 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., pricing_target_bakery = :margin, pricing_target_farm = :margin, pricing_target_services = :margin, maximum_rounds = 2))
     for m in (m0, m1); B.econo_step!(m, 1); end
     b0 = first(B.enterprises(m0, :bakery)); b1 = first(B.enterprises(m1, :bakery))
     @test B.margin_factor(m1, :bakery) ≈ 1.06 && B.margin_factor(m0, :bakery) == 1.0
     @test B.seller_reservation(m1, b1, :bread) > B.seller_reservation(m0, b0, :bread)                 # the floor carries the margin
     @test B.reserve_target(m1, b1) ≈ B.reserve_target(m0, b0) rtol = 0.5                              # :payout keeps the reserve target
-    m2 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., pricing_target_bakery = :margin, margin_profit_mode = :retain, maximum_rounds = 2))
+    m2 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., pricing_target_bakery = :margin, margin_profit_mode = :retain, maximum_rounds = 2))
     B.econo_step!(m2, 1); b2 = first(B.enterprises(m2, :bakery))
     @test B.reserve_target(m2, b2) > 3 * B.reserve_target(m0, b0)                                  # :retain keeps the profit up to the ceiling
-    mt = create_bread_economy(SimulationParameters(; seed = 1, BEH..., pricing_target_bakery = :margin, profit_tax_rate = 0.25, maximum_rounds = 2))
+    mt = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., pricing_target_bakery = :margin, profit_tax_rate = 0.25, maximum_rounds = 2))
     @test B.margin_factor(mt, :bakery) ≈ 1 + 0.06 / 0.75                                            # grossed up for the profit tax
     @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., pricing_target_bakery = :margin, pricing_target_farm = :margin))) < 1e-6
 end
 
 
 @testset "tiered demurrage (21 October 2026, EconoSim's tiers)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., SUM..., demurrage_tiers = DEMURRAGE_TIERS_TEST, maximum_rounds = 2))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., SUM..., demurrage_tiers = DEMURRAGE_TIERS_TEST, maximum_rounds = 2))
     @test B.demurrage_due(m, 100.0) ≈ 2.0                                        # inside the first tier: the flat 2 %
     @test B.demurrage_due(m, 500.0) ≈ 250 * 0.02 + 250 * 0.05                    # marginal, like tax brackets
     @test B.demurrage_due(m, 1200.0) ≈ 250 * 0.02 + 750 * 0.05 + 200 * 0.10
-    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., SUM..., maximum_rounds = 2))
+    m0 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., SUM..., maximum_rounds = 2))
     @test B.demurrage_due(m0, 500.0) ≈ 10.0                                      # no tiers: the flat rate
     @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., SUM..., demurrage_tiers = DEMURRAGE_TIERS_TEST))) < 1e-6
 end
 
 
 @testset "the cost floor and the reserve count the loans (21 October 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., cost_floor_includes_debt_service = true, maximum_rounds = 3))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., cost_floor_includes_debt_service = true, maximum_rounds = 3))
     for _ in 1:2; B.econo_step!(m, 1); end
     f = first(x for x in B.enterprises(m, :farm) if !isempty(B.debtor_loans(m, x)))     # a farm with its founding loan
     due = B.debt_service_due(m, f)
     @test due > 0
     @test B.debt_service_per_unit(m, f, 1.0) ≈ B.debt_service_due(m, f; interest_only = true) / max(f.production_target, f.expected_sales, 1.0)   # 22 Oct: the interest over the normal volume (floor_debt_service = :interest)
-    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., cost_floor_includes_debt_service = false, maximum_rounds = 3))
+    m0 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., cost_floor_includes_debt_service = false, maximum_rounds = 3))
     for _ in 1:2; B.econo_step!(m0, 1); end
     f0 = first(x for x in B.enterprises(m0, :farm) if x.id == f.id)
     @test B.seller_reservation(m, f, :grain) > B.seller_reservation(m0, f0, :grain)         # the floor is higher with the loans counted
@@ -1890,7 +1891,7 @@ end
 
 
 @testset "the floor per unit expected to sell (22 October 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., floor_per_unit_sold = true, maximum_rounds = 3))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., floor_per_unit_sold = true, maximum_rounds = 3))
     for _ in 1:2; B.econo_step!(m, 1); end
     f = first(B.enterprises(m, :farm)); empty!(f.unsold_history)
     @test B.expected_sales_factor(m, f) == 1.0                                   # no history: the plain floor
@@ -1906,7 +1907,7 @@ end
 
 
 @testset "prices against expected sales, with an adaptive buffer (22 October 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., own_market_planning = true, price_on_expected_sales = true, plan_window = 1, planning_margin = 0.1, maximum_rounds = 6))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., own_market_planning = true, price_on_expected_sales = true, plan_window = 1, planning_margin = 0.1, maximum_rounds = 6))
     for _ in 1:4; B.econo_step!(m, 1); end
     b = first(B.enterprises(m, :bakery)); p = B.parameters(m)
     @test b.expected_sales > 0 && b.buffer_share > 0
@@ -1923,7 +1924,7 @@ end
 
 
 @testset "deleveraging by land sales (22 October 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., cost_floor_includes_debt_service = true, own_market_planning = true, maximum_rounds = 4))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., cost_floor_includes_debt_service = true, own_market_planning = true, maximum_rounds = 4))
     for _ in 1:3; B.econo_step!(m, 1); end
     f = first(B.enterprises(m, :farm)); lender = first(B.persons(m))
     l = B.PeerLoan(length(m.peer_loans) + 1, lender.id, f.id, lender.id, 50.0, 50.0, 5.0, 0.005, 0.005, false, 1, 0, false, false, 0.0)   # a land loan of 50, 5 a month
@@ -1939,7 +1940,7 @@ end
 
 @testset "unsold land's price falls to the best offer (22 October 2026)" begin
     p0 = (; BEH..., land_pricing = :market, instalment_purchases = true, land_price_rent_multiple = 15.0, maximum_rounds = 6)
-    a = run_simulation(SimulationParameters(; seed = 3, p0...)); b = run_simulation(SimulationParameters(; seed = 3, p0..., land_price_meets_offers = true))
+    a = run_simulation(SimulationParameters(; PIN..., seed = 3, p0...)); b = run_simulation(SimulationParameters(; PIN..., seed = 3, p0..., land_price_meets_offers = true))
     da = round_data(a); db = round_data(b)
     @test all(db.land_price .<= da.land_price .+ 1e-9)                              # meeting the offers never raises the price
     @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., land_pricing = :market, instalment_purchases = true, land_price_meets_offers = true, firm_land_loan_max_rounds = 240))) < 1e-6
@@ -1947,7 +1948,7 @@ end
 
 
 @testset "a firm at cost prices to build its reserve (22 October 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., reserve_build_months = 12, maximum_rounds = 3))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., reserve_build_months = 12, maximum_rounds = 3))
     for _ in 1:2; B.econo_step!(m, 1); end
     f = first(B.enterprises(m, :farm)); short = B.reserve_target(m, f) - B.cash(f)
     if short > 0
@@ -1965,7 +1966,7 @@ end
         def = Base.invokelatest(L.ladder_definition, 512, 120, :invoicing; fiscal = fiscal)
         for (name, kd, ks) in def.rungs
             (isempty(kd) || isempty(ks)) && continue                                   # one-sided rungs are not compared
-            pd = SimulationParameters(; def.BARE_DEBT..., kd...); ps = SimulationParameters(; def.BARE_SUMSY..., ks...); d = Dict(f => getfield(pd, f) for f in fieldnames(SimulationParameters)); s = Dict(f => getfield(ps, f) for f in fieldnames(SimulationParameters))
+            pd = SimulationParameters(; PIN..., def.BARE_DEBT..., kd...); ps = SimulationParameters(; PIN..., def.BARE_SUMSY..., ks...); d = Dict(f => getfield(pd, f) for f in fieldnames(SimulationParameters)); s = Dict(f => getfield(ps, f) for f in fieldnames(SimulationParameters))
             for k in keys(d)
                 k in money && continue
                 @test (isequal(d[k], s[k]) || (isa(d[k], AbstractFloat) && isa(s[k], AbstractFloat) && isapprox(d[k], s[k]))) || error("fiscal = $fiscal, rung '$name': $k differs — debt $(d[k]), SuMSy $(s[k])")
@@ -1978,36 +1979,36 @@ end
 
 
 @testset "banks on a target net margin (23 October 2026)" begin
-    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., maximum_rounds = 4))
-    m1 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., bank_target_net_margin = 0.3, maximum_rounds = 4))
+    m0 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., maximum_rounds = 4))
+    m1 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., bank_target_net_margin = 0.3, maximum_rounds = 4))
     for m in (m0, m1); for _ in 1:3; B.econo_step!(m, 1); end; end
     r0 = [b.interest_rate for b in B.enterprises(m0, :bank)]; r1 = [b.interest_rate for b in B.enterprises(m1, :bank)]
     @test all(r1 .>= r0) && any(r1 .> r0)                                       # the margin raises the loan rate
     @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., bank_target_net_margin = 0.3))) < 1e-6
-    ms = create_bread_economy(SimulationParameters(; seed = 1, BEH..., SUM..., bank_target_net_margin = 0.3, maximum_rounds = 2))
+    ms = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., SUM..., bank_target_net_margin = 0.3, maximum_rounds = 2))
     @test B.effective_bank_spread(ms) == B.parameters(ms).bank_spread                               # the spread as set unless asked
-    ms2 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., SUM..., bank_target_net_margin = 0.3, bank_margin_on_spread = true, maximum_rounds = 2))
+    ms2 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., SUM..., bank_target_net_margin = 0.3, bank_margin_on_spread = true, maximum_rounds = 2))
     @test B.effective_bank_spread(ms2) ≈ B.parameters(ms2).bank_spread / 0.7                          # grossed up (no profit tax in SUM)
     @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., SUM..., bank_target_net_margin = 0.3, bank_margin_on_spread = true))) < 1e-6
 end
 
 
 @testset "the banks' rate on the going wage, and as an ask (23 October 2026)" begin
-    m0 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., maximum_rounds = 6))
-    m1 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., bank_rate_cost_from_going_wage = true, maximum_rounds = 6))
+    m0 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., maximum_rounds = 6))
+    m1 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., bank_rate_cost_from_going_wage = true, maximum_rounds = 6))
     for m in (m0, m1); for _ in 1:5; B.econo_step!(m, 1); end; end
     r0 = maximum(b.interest_rate for b in B.enterprises(m0, :bank)); r1 = maximum(b.interest_rate for b in B.enterprises(m1, :bank))
     @test r1 <= r0                                                               # the going wage never asks more than the bid did
     @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., bank_rate_cost_from_going_wage = true))) < 1e-6
     @test abs(money_identity_gap(run(; seed = 1, maximum_rounds = 12, BEH..., bank_rate_cost_from_going_wage = true, bank_rate_market = true))) < 1e-6
-    m2 = create_bread_economy(SimulationParameters(; seed = 1, BEH..., bank_rate_cost_from_going_wage = true, bank_rate_market = true, maximum_rounds = 6))
+    m2 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., bank_rate_cost_from_going_wage = true, bank_rate_market = true, maximum_rounds = 6))
     for _ in 1:5; B.econo_step!(m2, 1); end
     @test all(b.interest_rate <= B.parameters(m2).maximum_interest_rate for b in B.enterprises(m2, :bank))
 end
 
 
 @testset "bank staff scale with the loan book (23 October 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., bank_rate_cost_from_going_wage = true, bank_loans_per_labour_unit = 2, bank_staff_max_units = 5.0, maximum_rounds = 8))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., bank_rate_cost_from_going_wage = true, bank_loans_per_labour_unit = 2, bank_staff_max_units = 5.0, maximum_rounds = 8))
     for _ in 1:6; B.econo_step!(m, 1); end
     for b in B.enterprises(m, :bank)
         n = count(l -> !l.settled, B.creditor_loans(m, b))
@@ -2018,7 +2019,7 @@ end
 
 
 @testset "the levy scaled to a guaranteed meal (23 October 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., land_levy = true, land_levy_dividend = true, levy_dividend_target_in_breads = 2.0, number_of_landowners = 4, maximum_rounds = 8))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., land_levy = true, land_levy_dividend = true, levy_dividend_target_in_breads = 2.0, number_of_landowners = 4, maximum_rounds = 8))
     scales = Float64[]
     for _ in 1:6; B.econo_step!(m, 1); push!(scales, m.land_levy_scale); end
     @test all(0 .<= scales .<= B.parameters(m).levy_scale_max)
@@ -2032,7 +2033,7 @@ end
 
 
 @testset "a bakery bakes to its target, not to its hands (24 October 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., bakeries_bake_to_target = true, maximum_rounds = 4))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., bakeries_bake_to_target = true, maximum_rounds = 4))
     for _ in 1:3; B.econo_step!(m, 1); end
     b = first(B.enterprises(m, :bakery)); p = B.parameters(m)
     push!(b.grain, B.StockItem(1000.0, 0)); b.production_target = 3; b.hired_labour = 50.0            # plenty of grain and hands, a target of 3
@@ -2043,7 +2044,7 @@ end
 
 
 @testset "the expected-sales price rule under share planning (24 October 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., planning_margin = 0.1, price_on_expected_sales = true, maximum_rounds = 4))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., planning_margin = 0.1, price_on_expected_sales = true, maximum_rounds = 4))
     for _ in 1:3; B.econo_step!(m, 1); end
     p = B.parameters(m)
     for b in B.enterprises(m, :bakery)
@@ -2054,7 +2055,7 @@ end
 
 
 @testset "the land tax never below its base rate (24 October 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., land_levy = true, land_levy_dividend = true, levy_dividend_target_in_breads = 0.5, levy_scale_floor = 1.0, number_of_landowners = 4, maximum_rounds = 10))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., land_levy = true, land_levy_dividend = true, levy_dividend_target_in_breads = 0.5, levy_scale_floor = 1.0, number_of_landowners = 4, maximum_rounds = 10))
     scales = Float64[]
     for _ in 1:8; B.econo_step!(m, 1); push!(scales, m.land_levy_scale); end
     @test all(scales .>= 1.0 - 1e-12)                                       # a low target would cut it; the floor holds it at the base rate
@@ -2063,7 +2064,7 @@ end
 
 
 @testset "the heir receives everything (25 October 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., inherit_all_assets = true, maximum_rounds = 6))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., inherit_all_assets = true, maximum_rounds = 6))
     for _ in 1:3; B.econo_step!(m, 1); end
     ps = B.persons(m); dead = ps[1]; e = first(B.enterprises(m, :bakery))
     dead.gold = 7.0; e.shares[dead.id] = 3.0
@@ -2082,7 +2083,7 @@ end
 
 
 @testset "the heir takes on the debt the estate cannot pay (25 October 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., inherit_all_assets = true, heir_inherits_personal_debt = true, maximum_rounds = 6))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., inherit_all_assets = true, heir_inherits_personal_debt = true, maximum_rounds = 6))
     for _ in 1:3; B.econo_step!(m, 1); end
     ps = B.persons(m); dead = ps[1]; bank = first(B.enterprises(m, :bank))
     dead.land = 0
@@ -2113,7 +2114,7 @@ end
 
 
 @testset "a negative-rate peer loan books no money out of nothing (28 October 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., maximum_rounds = 6))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., maximum_rounds = 6))
     for _ in 1:3; B.econo_step!(m, 1); end
     ps = B.persons(m); bank = first(B.enterprises(m, :bank)); far = first(B.enterprises(m, :farm))
     gap0 = money_identity_gap(m)
@@ -2129,7 +2130,7 @@ end
 
 
 @testset "no tax rate above the maximum; the public wage stays positive (28 October 2026)" begin
-    m = create_bread_economy(SimulationParameters(; seed = 1, BEH..., maximum_rounds = 4))
+    m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., maximum_rounds = 4))
     for _ in 1:2; B.econo_step!(m, 1); end
     m.tax_scale = 10.0                                                      # a balancing policy at its extreme
     p = B.parameters(m)
@@ -2154,13 +2155,13 @@ end
     end
 
     @testset "the form is set per kind, and services can now be cooperatives" begin
-        m = create_bread_economy(SimulationParameters(; seed = 1, THEA..., cooperative_form_services = :consumer))
+        m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, THEA..., cooperative_form_services = :consumer))
         ts = B.enterprises(m, :services)
         @test count(t -> t.ownership == :cooperative, ts) == 1 && count(t -> t.ownership == :shareholders, ts) == 1
         @test B.coop_form(m, first(t for t in ts if t.ownership == :cooperative)) == :consumer
         @test B.coop_form(m, first(t for t in ts if t.ownership == :shareholders)) == :none
         # the default leaves every services for profit, as before 14 September
-        m0 = create_bread_economy(SimulationParameters(; seed = 1, OWN..., number_of_services = 2))
+        m0 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, OWN..., number_of_services = 2))
         @test all(t.ownership == :shareholders for t in B.enterprises(m0, :services))
     end
 
@@ -2186,7 +2187,7 @@ end
     end
 
     @testset "worker cooperative: members are served first and the work is spread over them" begin
-        m = create_bread_economy(SimulationParameters(; seed = 1, WORK..., maximum_rounds = 1))
+        m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, WORK..., maximum_rounds = 1))
         # run a few rounds so that memberships exist, then inspect one allocation
         m = run(; seed = 1, maximum_rounds = 12, WORK...)
         coops = [e for e in B.alive_agents(m) if e isa Enterprise && B.coop_form(m, e) == :worker && length(e.members) >= 2]
@@ -2216,7 +2217,7 @@ end
     end
 
     @testset "patronage: distribution proportional to hours, a share retained" begin
-        p = SimulationParameters(; seed = 1, WORK..., maximum_rounds = 3)
+        p = SimulationParameters(; PIN..., seed = 1, WORK..., maximum_rounds = 3)
         m = create_bread_economy(p)
         e = first(x for x in B.alive_agents(m) if x isa Enterprise && B.coop_form(m, x) == :worker)
         ws = B.persons(m)[1:3]
@@ -2237,7 +2238,7 @@ end
     end
 
     @testset "worker patronage is wage income, consumer rebate is untaxed" begin
-        pw = SimulationParameters(; seed = 1, WORK..., wage_tax_rate = 0.5, maximum_rounds = 3)
+        pw = SimulationParameters(; PIN..., seed = 1, WORK..., wage_tax_rate = 0.5, maximum_rounds = 3)
         mw = create_bread_economy(pw)
         ew = first(x for x in B.alive_agents(mw) if x isa Enterprise && B.coop_form(mw, x) == :worker)
         w = first(B.persons(mw)); ew.members[w.id] = 1; ew.member_since[w.id] = 1
@@ -2249,7 +2250,7 @@ end
         @test isapprox((B.cash(w) - before) + (B.cash(B.government(mw)) - gov_before), 75.0; atol = 1e-3)
         @test w.labour_income > 0
 
-        pc = SimulationParameters(; seed = 1, CONS..., wage_tax_rate = 0.5, maximum_rounds = 3)
+        pc = SimulationParameters(; PIN..., seed = 1, CONS..., wage_tax_rate = 0.5, maximum_rounds = 3)
         mc = create_bread_economy(pc)
         ec = first(x for x in B.alive_agents(mc) if x isa Enterprise && B.coop_form(mc, x) == :consumer)
         c = first(B.persons(mc)); ec.members[c.id] = 1; ec.member_since[c.id] = 1
@@ -2285,7 +2286,7 @@ end
     end
 
     @testset "member price awareness nets the rebate off the ask" begin
-        m = create_bread_economy(SimulationParameters(; seed = 1, CONS..., maximum_rounds = 1))
+        m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, CONS..., maximum_rounds = 1))
         e = first(x for x in B.alive_agents(m) if x isa Enterprise && B.coop_form(m, x) == :consumer)
         other = first(x for x in B.enterprises(m, :bakery) if x.ownership == :shareholders)
         w = first(B.persons(m))
@@ -2294,14 +2295,14 @@ end
         e.members[w.id] = 1
         @test B.member_ask(m, e, w, :bread) == 9.0            # a member: net of the expected rebate
         @test B.member_ask(m, e, w, :bread) < B.member_ask(m, other, w, :bread)
-        m2 = create_bread_economy(SimulationParameters(; seed = 1, CONS..., member_price_awareness = false, maximum_rounds = 1))
+        m2 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, CONS..., member_price_awareness = false, maximum_rounds = 1))
         e2 = first(x for x in B.alive_agents(m2) if x isa Enterprise && B.coop_form(m2, x) == :consumer)
         w2 = first(B.persons(m2)); e2.members[w2.id] = 1; e2.ask[:bread] = 10.0; e2.rebate_per_unit = 1.0
         @test B.member_ask(m2, e2, w2, :bread) == 10.0        # the switch is off
     end
 
     @testset "membership lapses when the patronage dries up" begin
-        m = create_bread_economy(SimulationParameters(; seed = 1, WORK..., membership_lapse_rounds_worker = 2, patronage_window = 3, maximum_rounds = 5))
+        m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, WORK..., membership_lapse_rounds_worker = 2, patronage_window = 3, maximum_rounds = 5))
         e = first(x for x in B.alive_agents(m) if x isa Enterprise && B.coop_form(m, x) == :worker)
         idle = B.persons(m)[1]; busy = B.persons(m)[2]
         for w in (idle, busy)
@@ -2318,7 +2319,7 @@ end
     end
 
     @testset "the asset lock sends the reserve to the public purse, not to an heir" begin
-        m = create_bread_economy(SimulationParameters(; seed = 1, WORK..., maximum_rounds = 3))
+        m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, WORK..., maximum_rounds = 3))
         e = first(x for x in B.alive_agents(m) if x isa Enterprise && B.coop_form(m, x) == :worker)
         w = first(B.persons(m)); e.members[w.id] = 1; e.member_since[w.id] = 1; e.membership_unpaid[w.id] = 0.0
         e.paid_in_capital = params(m).membership_share_price
@@ -2331,7 +2332,7 @@ end
     end
 
     @testset "symmetric founding calls on members instead of refusing credit" begin
-        m = create_bread_economy(SimulationParameters(; seed = 1, WORK..., cooperative_founding = :symmetric, maximum_rounds = 3))
+        m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, WORK..., cooperative_founding = :symmetric, maximum_rounds = 3))
         e = first(x for x in B.alive_agents(m) if x isa Enterprise && B.coop_form(m, x) == :worker)
         w = first(B.persons(m)); e.members[w.id] = 1; e.member_since[w.id] = 1; e.membership_unpaid[w.id] = 0.0
         give!(w, 400.0)
@@ -2351,15 +2352,15 @@ end
         @test_throws ArgumentError run(; seed = 1, maximum_rounds = 1, OWN..., membership_contribution = :buffer, membership_buffer_pledge = 0.0)
 
         # what is required of a joining member
-        m = create_bread_economy(SimulationParameters(; seed = 1, SU..., membership_contribution = :money, maximum_rounds = 1))
+        m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, SU..., membership_contribution = :money, maximum_rounds = 1))
         @test B.membership_requirement(m) == (params(m).membership_share_price, 0.0)
-        m = create_bread_economy(SimulationParameters(; seed = 1, SU..., membership_contribution = :buffer, maximum_rounds = 1))
+        m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, SU..., membership_contribution = :buffer, maximum_rounds = 1))
         @test B.membership_requirement(m) == (0.0, params(m).membership_buffer_pledge)
-        m = create_bread_economy(SimulationParameters(; seed = 1, SU..., membership_contribution = :mixed_fixed, maximum_rounds = 1))
+        m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, SU..., membership_contribution = :mixed_fixed, maximum_rounds = 1))
         @test B.membership_requirement(m) == (params(m).membership_share_price, params(m).membership_buffer_pledge)
 
         # a pledge moves the exemption and no money
-        m = create_bread_economy(SimulationParameters(; seed = 1, SU..., membership_contribution = :buffer, membership_buffer_pledge = 12.0, maximum_rounds = 1))
+        m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, SU..., membership_contribution = :buffer, membership_buffer_pledge = 12.0, maximum_rounds = 1))
         e = first(x for x in B.alive_agents(m) if x isa Enterprise && B.coop_form(m, x) == :worker)
         w = first(B.persons(m)); buffer0 = B.demurrage_buffer(m, w); coop0 = B.demurrage_buffer(m, e)
         money0 = B.cash(w)
@@ -2373,7 +2374,7 @@ end
         @test isapprox(B.demurrage_buffer(m, w), buffer0; atol = 1e-6) && isapprox(e.buffer_pledged, 0.0; atol = 1e-9)
 
         # the pledged exemption really does spare the cooperative demurrage
-        m = create_bread_economy(SimulationParameters(; seed = 1, SU..., membership_contribution = :buffer, demurrage_free_buffer = 30.0, membership_buffer_pledge = 20.0, maximum_rounds = 1))
+        m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, SU..., membership_contribution = :buffer, demurrage_free_buffer = 30.0, membership_buffer_pledge = 20.0, maximum_rounds = 1))
         e = first(x for x in B.alive_agents(m) if x isa Enterprise && B.coop_form(m, x) == :worker)
         other = first(x for x in B.enterprises(m, :bakery) if x.ownership == :shareholders)
         give!(e, 100.0); give!(other, 100.0)
@@ -2384,11 +2385,11 @@ end
         @test isapprox(100.0 - B.cash(other), (params(m).demurrage_rate + params(m).demurrage_tax_rate) * 100.0; atol = 1e-3)
         @test isapprox(100.0 - B.cash(e), (params(m).demurrage_rate + params(m).demurrage_tax_rate) * 80.0; atol = 1e-3)
         # a pledge bigger than the member's whole buffer cannot be given, so nobody joins on those terms
-        m2 = create_bread_economy(SimulationParameters(; seed = 1, SU..., membership_contribution = :buffer, demurrage_free_buffer = 30.0, membership_buffer_pledge = 40.0, maximum_rounds = 1))
+        m2 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, SU..., membership_contribution = :buffer, demurrage_free_buffer = 30.0, membership_buffer_pledge = 40.0, maximum_rounds = 1))
         @test B.plan_contribution(m2, first(B.persons(m2))) === nothing
 
         # :mixed_fixed asks for both
-        m = create_bread_economy(SimulationParameters(; seed = 1, SU..., membership_contribution = :mixed_fixed, maximum_rounds = 1))
+        m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, SU..., membership_contribution = :mixed_fixed, maximum_rounds = 1))
         e = first(x for x in B.alive_agents(m) if x isa Enterprise && B.coop_form(m, x) == :worker)
         w = first(B.persons(m)); give!(w, 400.0); before = B.cash(w)
         @test B.contribute_membership!(m, w, e)
@@ -2397,7 +2398,7 @@ end
 
         # :mixed_flexible — one total, the member chooses the split
         FLEX = (; SU..., membership_contribution = :mixed_flexible, membership_share_price = 10.0, membership_buffer_pledge = 10.0, demurrage_free_buffer = 30.0)
-        m = create_bread_economy(SimulationParameters(; seed = 1, FLEX..., maximum_rounds = 1))
+        m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, FLEX..., maximum_rounds = 1))
         w = first(B.persons(m))
         money, pledge = B.plan_contribution(m, w)                             # no cash: the idle buffer carries it
         @test isapprox(money + pledge * params(m).buffer_contribution_value, 20.0; atol = 1e-6)
@@ -2407,13 +2408,13 @@ end
         @test isapprox(money2 + pledge2 * params(m).buffer_contribution_value, 20.0; atol = 1e-6)
         @test money2 > money && pledge2 < pledge
         # the exchange rate is explicit, not assumed
-        m2 = create_bread_economy(SimulationParameters(; seed = 1, FLEX..., buffer_contribution_value = 2.0, maximum_rounds = 1))
+        m2 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, FLEX..., buffer_contribution_value = 2.0, maximum_rounds = 1))
         w2 = first(B.persons(m2))
         money3, pledge3 = B.plan_contribution(m2, w2)
         @test isapprox(money3 + pledge3 * 2.0, 10.0 + 10.0 * 2.0; atol = 1e-6)
 
         # someone who can meet neither requirement does not join
-        m = create_bread_economy(SimulationParameters(; seed = 1, SU..., membership_contribution = :mixed_fixed, membership_buffer_pledge = 1e6, maximum_rounds = 1))
+        m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, SU..., membership_contribution = :mixed_fixed, membership_buffer_pledge = 1e6, maximum_rounds = 1))
         e = first(x for x in B.alive_agents(m) if x isa Enterprise && B.coop_form(m, x) == :worker)
         w = first(B.persons(m)); give!(w, 400.0)
         @test B.plan_contribution(m, w) === nothing
@@ -2421,12 +2422,12 @@ end
 
         # under debt money there is no demurrage to spare, so a pledge is worth nothing: none is collected and the
         # flexible requirement falls back to its money half alone (it is not converted into more money)
-        m = create_bread_economy(SimulationParameters(; seed = 1, WORK..., membership_contribution = :mixed_flexible, maximum_rounds = 1))
+        m = create_bread_economy(SimulationParameters(; PIN..., seed = 1, WORK..., membership_contribution = :mixed_flexible, maximum_rounds = 1))
         @test B.buffer_value(m) == 0.0
         w = first(B.persons(m)); give!(w, 400.0)
         money4, pledge4 = B.plan_contribution(m, w)
         @test pledge4 == 0.0 && isapprox(money4, params(m).membership_share_price; atol = 1e-6)
-        m5 = create_bread_economy(SimulationParameters(; seed = 1, WORK..., membership_contribution = :buffer, maximum_rounds = 1))
+        m5 = create_bread_economy(SimulationParameters(; PIN..., seed = 1, WORK..., membership_contribution = :buffer, maximum_rounds = 1))
         w5 = first(B.persons(m5))
         @test B.plan_contribution(m5, w5) == (0.0, 0.0)          # a buffer-only membership is free under debt money
 

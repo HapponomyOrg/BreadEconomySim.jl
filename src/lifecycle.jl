@@ -42,10 +42,11 @@ function age_stock!(model)
         stocks = a isa Person ? ((:bread, a.bread),) : ((:grain, a.grain), (:bread, a.bread))
         for (name, items) in stocks
             foreach(i -> i.age += 1, items)
-            spoiled = sum(i.units for i in items if i.age >= p.spoilage_age_in_rounds; init = 0.0)
+            life = (name == :grain && p.grain_spoilage_age_in_rounds > 0) ? p.grain_spoilage_age_in_rounds : p.spoilage_age_in_rounds   # 3 Nov
+            spoiled = sum(i.units for i in items if i.age >= life; init = 0.0)
             spoiled > 0 && log_event!(model, :spoilage; actor = a.id, good = name, units = spoiled)
             a isa Enterprise && (a.spoiled_this_round += spoiled)             # 22 Oct: for the floor per unit sold
-            filter!(i -> i.age < p.spoilage_age_in_rounds, items)
+            filter!(i -> i.age < life, items)
         end
     end
     return nothing

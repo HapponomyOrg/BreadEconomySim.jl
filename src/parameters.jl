@@ -25,6 +25,7 @@ Base.@kwdef struct SimulationParameters
 
     # Goods
     spoilage_age_in_rounds::Int = 3
+    grain_spoilage_age_in_rounds::Int = 0       # 3 Nov: grain's own shelf life in months (0 = bread's); real grain stores a year or more — an unsold harvest is stock, not a loss (12 in the base)
 
     # Prices and negotiation
     initial_prices::OrderedDict{Symbol, Float64} = OrderedDict(:bread => 5.0, :grain => 5.2, :rent => 0.75, :wage => 3.92, :service => 2.0)   # static-consistent vector, see HANDOFF
@@ -655,7 +656,22 @@ Base.@kwdef struct SimulationParameters
     expansion_credit::Bool = false
     expansion_credit_term::Int = 12
     expansion_credit_limit::Float64 = 3.0           # 2 Nov: outstanding expansion credit at most this many months of the firm's obligations
+    expansion_requires_cash_flow::Bool = false      # 3 Nov: a research switch — with it on, loss-making farms (structural at step 8, realistic) fail sooner, the harvest drops and bread inflates (B seed 3: 68 liquidations, bread 11); the credit props them up; the cause to trace is their margins
     anticipate_hunger::Bool = false
+    # 3 Nov (Stef): supply contracts between bakeries and farms — what real markets have against the cobweb. Each month a bakery
+    # without live contracts commits `supply_contract_share` of its planned grain need for `supply_contract_months` months,
+    # spread over the farms in proportion to what each offered last month; a farm with contracts plans on its committed volume
+    # (grossed up by its share of the market and a `supply_contract_margin`) instead of guessing the whole market; in the grain
+    # market a bakery buys from its contracted farms first. The price is the market's (the contract commits volume). Off here, on in the base.
+    supply_contracts::Bool = false
+    supply_contract_share::Float64 = 0.8
+    supply_contract_months::Int = 6
+    supply_contract_margin::Float64 = 0.10
+    # 3 Nov (coder brief, task 3; traced on B seed 3): a firm's own plan moves only this share of the way from last month's target
+    # to this month's each month (1 = the whole way, as before). Two farms sizing for the whole market every month swung between
+    # 235 and 584 plots, a quarter of the harvest spoiled unsold, and the losses bankrupted them. A research switch (off): at 0.5
+    # it did not cut the churn on two cells — the ablation study of the brief's task 3 is the test.
+    plan_adjustment_share::Float64 = 1.0
     # 1 Nov (Stef): the theatre is the services sector. Demand by Engel's law (`services_engel_demand`): a villager wants
     # `services_baseline_units` a month, plus what `services_income_share` of last month's income above the meal and
     # `services_wealth_share` of the cash above their buffer buy at the expected price — the services share of spending rises
@@ -741,10 +757,17 @@ Base.@kwdef struct SimulationParameters
     # Downward wage rigidity (27 September, Stef): a worker lowers the asking wage by at most this share a month, whatever the
     # rules for other goods say (nominal wages hardly fall) — for a worker in work last month; after a month without work the
     # floor is gone (the unemployed take what they can get). 1.0 = no limit (the rule so far).
-    wage_cut_maximum::Float64 = 1.0
+    # 3 Nov (Stef): downward nominal wage rigidity is the default — a worker in a job accepts no nominal cut (`wage_cut_maximum = 0`),
+    # a contract's indexation raises and never cuts (Belgium's automatic indexation), and the floor lapses `wage_floor_months` after
+    # a job ends: a newcomer may be hired below what incumbents earn (Belgian pay scales rise with seniority; the hard floors are the
+    # sectoral scale and the indexed minimum wage — here the reservation wage of a meal a month, a floor in bread). Without the
+    # rigidity a productive village deflated to nothing (V8, realistic: wages 0.08). The food-emergency escape stays. The suite's
+    # golden runs pin the old values (1.0, no indexation).
+    wage_cut_maximum::Float64 = 0.0
     # How long the floor outlasts a job (28 September): a worker keeps refusing a cut for this many months after last being paid
     # (1 = only while continuously employed).
     wage_floor_months::Int = 1
+    wage_indexation::Bool = true
     # Loyalty and notice (3 October, Stef). `employer_loyalty`: an employer takes on last month's workers before strangers.
     # `notice_months` > 0: a worker who has worked `notice_tenure_months` or more consecutive months for the same employer cannot
     # simply be dropped — the employer keeps hiring them, at their units of last month, for `notice_months` more months (Belgian

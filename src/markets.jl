@@ -444,7 +444,7 @@ A worker cooperative takes the worker on as a member, counts the hours as patron
 part of the net wage towards the membership share.
 """
 function hire!(model, e::Enterprise, w::Person, units::Float64, wage::Float64)
-    w.last_wage_rate = wage; w.last_wage_round = current_round(model)
+    w.last_wage_rate = wage; w.last_wage_round = current_round(model); w.bread_price_at_last_wage = expected_price(model, :bread)
     e.wage_bill += units * wage
     e.labour_period += units * wage
     w.labour_available -= units; w.labour_sold += units; w.market[:wage].sold += units
@@ -518,6 +518,7 @@ function labour_market!(model, kinds)
                 units = min(w.contract_units, w.labour_available)
                 units > 1e-9 || continue
                 wage = w.contract_bread > 0 ? w.contract_wage * (1 + p.contract_indexation * (expected_price(model, :bread) / w.contract_bread - 1)) : w.contract_wage   # 17 Oct: indexed to bread
+                p.wage_cut_maximum <= 0 && (wage = max(wage, w.contract_wage))                                  # 3 Nov: indexation raises, never cuts (the nominal floor)
                 if want_left + 1e-9 >= w.contract_units || get(w.notice, e.id, p.notice_months) > 0
                     want_left + 1e-9 >= w.contract_units ? (haskey(w.notice, e.id) && delete!(w.notice, e.id)) : (w.notice[e.id] = get(w.notice, e.id, p.notice_months) - 1; log_event!(model, :notice; employer = e.id, worker = w.id, units = units, months_left = w.notice[e.id]))
                     hire!(model, e, w, units, round(wage, digits = 4))         # the floor: at least the contracted units; the rest of the worker's hours stay on the market
@@ -671,6 +672,7 @@ function grain_market!(model)
                 filter!(x -> x !== b, active); continue
             end
             sellers = sort([f for f in enterprises(model, :farm) if grain_units(f) >= 1 - 1e-9]; by = f -> f.ask[:grain])
+            parameters(model).supply_contracts && (sellers = sort(sellers; by = f -> -contracted_with(model, b, f)))   # 3 Nov: contracted farms first (a stable sort keeps the ask order among the rest)
             if isempty(sellers)
                 shortfall = max(b.market[:grain].wanted - b.market[:grain].got, 0.0)
                 foreach(f -> (f.market[:grain].unmet_demand = true; f.market[:grain].unmet_units += shortfall), enterprises(model, :farm))
