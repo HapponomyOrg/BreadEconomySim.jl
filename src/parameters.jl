@@ -135,6 +135,11 @@ Base.@kwdef struct SimulationParameters
     # below `buffer_min`), up when it sells into it (never above `buffer_max`). Needs own_market_planning; false = the old rule.
     price_on_expected_sales::Bool = false
     expected_sales_tolerance::Float64 = 0.1
+    # 4 Nov (the planning ablation): `price_on_expected_sales` does two things — prices against expected sales, and plans on
+    # expected sales plus the firm's buffer. The two halves can be switched off apart, to find which one makes the sawtooth
+    # (smaller price steps and a wider band did not remove it, so the planning half is the suspect). Both on by default.
+    expected_sales_in_price::Bool = true
+    expected_sales_in_plan::Bool = true
     buffer_step::Float64 = 0.1
     buffer_min::Float64 = 0.03
     buffer_max::Float64 = 0.5   # off on the base for now: on, it shifts every golden value and one scale-invariance check fails from month 10 — to be settled after the talk

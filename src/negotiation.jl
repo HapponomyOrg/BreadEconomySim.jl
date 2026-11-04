@@ -317,7 +317,7 @@ function adapt_prices!(model)
                 a.ask[g] = round(p.community_service_in_breads * expected_price(model, :bread), digits = 4); continue
             end
             r.offered <= 1e-9 && continue
-            if p.price_on_expected_sales && a isa Enterprise && g != :wage && a.expected_sales > 0   # 22 Oct: against what it expected to sell
+            if p.price_on_expected_sales && p.expected_sales_in_price && a isa Enterprise && g != :wage && a.expected_sales > 0   # 22 Oct: against what it expected to sell (4 Nov: the pricing half)
                 r.idle_rounds = r.sold > 1e-9 ? 0 : r.idle_rounds + 1
                 n_kind = max(count(e -> e.alive && e.kind == a.kind, model.enterprise_list), 1)
                 demand_seen = r.sold + r.unmet_units / n_kind                      # 24 Oct: what it sold plus its share of the customers turned away
@@ -444,7 +444,7 @@ function own_plan!(model, e::Enterprise, good::Symbol, per_unit::Float64, cap::I
         expected = observed * (1 + p.planning_margin)
     end
     r.sold >= r.offered * (1 - p.unsold_share) - 1e-9 && (expected = max(expected, e.production_target * per_unit * (1 + p.plan_step)))   # sold out: more
-    if p.price_on_expected_sales                                            # 22 Oct: the plan is expected sales plus the firm's own buffer
+    if p.price_on_expected_sales && p.expected_sales_in_plan                # 22 Oct: the plan is expected sales plus the firm's own buffer (4 Nov: the planning half)
         e.buffer_share < 0 && (e.buffer_share = max(p.planning_margin, p.buffer_min))
         base_expected = expected / (1 + p.planning_margin)                  # the margin was applied above; the firm's buffer replaces it
         if r.sold > e.expected_sales + 1e-9 && e.expected_sales > 0          # sold into the buffer: keep more
@@ -460,7 +460,7 @@ function own_plan!(model, e::Enterprise, good::Symbol, per_unit::Float64, cap::I
     sold_out = r.sold >= r.offered * (1 - p.unsold_share) - 1e-9
     p.respond_to_turned_away && sold_out && (expected = max(expected, e.production_target * per_unit * (1 + p.plan_step)))   # sold out: a step above the target
     if p.respond_to_turned_away && turned_away > 1e-9                                                          # customers turned away: at least what was wanted
-        expected = max(expected, (r.sold + turned_away) * (1 + (p.price_on_expected_sales ? max(e.buffer_share, 0.0) : p.planning_margin)))
+        expected = max(expected, (r.sold + turned_away) * (1 + ((p.price_on_expected_sales && p.expected_sales_in_plan) ? max(e.buffer_share, 0.0) : p.planning_margin)))
     end
     if p.grow_only_with_reserve && cash(e) < reserve_target(model, e)       # 22 Oct: no expansion until the reserve is met
         expected = min(expected, e.production_target * per_unit)
