@@ -21,6 +21,8 @@
 #   :no_contracts       supply_contracts = false              (3 Nov: the farms back on their own guess of the market)
 #   :no_storage         grain_spoilage_age_in_rounds = 0      (grain spoils like bread, 3 months)
 #   :partial            plan_adjustment_share = 0.5           (half the way to the plan each month)
+#   :small_steps        price steps of 2 % instead of 6 % (4 Nov)
+#   :wide_band          a 25 % tolerance band on expected sales instead of 10 % (4 Nov)
 # Runs are sequential (one process); 168 runs of 120 months take a working day on a laptop — run a subset first.
 
 include(joinpath(@__DIR__, "run_all.jl"))
@@ -34,6 +36,11 @@ const ABLATION_VARIANTS = Dict(
     :no_contracts => (; supply_contracts = false),
     :no_storage => (; grain_spoilage_age_in_rounds = 0),
     :partial => (; plan_adjustment_share = 0.5),
+    # 4 Nov, after the first subset (step 8, 4 seeds): the oscillation is the expected-sales pricing (volatility 5.2 % → 1.65 % and
+    # autocorrelation −0.38 → −0.06 with it off in the debt village; 14 %/yr inflation in SuMSy without it) — so the remedies to
+    # test are smaller price steps and a wider tolerance band, not removal:
+    :small_steps => (; ask_increase_after_sellout = 0.02, ask_decrease_after_partial_sale = 0.02),
+    :wide_band => (; expected_sales_tolerance = 0.25),
 )
 
 function ablation(; cells = ["8 ", "B ", "V8 "], seeds = 1:4, variants = collect(keys(ABLATION_VARIANTS)), months = 120, villagers = 512)
