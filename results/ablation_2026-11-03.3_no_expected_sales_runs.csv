@@ -1,9 +1,17 @@
 variant,rung,system,seed,alive,liquidations,hungry_months,bread_y10,unemployed_y10
-no_expected_sales,8 + shareholders & share market,debt,1,493,35,1,6.461670642201821,125
-no_expected_sales,8 + shareholders & share market,debt,2,502,26,0,7.908435714285766,122
-no_expected_sales,8 + shareholders & share market,debt,3,498,44,0,8.327559879032254,130
-no_expected_sales,8 + shareholders & share market,debt,4,494,39,0,5.641678166838319,134
-no_expected_sales,8 + shareholders & share market,sumsy,1,512,27,1,15.800415514018649,0
-no_expected_sales,8 + shareholders & share market,sumsy,2,512,45,1,19.49747003710592,0
-no_expected_sales,8 + shareholders & share market,sumsy,3,512,47,0,18.65164972118952,0
-no_expected_sales,8 + shareholders & share market,sumsy,4,512,49,0,14.84580000000001,0
+no_expected_sales,B best SuMSy village: co-ops + reserve,debt,1,488,23,1,5.726189326424912,123
+no_expected_sales,B best SuMSy village: co-ops + reserve,debt,2,502,8,0,5.691253025640978,123
+no_expected_sales,B best SuMSy village: co-ops + reserve,debt,3,497,30,0,7.3722878048780345,131
+no_expected_sales,B best SuMSy village: co-ops + reserve,debt,4,497,34,0,5.940500000000025,142
+no_expected_sales,B best SuMSy village: co-ops + reserve,sumsy,1,512,43,1,17.502799591419926,0
+no_expected_sales,B best SuMSy village: co-ops + reserve,sumsy,2,512,50,0,18.239499999999826,0
+no_expected_sales,B best SuMSy village: co-ops + reserve,sumsy,3,512,47,0,24.148712177121915,0
+no_expected_sales,B best SuMSy village: co-ops + reserve,sumsy,4,512,51,0,20.08489999999991,0
+no_expected_sales,"V8 productive village, standard of living",debt,1,391,21,7,1.0394999999999919,82
+no_expected_sales,"V8 productive village, standard of living",debt,2,78,30,14,1.2927371069182387,13
+no_expected_sales,"V8 productive village, standard of living",debt,3,467,17,7,1.1266396624472497,90
+no_expected_sales,"V8 productive village, standard of living",debt,4,443,28,6,1.223094844253494,151
+no_expected_sales,"V8 productive village, standard of living",sumsy,1,512,50,2,0.969100000000013,44
+no_expected_sales,"V8 productive village, standard of living",sumsy,2,512,47,2,0.9726999999999904,33
+no_expected_sales,"V8 productive village, standard of living",sumsy,3,512,58,2,0.9621609057301254,44
+no_expected_sales,"V8 productive village, standard of living",sumsy,4,512,62,1,1.0117000000000085,30

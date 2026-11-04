@@ -1,9 +1,17 @@
 variant,rung,system,seed,alive,liquidations,hungry_months,bread_y10,unemployed_y10
-no_contracts,8 + shareholders & share market,debt,1,503,34,0,4.34803501454898,127
-no_contracts,8 + shareholders & share market,debt,2,493,39,0,6.8199506707946265,137
-no_contracts,8 + shareholders & share market,debt,3,499,35,1,4.244382096933745,9
-no_contracts,8 + shareholders & share market,debt,4,505,41,4,4.319546005774786,67
-no_contracts,8 + shareholders & share market,sumsy,1,512,68,0,5.987299999999911,0
-no_contracts,8 + shareholders & share market,sumsy,2,512,57,0,6.748273394495486,24
-no_contracts,8 + shareholders & share market,sumsy,3,512,60,1,7.293170707070692,109
-no_contracts,8 + shareholders & share market,sumsy,4,512,53,2,7.591965152919382,0
+no_contracts,B best SuMSy village: co-ops + reserve,debt,1,501,38,3,3.8228567460317553,20
+no_contracts,B best SuMSy village: co-ops + reserve,debt,2,506,30,1,6.685953217568893,124
+no_contracts,B best SuMSy village: co-ops + reserve,debt,3,492,41,4,4.236757487437207,64
+no_contracts,B best SuMSy village: co-ops + reserve,debt,4,504,66,2,5.412497408829178,80
+no_contracts,B best SuMSy village: co-ops + reserve,sumsy,1,512,63,0,9.862228148148185,23
+no_contracts,B best SuMSy village: co-ops + reserve,sumsy,2,512,68,1,5.85539878163074,0
+no_contracts,B best SuMSy village: co-ops + reserve,sumsy,3,511,62,0,5.488800000000053,0
+no_contracts,B best SuMSy village: co-ops + reserve,sumsy,4,512,93,0,5.504500000000006,0
+no_contracts,"V8 productive village, standard of living",debt,1,416,33,4,0.5168091743119295,75
+no_contracts,"V8 productive village, standard of living",debt,2,509,34,0,0.7790653696498114,59
+no_contracts,"V8 productive village, standard of living",debt,3,508,26,0,0.8340999999999948,84
+no_contracts,"V8 productive village, standard of living",debt,4,500,29,2,0.8886992172211332,211
+no_contracts,"V8 productive village, standard of living",sumsy,1,512,51,0,0.6262724931002763,13
+no_contracts,"V8 productive village, standard of living",sumsy,2,512,64,0,0.6620104961832026,0
+no_contracts,"V8 productive village, standard of living",sumsy,3,512,42,0,0.6663560290117873,0
+no_contracts,"V8 productive village, standard of living",sumsy,4,512,60,0,1.0461999999999991,0

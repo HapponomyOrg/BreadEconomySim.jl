@@ -1,0 +1,25 @@
+variant,rung,system,seed,alive,liquidations,hungry_months,bread_y10,unemployed_y10
+small_steps,8 + shareholders & share market,debt,1,499,50,1,5.365932712765936,193
+small_steps,8 + shareholders & share market,debt,2,485,31,0,7.349999999999957,111
+small_steps,8 + shareholders & share market,debt,3,499,26,0,5.094254545454525,101
+small_steps,8 + shareholders & share market,debt,4,493,44,0,8.493760606060507,125
+small_steps,8 + shareholders & share market,sumsy,1,512,53,0,7.654041001855336,0
+small_steps,8 + shareholders & share market,sumsy,2,512,46,1,17.31301176470591,0
+small_steps,8 + shareholders & share market,sumsy,3,512,62,0,6.975526835901976,0
+small_steps,8 + shareholders & share market,sumsy,4,512,60,0,7.494643364486067,0
+small_steps,B best SuMSy village: co-ops + reserve,debt,1,510,7,0,4.890807562189121,162
+small_steps,B best SuMSy village: co-ops + reserve,debt,2,492,72,2,6.930806126482138,121
+small_steps,B best SuMSy village: co-ops + reserve,debt,3,488,34,2,5.464129247311782,96
+small_steps,B best SuMSy village: co-ops + reserve,debt,4,496,36,2,5.74929473684206,125
+small_steps,B best SuMSy village: co-ops + reserve,sumsy,1,512,53,1,6.735301088929262,15
+small_steps,B best SuMSy village: co-ops + reserve,sumsy,2,512,65,0,12.051621575985086,0
+small_steps,B best SuMSy village: co-ops + reserve,sumsy,3,512,51,0,6.042641341795123,3
+small_steps,B best SuMSy village: co-ops + reserve,sumsy,4,512,51,0,6.62713370577281,10
+small_steps,"V8 productive village, standard of living",debt,1,500,21,2,1.0462172888015786,99
+small_steps,"V8 productive village, standard of living",debt,2,503,22,2,1.0600263979193802,175
+small_steps,"V8 productive village, standard of living",debt,3,503,20,3,1.6350813725490114,198
+small_steps,"V8 productive village, standard of living",debt,4,487,19,4,0.8922596741344261,114
+small_steps,"V8 productive village, standard of living",sumsy,1,512,50,2,0.8518636779505974,0
+small_steps,"V8 productive village, standard of living",sumsy,2,512,67,2,1.0113172932330767,0
+small_steps,"V8 productive village, standard of living",sumsy,3,512,55,2,1.0333175600739402,0
+small_steps,"V8 productive village, standard of living",sumsy,4,512,51,1,0.8483708719851571,18
