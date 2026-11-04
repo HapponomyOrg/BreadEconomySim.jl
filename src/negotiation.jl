@@ -454,6 +454,8 @@ function own_plan!(model, e::Enterprise, good::Symbol, per_unit::Float64, cap::I
         end
         e.expected_sales = base_expected
         expected = base_expected * (1 + e.buffer_share)
+    elseif p.price_on_expected_sales && p.expected_sales_in_price
+        e.expected_sales = expected / (1 + p.planning_margin)                # 4 Nov: the pricing half reads expected sales under the older plan too (without this, price_only was the rule off)
     end
     # 25 Oct (Stef: a firm that turns customers away should always produce more). Applied after the buffer: the rescale of 22 Oct
     # (÷ (1 + margin)) cancelled the sold-out step under the expected-sales rule. The expected sales the price rule reads are unchanged.
