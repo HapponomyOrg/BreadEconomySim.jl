@@ -25,6 +25,8 @@
 #   :wide_band          a 25 % tolerance band on expected sales instead of 10 % (4 Nov)
 #   :price_only         the expected-sales rule's pricing half only (4 Nov)
 #   :plan_only          its planning half only (4 Nov)
+# Since 2026-11-04.2 the base has the planning half off (`expected_sales_in_plan = false`), so `:price_only` equals `:base`;
+# `:plan_only` then switches the pricing half off as well and the planning half back on.
 # Runs are spread over `jobs` worker processes (default: CPU threads − 1), as in `run_all`; an interrupted call resumes.
 
 include(joinpath(@__DIR__, "run_all.jl"))
@@ -45,7 +47,7 @@ const ABLATION_VARIANTS = Dict(
     :wide_band => (; expected_sales_tolerance = 0.25),
     # 4 Nov, after the second subset: neither remedy removed the debt village's oscillation, so the rule is split in two —
     :price_only => (; expected_sales_in_plan = false),      # prices against expected sales, plans the older way
-    :plan_only => (; expected_sales_in_price = false),      # plans on expected sales, prices the older way
+    :plan_only => (; expected_sales_in_price = false, expected_sales_in_plan = true),      # plans on expected sales, prices the older way
 )
 
 # 4 Nov: the runs go to worker processes as in `run_all` (same `jobs`, `worker_recycle`, `heap_hint`), each run written under
