@@ -1,0 +1,25 @@
+variant,rung,system,seed,alive,liquidations,hungry_months,bread_y10,unemployed_y10
+base,8 + shareholders & share market,debt,1,507,49,1,6.011701702932813,130
+base,8 + shareholders & share market,debt,2,467,39,0,5.330704741833563,116
+base,8 + shareholders & share market,debt,3,507,13,0,5.792607250755238,133
+base,8 + shareholders & share market,debt,4,502,50,1,5.247807572815536,104
+base,8 + shareholders & share market,sumsy,1,512,59,0,7.998970925925919,0
+base,8 + shareholders & share market,sumsy,2,512,57,0,8.838433302063757,0
+base,8 + shareholders & share market,sumsy,3,512,64,0,8.072382439925999,2
+base,8 + shareholders & share market,sumsy,4,512,65,0,7.44490696798497,71
+base,B best SuMSy village: co-ops + reserve,debt,1,502,7,0,5.39606270491807,132
+base,B best SuMSy village: co-ops + reserve,debt,2,510,9,0,6.2094272902603915,122
+base,B best SuMSy village: co-ops + reserve,debt,3,487,42,0,5.718038446215188,117
+base,B best SuMSy village: co-ops + reserve,debt,4,498,56,1,4.990987148594364,45
+base,B best SuMSy village: co-ops + reserve,sumsy,1,512,57,0,6.128473030583891,0
+base,B best SuMSy village: co-ops + reserve,sumsy,2,512,60,0,14.264610697674545,0
+base,B best SuMSy village: co-ops + reserve,sumsy,3,512,58,2,8.776894848206002,0
+base,B best SuMSy village: co-ops + reserve,sumsy,4,512,56,0,6.465438397017676,32
+base,"V8 productive village, standard of living",debt,1,505,30,4,0.8577574468085196,102
+base,"V8 productive village, standard of living",debt,2,496,24,3,0.9066270793036741,55
+base,"V8 productive village, standard of living",debt,3,505,26,2,0.8685447657028884,224
+base,"V8 productive village, standard of living",debt,4,378,26,7,0.8158288659793743,86
+base,"V8 productive village, standard of living",sumsy,1,512,63,2,0.9945449541284431,0
+base,"V8 productive village, standard of living",sumsy,2,512,69,2,1.0036001883239292,0
+base,"V8 productive village, standard of living",sumsy,3,512,55,2,0.8055831792975896,0
+base,"V8 productive village, standard of living",sumsy,4,512,77,1,0.8246050046339222,0
