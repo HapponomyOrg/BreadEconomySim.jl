@@ -40,6 +40,15 @@ Base.@kwdef struct SimulationParameters
     bid_decrease_after_success::Float64 = 0.03
     bid_increase_when_starved::Vector{Float64} = [0.06, 0.12, 0.25]   # consecutive rounds of missing out
     bread_price_ageing_discount::Float64 = 0.40
+    # 5 Nov (Stef): (1) a unit sold keeps its age — the buyer received it as new (`keep_stock_age`, on; the golden runs pin it off);
+    # (2) `price_by_age`: the posted or agreed price is for fresh goods, and the units sold, oldest first, are charged
+    # 1 − discount × age (floored at 0) of it — bread at `bread_price_ageing_discount` a month, grain at
+    # `grain_price_ageing_discount` (about a year's storage cost); a consumer judges the discounted price against what they will
+    # pay; the bakery's cost floor then no longer falls with age (no double discount). Off here, on in the ladder's base.
+    keep_stock_age::Bool = true
+    price_by_age::Bool = false
+    grain_price_ageing_discount::Float64 = 0.01
+    fresh_buffer_share::Float64 = 2 / 3      # 5 Nov (Stef): fresh bread is bought when it keeps cash above this share of the buffer target (or the month's buildup positive)
     hunger_wage_discount::Float64 = 0.25
     farm_maximum_rent_fraction_of_grain_price::Float64 = 0.6
     bakery_grain_wage_fraction::Float64 = 0.5

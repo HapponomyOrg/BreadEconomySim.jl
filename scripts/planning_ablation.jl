@@ -48,6 +48,11 @@ const ABLATION_VARIANTS = Dict(
     # 4 Nov, after the second subset: neither remedy removed the debt village's oscillation, so the rule is split in two —
     :price_only => (; expected_sales_in_plan = false),      # prices against expected sales, plans the older way
     :plan_only => (; expected_sales_in_price = false, expected_sales_in_plan = true),      # plans on expected sales, prices the older way
+    # 5 Nov: prices by age (Stef) at three bread discounts a month (grain 1 % a month in all); off in the base until these decide —
+    # at 40 % a month step 8 debt seed 1 lost 30 villagers and liquidations rose from 7 to 33 (bakeries sell last month's buffer at 60 %)
+    :age_prices_40 => (; price_by_age = true, bread_price_ageing_discount = 0.40),
+    :age_prices_15 => (; price_by_age = true, bread_price_ageing_discount = 0.15),
+    :age_prices_05 => (; price_by_age = true, bread_price_ageing_discount = 0.05),
 )
 
 # 4 Nov: the runs go to worker processes as in `run_all` (same `jobs`, `worker_recycle`, `heap_hint`), each run written under

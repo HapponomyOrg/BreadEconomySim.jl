@@ -19,7 +19,7 @@ const SUM = (; monetary_system = :sumsy, dividend_tax_rate = 0.0, wage_tax_rate 
               minimum_fee_in_breads = 0.0, partial_unemployment_fee = false, government_employment_share = 0.0,
               account_fee_person = 0.5, account_fee_enterprise = 1.5, demurrage_rate = 0.02,
               instalment_purchases = true, land_price_rent_multiple = 50.0)
-const PIN = (; wage_cut_maximum = 1.0, wage_indexation = false)   # 3 Nov: the golden runs keep the wage rules they were made with
+const PIN = (; wage_cut_maximum = 1.0, wage_indexation = false, keep_stock_age = false)   # 5 Nov: the age-reset fix pinned off for the golden runs   # 3 Nov: the golden runs keep the wage rules they were made with
 run(; kw...) = run_simulation(SimulationParameters(; PIN..., kw...))
 const TH = (; BEH..., entertainment = true, planning_margin = 0.1, plan_for_gluttony = true)
 const OWN = (; TH..., ownership = :mixed, number_of_farms = 4, number_of_bakeries = 4, share_market = true, startup_financing = :paid_in_capital)

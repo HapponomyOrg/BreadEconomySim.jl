@@ -17,6 +17,16 @@ function expected_sales_factor(model, seller)
     return max(1 - u, 1 - cap)
 end
 
+"""The margin a firm plans above its sales (5 Nov, Stef: planning takes depreciation into account): with `price_by_age`, the
+margin shrinks by the share of it the firm lost — spoilage and the value lost selling aged units, as a share of what it offered,
+averaged over its recent months — so extra units that lose their value are made less; without, `planning_margin`."""
+function planning_margin_for(model, e)
+    p = parameters(model); m = p.planning_margin
+    (p.price_by_age && e isa Enterprise && !isempty(e.unsold_history) && m > 0) || return m
+    u = sum(e.unsold_history) / length(e.unsold_history)
+    return m * clamp(1 - u / m, 0.0, 1.0)
+end
+
 """Each firm's unsold share of what it offered this month, kept for `plan_window` months (22 October)."""
 function record_unsold!(model)
     p = parameters(model)
@@ -95,7 +105,7 @@ function seller_reservation(model, seller::Agent, good::Symbol; age::Int = 0)
         g = (isnan(grain_paid) || p.indexed_pricing) ? expected_price(model, :grain) : max(grain_paid, expected_price(model, :grain))
         w = (isnan(wage_paid) || p.indexed_pricing) ? expected_price(model, :wage) : max(wage_paid, expected_price(model, :wage))
         base = ((g + w) / p.breads_per_grain + debt_service_per_unit(model, seller, Float64(p.breads_per_grain)) + reserve_build_per_unit(model, seller, Float64(p.breads_per_grain))) / expected_sales_factor(model, seller) * margin_factor(model, :bakery, seller isa Enterprise ? seller.pricing : :sector)
-        return base * max(1 - p.bread_price_ageing_discount * age, 0.0)
+        return base * max(1 - (p.price_by_age ? 0.0 : p.bread_price_ageing_discount) * age, 0.0)   # 5 Nov: with price_by_age the discount is at the till
     elseif good == :rent      # landowner: a meal from full letting; bank: the going rent
         seller isa Person || return expected_price(model, :rent) * 0.5
         return min(meal_price(model) / max(seller.land, 1), expected_price(model, :rent))
@@ -185,7 +195,7 @@ function negotiate(model, seller::Agent, buyer::Agent, good::Symbol; age::Int = 
     if p.posted_consumer_prices && good in (:bread, :service) && buyer isa Person
         # 30 Oct (Stef): consumers do not bid — the producer posts a price and the consumer buys at it or does not; what the
         # producer learns is its sales (and the customers it turned away). Bargaining stays for grain, labour, rent and land.
-        ask <= buyer_ceiling + 1e-9 || return nothing
+        ask * ((p.price_by_age && good == :bread) ? max(1 - p.bread_price_ageing_discount * age, 0.0) : 1.0) <= buyer_ceiling + 1e-9 || return nothing   # 5 Nov: judged at the discounted price
         price = round(ask, digits = 4); seller.negotiated[key] = price
         return price
     end
@@ -439,9 +449,9 @@ function own_plan!(model, e::Enterprise, good::Symbol, per_unit::Float64, cap::I
         push!(h, observed); while length(h) > p.plan_window; popfirst!(h); end
         # 21 Oct: the average guards against a dip; a rise is followed at once (the average alone kept firms sold out longer, and
         # every sold-out month raised the price: SuMSy step 8 +7 %/yr against +3.5 % on last month alone)
-        expected = (p.plan_window_follows_rises ? max(sum(h) / length(h), observed) : sum(h) / length(h)) * (1 + p.planning_margin)
+        expected = (p.plan_window_follows_rises ? max(sum(h) / length(h), observed) : sum(h) / length(h)) * (1 + planning_margin_for(model, e))
     else
-        expected = observed * (1 + p.planning_margin)
+        expected = observed * (1 + planning_margin_for(model, e))
     end
     r.sold >= r.offered * (1 - p.unsold_share) - 1e-9 && (expected = max(expected, e.production_target * per_unit * (1 + p.plan_step)))   # sold out: more
     if p.price_on_expected_sales && p.expected_sales_in_plan                # 22 Oct: the plan is expected sales plus the firm's own buffer (4 Nov: the planning half)
@@ -462,7 +472,7 @@ function own_plan!(model, e::Enterprise, good::Symbol, per_unit::Float64, cap::I
     sold_out = r.sold >= r.offered * (1 - p.unsold_share) - 1e-9
     p.respond_to_turned_away && sold_out && (expected = max(expected, e.production_target * per_unit * (1 + p.plan_step)))   # sold out: a step above the target
     if p.respond_to_turned_away && turned_away > 1e-9                                                          # customers turned away: at least what was wanted
-        expected = max(expected, (r.sold + turned_away) * (1 + ((p.price_on_expected_sales && p.expected_sales_in_plan) ? max(e.buffer_share, 0.0) : p.planning_margin)))
+        expected = max(expected, (r.sold + turned_away) * (1 + ((p.price_on_expected_sales && p.expected_sales_in_plan) ? max(e.buffer_share, 0.0) : planning_margin_for(model, e))))
     end
     if p.grow_only_with_reserve && cash(e) < reserve_target(model, e)       # 22 Oct: no expansion until the reserve is met
         expected = min(expected, e.production_target * per_unit)

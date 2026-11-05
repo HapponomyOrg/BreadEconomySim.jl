@@ -482,6 +482,7 @@ function begin_round!(model)
             a.effective_capacity = a.last_meal == :half ? a.capacity * p.half_meal_capacity_fraction : a.capacity
             a.unemployed_last_round = a.labour_offered > 1e-9 && a.labour_sold <= 1e-9   # 31 Oct: remembered before the reset (1 Nov: it sat one line too late and was always false)
             a.income_last_round = a.labour_income + a.rent_income + a.dividend_income + a.fee_received + a.rebate_income   # 1 Nov: before the reset
+            a.cash_at_round_start = cash(a)                                  # 5 Nov
             a.labour_available = 0.0; a.labour_offered = 0.0; a.labour_sold = 0.0; a.volunteer_hours = 0.0
             a.labour_income = 0.0; a.rent_income = 0.0; a.fee_received = 0.0; a.rebate_income = 0.0
             empty!(a.labour_reserved)

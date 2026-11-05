@@ -113,6 +113,7 @@ end
     heir_id::Int = 0                    # 25 Oct: who inherited this person's estate (0 = none or still alive) — late payments follow it
     unemployed_last_round::Bool = false # 31 Oct: last month's status, for rules that run before this month's labour market (the dwelling-rent exemption)
     income_last_round::Float64 = 0.0    # 1 Nov: last month's net income (labour, rent, dividends, benefit, rebates), for the services demand
+    cash_at_round_start::Float64 = 0.0  # 5 Nov: for the fresh-or-stale choice (a positive buildup this month)
     greed::Symbol = :none               # :none | :greedy (each act of greed: capital with greed_hoarding, consumption otherwise)
     volunteer_hours::Float64 = 0.0      # unpaid labour given to the commons this month (4 Oct)
     contract::Int = 0                   # 17 Oct: the employer this worker is contracted to (0 = a temp)

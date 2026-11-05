@@ -626,6 +626,41 @@ function produce_grain!(model)
     return nothing
 end
 
+"""Move `units` from one stock to another, oldest first, each keeping its age (5 Nov: the buyer had received them as new)."""
+function move_stock!(model, from::Vector{StockItem}, to::Vector{StockItem}, units::Float64; newest_first::Bool = false)
+    parameters(model).keep_stock_age || (taken = take_stock!(from, units); taken > 0 && push!(to, StockItem(taken, 0)); return taken)
+    sort!(from; by = i -> newest_first ? i.age : -i.age)                      # 5 Nov: a buyer who wants fresh takes the newest
+    moved = 0.0
+    while units > 1e-9 && !isempty(from)
+        i = from[1]; t = min(i.units, units)
+        i.units -= t; units -= t; moved += t
+        k = findfirst(j -> j.age == i.age, to); k === nothing ? push!(to, StockItem(t, i.age)) : (to[k].units += t)
+        i.units <= 1e-9 && popfirst!(from)
+    end
+    return moved
+end
+
+"""The value of the oldest `units` of a stock against fresh (5 Nov): 1 − discount × age a unit, floored at 0, averaged; 1 without `price_by_age`."""
+function age_value_factor(model, items::Vector{StockItem}, units::Float64, good::Symbol; newest_first::Bool = false)
+    p = parameters(model); p.price_by_age || return 1.0
+    d = good == :grain ? p.grain_price_ageing_discount : p.bread_price_ageing_discount
+    d > 0 || return 1.0
+    left = units; v = 0.0; got = 0.0
+    for i in sort(items; by = i -> newest_first ? i.age : -i.age)
+        t = min(i.units, left); v += t * max(1 - d * i.age, 0.0); got += t; left -= t
+        left <= 1e-9 && break
+    end
+    return got > 0 ? v / got : 1.0
+end
+
+"""Fresh or stale (5 Nov, Stef): a villager buys fresh bread when, after paying for it, their cash stays above
+`fresh_buffer_share` (⅔) of their buffer target or still ends above where the month began — and fresh is within their ceiling;
+otherwise the oldest, at its discount. Only those in difficulty choose stale bread."""
+function prefers_fresh(model, w::Person, fresh_cost::Float64)
+    p = parameters(model); after = cash(w) - gross_price(model, w, fresh_cost)
+    return after >= p.fresh_buffer_share * buffer_target(model, w) - 1e-9 || after > w.cash_at_round_start + 1e-9
+end
+
 function take_stock!(items::Vector{StockItem}, units::Float64)
     sort!(items; by = i -> -i.age)
     taken = 0.0
@@ -682,10 +717,13 @@ function grain_market!(model)
             for f in sellers
                 price = negotiate(model, f, b, :grain)
                 price === nothing && continue
+                gfac = age_value_factor(model, f.grain, 1.0, :grain)
+                price = round(price * gfac, digits = 4)                        # 5 Nov: old grain at its value
+                f.spoiled_this_round += 1.0 - gfac                               # the value lost counts as loss in the floor and the plan
                 fund!(model, b, price, :grain) || continue
                 pay!(model, b, f, price, :grain)
                 b.materials_period += price; f.revenue_period += price; f.revenue_this_round += price
-                take_stock!(f.grain, 1.0); push!(b.grain, StockItem(1.0, 0))
+                move_stock!(model, f.grain, b.grain, 1.0)
                 f.market[:grain].sold += 1; b.market[:grain].got += 1
                 record_transaction!(model, :grain, price, 1.0)
                 bought = true; break
@@ -744,9 +782,12 @@ function buy_extra_bread!(model, buyer::Person, purpose::Symbol; tier::Bool = fa
         price = negotiate(model, s, buyer, :bread; age = oldest_bread_age(s))
         price === nothing && continue
         tier && (price = round(price * s.tier_multiplier, digits = 4); s.tier_sold += 1)
+        fresh = parameters(model).price_by_age && prefers_fresh(model, buyer, price) && price <= buyer_reservation(model, buyer, :bread) + 1e-9
+        fac = age_value_factor(model, s.bread, 1.0, :bread; newest_first = fresh)
+        price = round(price * fac, digits = 4); s.spoiled_this_round += 1.0 - fac   # 5 Nov: old bread at its value; the loss booked
         available_cash(buyer) >= gross_price(model, buyer, price) || return false            # savings allowed, no credit
         pay_consumption!(model, buyer, s, price, purpose)
-        take_stock!(s.bread, 1.0); push!(buyer.bread, StockItem(1.0, 0))
+        move_stock!(model, s.bread, buyer.bread, 1.0; newest_first = fresh)
         record_patronage!(model, s, buyer, 1.0)
         s.market[:bread].sold += 1
         tier ? (model.tier_revenue_this_round += price) : record_transaction!(model, :bread, price, 1.0)   # tier sales stay out of the ordinary price
@@ -821,7 +862,7 @@ function premium_market!(model)
         end
         hired >= need - 1e-9 || continue                                   # no hands: no premium loaf this month
         pay_consumption!(model, buyer, s, cost, :bread)
-        take_stock!(s.bread, size); push!(buyer.bread, StockItem(size, 0))
+        move_stock!(model, s.bread, buyer.bread, size)
         s.market[:bread].sold += size; buyer.market[:bread].got = size
         record_transaction!(model, :bread, p.premium_at_plain_price ? price / p.premium_markup : price, size)   # 21 Oct: the bread price sees the plain value
         model.premium_loaves_this_round += size; model.premium_revenue_this_round += cost; model.premium_labour_this_round += hired
@@ -863,15 +904,17 @@ function bread_market!(model)
             done = false
             for size in (buyer.market[:bread].wanted, 1.0)
                 size <= sellable_bread(s) + 1e-9 || continue
-                cost = round(price * size, digits = 4)
+                fresh = p.price_by_age && prefers_fresh(model, buyer, price * size) && price <= buyer_reservation(model, buyer, :bread) + 1e-9
+                fac = age_value_factor(model, s.bread, size, :bread; newest_first = fresh)   # 5 Nov: old bread at its value
+                cost = round(price * size * fac, digits = 4)
                 gross = gross_price(model, buyer, cost)
                 can_pay = cash(buyer) >= gross - 1e-6 || (p.credit_for_bread && credit_eligible(model, buyer, gross - cash(buyer)))
                 can_pay || continue
                 pay_consumption!(model, buyer, s, cost, :bread)
-                take_stock!(s.bread, size); push!(buyer.bread, StockItem(size, 0))
+                move_stock!(model, s.bread, buyer.bread, size; newest_first = fresh); s.spoiled_this_round += size * (1 - fac)
                 record_patronage!(model, s, buyer, size)
                 s.market[:bread].sold += size; buyer.market[:bread].got = size
-                record_transaction!(model, :bread, price, size)
+                record_transaction!(model, :bread, round(price * fac, digits = 4), size)
                 log_event!(model, :bread_sale; bakery = s.id, buyer = buyer.id, size = size, price = price)
                 done = true; break
             end
