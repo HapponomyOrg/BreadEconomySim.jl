@@ -1,0 +1,25 @@
+variant,rung,system,seed,alive,liquidations,hungry_months,bread_y10,unemployed_y10
+base,8 + shareholders & share market,debt,1,497,7,0,5.448407547169816,130
+base,8 + shareholders & share market,debt,2,475,26,2,5.5129675025074905,114
+base,8 + shareholders & share market,debt,3,450,38,4,7.727305021834016,96
+base,8 + shareholders & share market,debt,4,505,36,2,5.006600982318304,114
+base,8 + shareholders & share market,sumsy,1,512,51,0,5.316062349676248,0
+base,8 + shareholders & share market,sumsy,2,512,51,0,10.16948595505622,0
+base,8 + shareholders & share market,sumsy,3,512,55,0,7.478328988149455,0
+base,8 + shareholders & share market,sumsy,4,512,50,0,6.962300000000047,0
+base,B best SuMSy village: co-ops + reserve,debt,1,497,17,0,5.585203964321143,136
+base,B best SuMSy village: co-ops + reserve,debt,2,491,38,0,5.116876039603978,122
+base,B best SuMSy village: co-ops + reserve,debt,3,507,46,1,5.938993610842226,146
+base,B best SuMSy village: co-ops + reserve,debt,4,500,30,0,5.156580353634565,125
+base,B best SuMSy village: co-ops + reserve,sumsy,1,512,48,0,4.84572700460834,0
+base,B best SuMSy village: co-ops + reserve,sumsy,2,512,50,1,8.279410486891432,0
+base,B best SuMSy village: co-ops + reserve,sumsy,3,512,53,0,6.245199999999969,0
+base,B best SuMSy village: co-ops + reserve,sumsy,4,512,54,0,7.861089453860527,0
+base,"V8 productive village, standard of living",debt,1,509,12,2,0.8906582924435704,169
+base,"V8 productive village, standard of living",debt,2,507,18,2,1.015847536231881,162
+base,"V8 productive village, standard of living",debt,3,510,17,2,0.8460510243902374,160
+base,"V8 productive village, standard of living",debt,4,510,22,2,0.9977048543689201,171
+base,"V8 productive village, standard of living",sumsy,1,512,48,2,0.8324642201834942,54
+base,"V8 productive village, standard of living",sumsy,2,512,60,2,0.7715288135593206,40
+base,"V8 productive village, standard of living",sumsy,3,512,54,2,0.7832202777777783,39
+base,"V8 productive village, standard of living",sumsy,4,512,51,1,0.8306999999999916,37

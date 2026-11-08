@@ -49,6 +49,13 @@ Base.@kwdef struct SimulationParameters
     price_by_age::Bool = false
     grain_price_ageing_discount::Float64 = 0.01
     fresh_buffer_share::Float64 = 2 / 3      # 5 Nov (Stef): fresh bread is bought when it keeps cash above this share of the buffer target (or the month's buildup positive)
+    # 5 Nov (Stef): bread's value by age bracket — the share of the fresh price a loaf of age 0, 1, 2, … sells for (the last entry
+    # holds for older loaves); empty = the linear `bread_price_ageing_discount`. A bracket at 0 means the bread is given away
+    # instead of thrown away: direct donations (`donate_bread!`, before the bread market) to villagers who cannot afford fresh
+    # bread and lack a meal, poorest first, up to `bread_donation_cap` loaves each a month; what nobody receives is thrown away,
+    # so free bread is never sold. No VAT on a gift (Belgian VAT decision E.T. 124.417, 2013); a gift is not income.
+    bread_age_schedule::Vector{Float64} = Float64[]
+    bread_donation_cap::Float64 = 2.0
     hunger_wage_discount::Float64 = 0.25
     farm_maximum_rent_fraction_of_grain_price::Float64 = 0.6
     bakery_grain_wage_fraction::Float64 = 0.5

@@ -640,14 +640,49 @@ function move_stock!(model, from::Vector{StockItem}, to::Vector{StockItem}, unit
     return moved
 end
 
+"""The share of the fresh price a unit of `good` and `age` is worth (5 Nov): the bracket schedule for bread if one is set, else
+1 − discount × age, floored at 0."""
+function age_factor(p, good::Symbol, age::Int)
+    good == :bread && !isempty(p.bread_age_schedule) && return p.bread_age_schedule[min(age + 1, length(p.bread_age_schedule))]
+    d = good == :grain ? p.grain_price_ageing_discount : p.bread_price_ageing_discount
+    return max(1 - d * age, 0.0)
+end
+
+"""Direct donations (5 Nov, Stef): with `price_by_age` and a bread bracket at 0, each bakery gives its free-age bread to villagers
+who cannot afford fresh bread and lack a meal, poorest first, up to `bread_donation_cap` loaves each a month, and throws away what
+nobody receives — so free bread is never sold. The gift is a loss to the bakery (booked like spoilage); no VAT, no money."""
+function donate_bread!(model)
+    p = parameters(model)
+    (p.price_by_age && !isempty(p.bread_age_schedule) && any(x -> x <= 0, p.bread_age_schedule)) || return nothing
+    meal_cost = p.breads_per_meal * expected_price(model, :bread)
+    needy = sort([w for w in persons(model) if bread_units(w) < p.breads_per_meal - 1e-9 && !prefers_fresh(model, w, meal_cost)]; by = cash)
+    got = Dict{Int, Float64}()
+    for b in sort(enterprises(model, :bakery); by = x -> x.id)
+        b.alive || continue
+        free = [i for i in b.bread if age_factor(p, :bread, i.age) <= 0]
+        isempty(free) && continue
+        filter!(i -> age_factor(p, :bread, i.age) > 0, b.bread)
+        for w in needy
+            isempty(free) && break
+            want = min(p.bread_donation_cap - get(got, w.id, 0.0), p.breads_per_meal - bread_units(w))
+            want > 1e-9 || continue
+            given = move_stock!(model, free, w.bread, want)
+            given > 0 || continue
+            got[w.id] = get(got, w.id, 0.0) + given; model.bread_donated_this_round += given; b.spoiled_this_round += given
+            log_event!(model, :donation; actor = b.id, agent_kind = :bakery, recipient = w.id, units = given)
+        end
+        thrown = sum(i.units for i in free; init = 0.0)
+        thrown > 0 && (b.spoiled_this_round += thrown; model.bread_discarded_this_round += thrown; log_event!(model, :spoilage; actor = b.id, good = :bread, units = thrown))
+    end
+    return nothing
+end
+
 """The value of the oldest `units` of a stock against fresh (5 Nov): 1 − discount × age a unit, floored at 0, averaged; 1 without `price_by_age`."""
 function age_value_factor(model, items::Vector{StockItem}, units::Float64, good::Symbol; newest_first::Bool = false)
     p = parameters(model); p.price_by_age || return 1.0
-    d = good == :grain ? p.grain_price_ageing_discount : p.bread_price_ageing_discount
-    d > 0 || return 1.0
     left = units; v = 0.0; got = 0.0
     for i in sort(items; by = i -> newest_first ? i.age : -i.age)
-        t = min(i.units, left); v += t * max(1 - d * i.age, 0.0); got += t; left -= t
+        t = min(i.units, left); v += t * age_factor(p, good, i.age); got += t; left -= t
         left <= 1e-9 && break
     end
     return got > 0 ? v / got : 1.0

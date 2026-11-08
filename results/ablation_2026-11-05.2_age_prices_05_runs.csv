@@ -1,0 +1,25 @@
+variant,rung,system,seed,alive,liquidations,hungry_months,bread_y10,unemployed_y10
+age_prices_05,8 + shareholders & share market,debt,1,500,42,2,5.790265493646105,111
+age_prices_05,8 + shareholders & share market,debt,2,502,48,2,5.395767562380033,122
+age_prices_05,8 + shareholders & share market,debt,3,501,50,0,5.621778131212729,124
+age_prices_05,8 + shareholders & share market,debt,4,493,26,0,5.341300000000037,122
+age_prices_05,8 + shareholders & share market,sumsy,1,512,52,1,10.902667741935558,0
+age_prices_05,8 + shareholders & share market,sumsy,2,512,53,0,8.045560301034744,0
+age_prices_05,8 + shareholders & share market,sumsy,3,512,55,0,7.809570848708559,0
+age_prices_05,8 + shareholders & share market,sumsy,4,512,52,0,7.493640018744097,43
+age_prices_05,B best SuMSy village: co-ops + reserve,debt,1,510,39,0,5.454257852882694,125
+age_prices_05,B best SuMSy village: co-ops + reserve,debt,2,503,31,0,5.670414793467792,129
+age_prices_05,B best SuMSy village: co-ops + reserve,debt,3,502,47,0,7.041029249011827,118
+age_prices_05,B best SuMSy village: co-ops + reserve,debt,4,497,44,1,5.344317724068523,92
+age_prices_05,B best SuMSy village: co-ops + reserve,sumsy,1,512,54,0,8.270619069767394,0
+age_prices_05,B best SuMSy village: co-ops + reserve,sumsy,2,512,48,0,12.349536516853995,0
+age_prices_05,B best SuMSy village: co-ops + reserve,sumsy,3,512,58,1,13.796921658986141,0
+age_prices_05,B best SuMSy village: co-ops + reserve,sumsy,4,512,52,0,8.655492803030379,0
+age_prices_05,"V8 productive village, standard of living",debt,1,510,19,2,1.035805172413794,144
+age_prices_05,"V8 productive village, standard of living",debt,2,505,23,5,0.8218780952381041,114
+age_prices_05,"V8 productive village, standard of living",debt,3,214,25,7,0.8450975555555575,21
+age_prices_05,"V8 productive village, standard of living",debt,4,505,26,4,1.0605208695652193,155
+age_prices_05,"V8 productive village, standard of living",sumsy,1,512,55,2,0.759945137614679,25
+age_prices_05,"V8 productive village, standard of living",sumsy,2,512,52,2,0.7711241054613985,3
+age_prices_05,"V8 productive village, standard of living",sumsy,3,512,47,2,0.84406592592593,36
+age_prices_05,"V8 productive village, standard of living",sumsy,4,512,52,2,0.7926307548928253,30

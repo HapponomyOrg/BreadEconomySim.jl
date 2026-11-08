@@ -56,7 +56,7 @@ append!(ROUND_BEHAVIORS, Function[
     government_hiring!,
     pay_unemployment_fees!,
     pay_basic_income!,                  # 14 Oct: a basic income under debt money
-    bread_market!,
+    donate_bread!, bread_market!,
     staff_services_with_volunteers!,   # 4 Oct: after the labour markets, before the shows
     service_market!,
     sell_rides!,

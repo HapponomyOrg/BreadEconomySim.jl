@@ -195,7 +195,7 @@ function negotiate(model, seller::Agent, buyer::Agent, good::Symbol; age::Int = 
     if p.posted_consumer_prices && good in (:bread, :service) && buyer isa Person
         # 30 Oct (Stef): consumers do not bid — the producer posts a price and the consumer buys at it or does not; what the
         # producer learns is its sales (and the customers it turned away). Bargaining stays for grain, labour, rent and land.
-        ask * ((p.price_by_age && good == :bread) ? max(1 - p.bread_price_ageing_discount * age, 0.0) : 1.0) <= buyer_ceiling + 1e-9 || return nothing   # 5 Nov: judged at the discounted price
+        ask * ((p.price_by_age && good == :bread) ? age_factor(p, :bread, age) : 1.0) <= buyer_ceiling + 1e-9 || return nothing   # 5 Nov: judged at the discounted price
         price = round(ask, digits = 4); seller.negotiated[key] = price
         return price
     end
