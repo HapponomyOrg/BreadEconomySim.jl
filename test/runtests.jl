@@ -319,7 +319,7 @@ end
     # Survives any change that only reshuffles the draws (a Julia release, a reordered loop); fails when the behaviour moves.
     # Bands are roughly three standard errors of a ten-run mean around the values of 23 September; the SuMSy money stock is
     # set by the guaranteed income and the parking fee alone, so its band is narrow.
-    for (name, kw, bread, money, gini, money_band) in (("debt", BEH, 6.65, 2917.0, 0.475, 200.0), ("sumsy", (; BEH..., SUM...), 5.75, 2984.5, 0.524, 15.0))
+    for (name, kw, bread, money, gini, money_band) in (("debt", BEH, 8.94, 3557.4, 0.487, 240.0), ("sumsy", (; BEH..., SUM...), 5.75, 2984.5, 0.524, 15.0))   # 9 Nov: the debt reference re-baselined for EconoSim 0.3.0 (interest stays in circulation: bread 6.65 → 8.94, money 2,917 → 3,557); the band scaled with the money stock
         rows = [round_data(run(; seed = s, maximum_rounds = 40, kw...))[end, :] for s in 1:10]
         @test all(r.persons_alive == 16 for r in rows)                                        # nobody dies in either reference village
         @test abs(mean(r.price_bread for r in rows) - bread) <= 0.2 * bread
@@ -335,12 +335,13 @@ end
     # random stream (`random_streams = false`), `streams` = per-subsystem streams. scripts/golden.jl regenerates both; the
     # 15 September values are superseded and kept only in git history.
     golden = Dict(
-        ("single", "debt") => (; price_bread = 6.315871875000001, price_wage = 4.778102558823528, money = 2088.5076000000004, debt = 2136.9815000000003, gov_debt = 1501.7097, gini = 0.46687493505357125, cash_persons = 1761.8283000000001, tax = 34.2685),
-        ("single", "debt_bonds") => (; price_bread = 5.463324242424242, price_wage = 3.906711011029414, money = 729.5627, debt = 606.1003, gov_debt = 1385.1892999999998, gini = 0.44926952631242467, cash_persons = 588.9098999999999, tax = 28.11439999999999),
+        ("single", "debt") => (; price_bread = 8.185997058823531, price_wage = 6.46172301470588, money = 2349.7641, debt = 2209.3937, gov_debt = 1592.8234, gini = 0.46143129225459445, cash_persons = 1983.5637000000002, tax = 45.87030000000001),
+        ("single", "debt_bonds") => (; price_bread = 7.6663588235294124, price_wage = 6.035705717581151, money = 971.9949, debt = 728.3151999999999, gov_debt = 1386.1526000000001, gini = 0.49112364192259794, cash_persons = 787.0333, tax = 44.378299999999996),
         ("single", "sumsy") => (; price_bread = 4.716076470588236, price_wage = 3.4243705882352957, money = 2483.5764, debt = 10.598600000000001, gov_debt = 0.0, gini = 0.5351819353471121, cash_persons = 1706.7677000000003, tax = 0.0),
-        ("streams", "debt") => (; price_bread = 5.916084848484848, price_wage = 4.581315493259804, money = 2051.6816999999996, debt = 2099.1299, gov_debt = 1484.3687, gini = 0.46190433292821576, cash_persons = 1757.2860999999996, tax = 33.174899999999994),
-        ("streams", "debt_bonds") => (; price_bread = 5.571720588235295, price_wage = 3.8882152496292637, money = 776.7808, debt = 653.0337999999999, gov_debt = 1391.4052, gini = 0.4491868476612597, cash_persons = 585.6147, tax = 29.69620000000004),
+        ("streams", "debt") => (; price_bread = 7.891142424242424, price_wage = 6.228832631740195, money = 2339.8661, debt = 2195.8041000000003, gov_debt = 1565.0055, gini = 0.48943483287002487, cash_persons = 2005.9686000000002, tax = 44.666799999999995),
+        ("streams", "debt_bonds") => (; price_bread = 7.391520588235294, price_wage = 5.652239586422805, money = 937.1806, debt = 693.8528999999997, gov_debt = 1388.016, gini = 0.46048879945446575, cash_persons = 728.2403999999998, tax = 42.15319999999999),
         ("streams", "sumsy") => (; price_bread = 4.457366666666666, price_wage = 3.296194117647059, money = 2483.6059000000005, debt = 1.7051, gov_debt = 0.0, gini = 0.5122876828682883, cash_persons = 1716.5401000000002, tax = 0.0))
+    # 9 Nov: the four debt-money entries re-baselined for EconoSim 0.3.0 — a repayment destroys the principal only, the interest stays as the bank's own money, so money in circulation (2,089 → 2,350) and prices (bread 6.32 → 8.19) rise; the SuMSy entries are unchanged to the digit
     # 20 Oct: the two debt_bonds Ginis re-baselined — firm-held bonds are now attributed to their owners (a measure, not a behaviour: every other golden value is unchanged)
     configs = Dict("debt" => BEH, "sumsy" => (; BEH..., SUM...),
                    "debt_bonds" => (; BEH..., government_bonds = true, deposit_interest_period = 12, deposit_interest_rate = 0.01, loyalty_bonus_rate = 0.02))
@@ -1395,7 +1396,7 @@ end
     # interest only from equity: a bank under water pays none
     mi = create_bread_economy(SimulationParameters(; PIN..., seed = 1, BEH..., deposit_interest_rate = 0.05, deposit_interest_period = 1, interest_from_equity = true, maximum_rounds = 2))
     for bk in B.enterprises(mi, :bank)                                                       # every bank: a large loss, net worth below zero
-        bk.retained_interest = 1_000.0; B.book_asset!(bk.balance, B.DEBT, -1_000.0; skip_check = true)
+        bk.retained_interest = 1_000.0; B.book_asset!(bk.balance, B.DEPOSIT, -1_000.0; skip_check = true)   # 9 Nov: the loss taken off the bank's money, not its loan book (EconoSim 0.3.0 refuses loans on an entry below its minimum)
     end
     run_simulation!(mi)
     @test round_data(mi).deposit_interest[end] == 0.0
@@ -2275,7 +2276,7 @@ end
     end
 
     @testset "consumer cooperative: membership follows purchases, rebate proportional" begin
-        m = run(; seed = 1, maximum_rounds = 30, CONS...)
+        m = run(; seed = 1, maximum_rounds = 60, CONS...)   # 9 Nov: 60 months — under EconoSim 0.3.0 the first distributable surplus comes later (none by month 48, 9.78 by month 60)
         coops = [e for e in B.alive_agents(m) if e isa Enterprise && B.coop_form(m, e) == :consumer]
         @test !isempty(coops) && any(!isempty(e.members) for e in coops)
         d = round_data(m)

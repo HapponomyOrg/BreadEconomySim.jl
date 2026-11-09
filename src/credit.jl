@@ -199,6 +199,10 @@ end
 """Book a bank loan: the deposit is created, the debt recorded, the money counted. No credit decision — see `request_loan!`."""
 function make_loan!(model, lender::Enterprise, borrower::Agent, amount::Float64, purpose::Symbol; term::Int = loan_term_for(model, borrower))
     rate = borrowing_rate(model, lender, borrower)
+    if cash(borrower) < EconoSim.min_balance(borrower.balance, DEPOSIT, EconoSim.asset) - 1e-9   # 9 Nov (EconoSim 0.3.0): a loan is refused on an account below its minimum
+        log_event!(model, :credit_refused; actor = borrower.id, agent_kind = kind_of(borrower), amount = amount, reason = :below_minimum)
+        return nothing
+    end
     debt = bank_loan(lender.balance, borrower.balance, amount, rate, term, 1, current_round(model))
     push!(model.loans, Loan(next_loan_id!(model), lender.id, borrower.id, debt, 0, false, current_round(model), false, 0.0))
     model.money_created_this_round += amount
@@ -749,8 +753,8 @@ function service_debt!(model)
             creditor.interest_received += paid_interest
             debtor isa Enterprise && (debtor.interest_paid += paid_interest)
             model.cumulative_interest_paid += paid_interest
-            model.money_destroyed_this_round += paid_installment + paid_interest
-            model.cumulative_money_destroyed += paid_installment + paid_interest
+            model.money_destroyed_this_round += paid_installment                 # 9 Nov (EconoSim 0.3.0): a repayment destroys the principal only — the interest is the bank's income and stays in existence as its own money
+            model.cumulative_money_destroyed += paid_installment
             missed = shortfall + rest_interest(loan) > p.arrears_de_minimis_in_meals * meal_price(model)
             if missed
                 loan.in_arrears = true
@@ -1450,6 +1454,7 @@ function pass_to_owners!(model, dead::Enterprise, bank::Agent, principal::Float6
         amount = round(principal * u / total, digits = 4)
         amount > 1e-6 || continue
         rate = borrowing_rate(model, bank, w)
+        cash(w) < EconoSim.min_balance(w.balance, DEPOSIT, EconoSim.asset) - 1e-9 && continue   # 9 Nov: an owner whose account is below its minimum cannot take the loan (EconoSim 0.3.0 would refuse it)
         debt = bank_loan(bank.balance, w.balance, amount, rate, p.founding_loan_term, 1, current_round(model))
         book_asset!(w.balance, DEPOSIT, -amount; skip_check = true)                  # the deposit the loan booked is cancelled:
         book_liability!(bank.balance, DEPOSIT, -amount; skip_check = true)           # the debt moves, no money is created
