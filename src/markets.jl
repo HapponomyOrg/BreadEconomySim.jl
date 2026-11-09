@@ -754,7 +754,7 @@ function grain_market!(model)
                 price === nothing && continue
                 gfac = age_value_factor(model, f.grain, 1.0, :grain)
                 price = round(price * gfac, digits = 4)                        # 5 Nov: old grain at its value
-                f.spoiled_this_round += 1.0 - gfac                               # the value lost counts as loss in the floor and the plan
+                parameters(model).depreciation_in_floor && (f.spoiled_this_round += 1.0 - gfac)   # the value lost counts as loss in the floor and the plan
                 fund!(model, b, price, :grain) || continue
                 pay!(model, b, f, price, :grain)
                 b.materials_period += price; f.revenue_period += price; f.revenue_this_round += price
@@ -819,7 +819,7 @@ function buy_extra_bread!(model, buyer::Person, purpose::Symbol; tier::Bool = fa
         tier && (price = round(price * s.tier_multiplier, digits = 4); s.tier_sold += 1)
         fresh = parameters(model).price_by_age && prefers_fresh(model, buyer, price) && price <= buyer_reservation(model, buyer, :bread) + 1e-9
         fac = age_value_factor(model, s.bread, 1.0, :bread; newest_first = fresh)
-        price = round(price * fac, digits = 4); s.spoiled_this_round += 1.0 - fac   # 5 Nov: old bread at its value; the loss booked
+        price = round(price * fac, digits = 4); parameters(model).depreciation_in_floor && (s.spoiled_this_round += 1.0 - fac)   # 5 Nov: old bread at its value; the loss booked
         available_cash(buyer) >= gross_price(model, buyer, price) || return false            # savings allowed, no credit
         pay_consumption!(model, buyer, s, price, purpose)
         move_stock!(model, s.bread, buyer.bread, 1.0; newest_first = fresh)
@@ -946,7 +946,7 @@ function bread_market!(model)
                 can_pay = cash(buyer) >= gross - 1e-6 || (p.credit_for_bread && credit_eligible(model, buyer, gross - cash(buyer)))
                 can_pay || continue
                 pay_consumption!(model, buyer, s, cost, :bread)
-                move_stock!(model, s.bread, buyer.bread, size; newest_first = fresh); s.spoiled_this_round += size * (1 - fac)
+                move_stock!(model, s.bread, buyer.bread, size; newest_first = fresh); p.depreciation_in_floor && (s.spoiled_this_round += size * (1 - fac))
                 record_patronage!(model, s, buyer, size)
                 s.market[:bread].sold += size; buyer.market[:bread].got = size
                 record_transaction!(model, :bread, round(price * fac, digits = 4), size)

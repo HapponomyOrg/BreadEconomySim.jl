@@ -56,6 +56,10 @@ Base.@kwdef struct SimulationParameters
     # so free bread is never sold. No VAT on a gift (Belgian VAT decision E.T. 124.417, 2013); a gift is not income.
     bread_age_schedule::Vector{Float64} = Float64[]
     bread_donation_cap::Float64 = 2.0
+    # 8 Nov: the three parts of prices by age, separately (the ablation lost 75–118 villagers in V8's debt village at every rate):
+    # the value lost to ageing booked into the cost floor, and into the plan's margin; both on with `price_by_age`.
+    depreciation_in_floor::Bool = true
+    depreciation_in_plan::Bool = true
     hunger_wage_discount::Float64 = 0.25
     farm_maximum_rent_fraction_of_grain_price::Float64 = 0.6
     bakery_grain_wage_fraction::Float64 = 0.5

@@ -22,7 +22,7 @@ margin shrinks by the share of it the firm lost — spoilage and the value lost 
 averaged over its recent months — so extra units that lose their value are made less; without, `planning_margin`."""
 function planning_margin_for(model, e)
     p = parameters(model); m = p.planning_margin
-    (p.price_by_age && e isa Enterprise && !isempty(e.unsold_history) && m > 0) || return m
+    (p.price_by_age && p.depreciation_in_plan && e isa Enterprise && !isempty(e.unsold_history) && m > 0) || return m
     u = sum(e.unsold_history) / length(e.unsold_history)
     return m * clamp(1 - u / m, 0.0, 1.0)
 end

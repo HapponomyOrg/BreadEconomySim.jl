@@ -1,0 +1,17 @@
+variant,rung,system,seed,alive,liquidations,hungry_months,bread_y10,unemployed_y10
+brackets_no_plan,"V8 productive village, standard of living",debt,1,451,32,4,0.8914912568305978,163
+brackets_no_plan,"V8 productive village, standard of living",debt,2,508,26,5,1.0145626223091944,178
+brackets_no_plan,"V8 productive village, standard of living",debt,3,508,20,3,0.9647711720226744,207
+brackets_no_plan,"V8 productive village, standard of living",debt,4,507,20,2,1.1883021215043321,167
+brackets_no_plan,"V8 productive village, standard of living",sumsy,1,512,66,2,0.8306390977443561,37
+brackets_no_plan,"V8 productive village, standard of living",sumsy,2,512,56,2,0.8551793038570038,7
+brackets_no_plan,"V8 productive village, standard of living",sumsy,3,512,62,2,0.8241947271045388,10
+brackets_no_plan,"V8 productive village, standard of living",sumsy,4,512,55,1,0.7804340802987874,38
+brackets_no_plan,8 + shareholders & share market,debt,1,508,26,0,6.0193229571984,131
+brackets_no_plan,8 + shareholders & share market,debt,2,511,59,1,7.592604039408855,116
+brackets_no_plan,8 + shareholders & share market,debt,3,503,29,0,6.730040828402411,128
+brackets_no_plan,8 + shareholders & share market,debt,4,509,46,0,7.166615900383184,133
+brackets_no_plan,8 + shareholders & share market,sumsy,1,512,58,0,7.223382397003663,0
+brackets_no_plan,8 + shareholders & share market,sumsy,2,512,53,0,7.204698300283331,0
+brackets_no_plan,8 + shareholders & share market,sumsy,3,512,54,0,7.96215212569316,0
+brackets_no_plan,8 + shareholders & share market,sumsy,4,512,52,0,6.738127534883667,0

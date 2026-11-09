@@ -54,6 +54,10 @@ const ABLATION_VARIANTS = Dict(
     :age_prices_15 => (; price_by_age = true, bread_price_ageing_discount = 0.15),
     :age_prices_05 => (; price_by_age = true, bread_price_ageing_discount = 0.05),
     :age_brackets => (; price_by_age = true, bread_age_schedule = [1.0, 0.7, 0.0]),   # 5 Nov (Stef): −30 % after a month, given away after two
+    # 8 Nov: which part of prices by age costs V8's debt village its people — the brackets without the plan's response, without the floor's, without both
+    :brackets_no_plan => (; price_by_age = true, bread_age_schedule = [1.0, 0.7, 0.0], depreciation_in_plan = false),
+    :brackets_no_floor => (; price_by_age = true, bread_age_schedule = [1.0, 0.7, 0.0], depreciation_in_floor = false),
+    :brackets_choice_only => (; price_by_age = true, bread_age_schedule = [1.0, 0.7, 0.0], depreciation_in_plan = false, depreciation_in_floor = false),
 )
 
 # 4 Nov: the runs go to worker processes as in `run_all` (same `jobs`, `worker_recycle`, `heap_hint`), each run written under
