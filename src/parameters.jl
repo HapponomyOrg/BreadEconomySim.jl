@@ -58,7 +58,7 @@ Base.@kwdef struct SimulationParameters
     bread_donation_cap::Float64 = 2.0
     # 8 Nov: the three parts of prices by age, separately (the ablation lost 75–118 villagers in V8's debt village at every rate):
     # the value lost to ageing booked into the cost floor, and into the plan's margin; both on with `price_by_age`.
-    depreciation_in_floor::Bool = true
+    depreciation_in_floor::Bool = false      # 9 Nov: off — the discount lowers revenue and the plan learns from it; charging it to the cost floor as well counted the loss twice and, with the plan, killed a quarter of V8's debt village
     depreciation_in_plan::Bool = true
     hunger_wage_discount::Float64 = 0.25
     farm_maximum_rent_fraction_of_grain_price::Float64 = 0.6

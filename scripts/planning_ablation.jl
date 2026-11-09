@@ -25,7 +25,8 @@
 #   :wide_band          a 25 % tolerance band on expected sales instead of 10 % (4 Nov)
 #   :price_only         the expected-sales rule's pricing half only (4 Nov)
 #   :plan_only          its planning half only (4 Nov)
-# Since 2026-11-04.2 the base has the planning half off (`expected_sales_in_plan = false`), so `:price_only` equals `:base`;
+# Since 2026-11-09.0 the base has prices by age on with the brackets [1.0, 0.7, 0.0] and the plan's response (the floor's off),
+# so `:age_brackets` equals `:base`. Since 2026-11-04.2 the base has the planning half off (`expected_sales_in_plan = false`), so `:price_only` equals `:base`;
 # `:plan_only` then switches the pricing half off as well and the planning half back on.
 # Runs are spread over `jobs` worker processes (default: CPU threads − 1), as in `run_all`; an interrupted call resumes.
 
