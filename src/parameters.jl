@@ -991,7 +991,6 @@ Base.@kwdef struct SimulationParameters
     collection_floor_in_breads::Float64 = 1.0
     liquidation_arrears_share::Float64 = 0.10
     liquidation_overdue_rounds::Int = 3
-    loan_residue::Float64 = 0.001           # 9 Nov: a loan whose next payment is at most this, with the debt entry already at zero, is a rounding residue and is settled
     liquidation_price_share::Float64 = 0.90
     liquidated_coop_stays_coop::Bool = false           # true: a cooperative is refounded by its members, one share at par each
     bank_bailout::Bool = true                          # a bank whose net worth goes below zero is recapitalised by the government (failure: a future option)

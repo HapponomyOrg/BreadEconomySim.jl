@@ -653,6 +653,19 @@ function garnish!(model, a::Agent, incoming::Float64)
     return nothing
 end
 
+"""Reduce both sides' DEBT entries by `principal` — the debtor's liability and the creditor's asset — checking first that both
+bookings fit (10 Nov, Stef: `seize_land!` and `repay_extra!` never checked theirs). The amount is clamped to what the two
+entries hold (a rounding residue could exceed them); the clamped principal is returned. Nothing is booked if either check fails."""
+function reduce_debt_entries!(model, debtor::Agent, creditor::Agent, principal::Float64, loan::Loan)
+    principal = round(min(principal, Float64(EconoSim.liability_value(debtor.balance, DEBT)), Float64(EconoSim.asset_value(creditor.balance, DEBT))), digits = 4)
+    principal <= 1e-9 && return 0.0
+    (EconoSim.check_booking(debtor.balance, DEBT, EconoSim.liability, false, -principal) && EconoSim.check_booking(creditor.balance, DEBT, EconoSim.asset, false, -principal)) ||
+        error("reducing the debt entries by $principal on loan $(loan.id) would break a balance minimum; nothing was booked")
+    book_liability!(debtor.balance, DEBT, -principal) || error("the debtor's DEBT booking failed on loan $(loan.id)")
+    book_asset!(creditor.balance, DEBT, -principal) || error("the creditor's DEBT booking failed on loan $(loan.id)")
+    return principal
+end
+
 """
     repay_extra!(model, loan, amount) -> paid
 
@@ -676,14 +689,17 @@ function repay_extra!(model, loan::Loan, amount::Float64)
             inst[end] = Currency(i - remaining); remaining = 0.0
         end
     end
+    # 10 Nov (EconoSim 0.3.0): the debtor pays the whole amount; the bank's deposit liability falls by the principal only and the
+    # interest is booked as the bank's own money (it was destroyed before, the 0.2.1 rule); both DEBT bookings are checked
     book_asset!(debtor.balance, DEPOSIT, -amount) || error("extra repayment failed on loan $(loan.id)")
-    book_liability!(debtor.balance, DEBT, -principal)
-    book_liability!(creditor.balance, DEPOSIT, -amount)
-    book_asset!(creditor.balance, DEBT, -principal)
+    principal = reduce_debt_entries!(model, debtor, creditor, principal, loan)
+    book_liability!(creditor.balance, DEPOSIT, -principal) || error("the creditor's deposit booking failed on loan $(loan.id)")
+    interest > 1e-9 && (book_asset!(creditor.balance, DEPOSIT, interest) || error("the creditor's interest booking failed on loan $(loan.id)"))
     creditor.retained_interest += interest
+    creditor.interest_received += interest
     model.cumulative_interest_paid += interest
-    model.money_destroyed_this_round += amount
-    model.cumulative_money_destroyed += amount
+    model.money_destroyed_this_round += principal
+    model.cumulative_money_destroyed += principal
     loan.settled = debt_settled(loan.debt)
     loan.settled && (loan.in_arrears = false)
     return amount
@@ -740,11 +756,6 @@ function service_debt!(model)
                 continue
             end
             creditor = model[loan.creditor_id]
-            if next_payment(loan) <= p.loan_residue && EconoSim.liability_value(debtor.balance, DEBT) <= 1e-9   # 9 Nov: a rounding residue on a debt entry already at zero — settle it (EconoSim 0.3.0 refuses the booking; before, it lingered)
-                loan.settled = true
-                log_event!(model, :residue_written_off; actor = debtor.id, agent_kind = kind_of(debtor), loan = loan.id, amount = next_payment(loan))
-                continue
-            end
             is_bank(debtor) && monetise_equity!(model, debtor, next_payment(loan) - cash(debtor))
             due_interest = loan.debt.interest_rate * outstanding_principal(loan) + rest_interest(loan)
             if debtor isa Person && cash(debtor) - collection_floor(model) < next_payment(loan) - 1e-9
@@ -824,8 +835,7 @@ function seize_land!(model, loan::Loan)
                 inst[end] = Currency(i - value); principal += value; value = 0.0
             end
         end
-        book_liability!(debtor.balance, DEBT, -principal)
-        book_asset!(creditor.balance, DEBT, -principal)
+        principal = reduce_debt_entries!(model, debtor, creditor, principal, loan)   # 10 Nov: checked (the seizure never checked its DEBT bookings)
         creditor.retained_interest += interest
         if value > 1e-9
             refund = min(value, cash(creditor))

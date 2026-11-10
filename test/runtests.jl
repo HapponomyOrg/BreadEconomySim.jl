@@ -335,12 +335,13 @@ end
     # random stream (`random_streams = false`), `streams` = per-subsystem streams. scripts/golden.jl regenerates both; the
     # 15 September values are superseded and kept only in git history.
     golden = Dict(
-        ("single", "debt") => (; price_bread = 8.185997058823531, price_wage = 6.46172301470588, money = 2349.7641, debt = 2209.3937, gov_debt = 1592.8234, gini = 0.46143129225459445, cash_persons = 1983.5637000000002, tax = 45.87030000000001),
-        ("single", "debt_bonds") => (; price_bread = 7.6663588235294124, price_wage = 6.035705717581151, money = 971.9949, debt = 728.3151999999999, gov_debt = 1386.1526000000001, gini = 0.49112364192259794, cash_persons = 787.0333, tax = 44.378299999999996),
+        ("single", "debt") => (; price_bread = 8.451753125, price_wage = 6.236714953781515, money = 2361.4653999999996, debt = 2221.4069999999997, gov_debt = 1586.5768, gini = 0.4575120942822397, cash_persons = 1986.2126999999998, tax = 44.20499999999998),
+        ("single", "debt_bonds") => (; price_bread = 7.6663588235294124, price_wage = 6.035708642280442, money = 972.0061, debt = 728.3259999999998, gov_debt = 1386.1525, gini = 0.49112415215486593, cash_persons = 787.0441, tax = 44.378299999999996),
         ("single", "sumsy") => (; price_bread = 4.716076470588236, price_wage = 3.4243705882352957, money = 2483.5764, debt = 10.598600000000001, gov_debt = 0.0, gini = 0.5351819353471121, cash_persons = 1706.7677000000003, tax = 0.0),
-        ("streams", "debt") => (; price_bread = 7.891142424242424, price_wage = 6.228832631740195, money = 2339.8661, debt = 2195.8041000000003, gov_debt = 1565.0055, gini = 0.48943483287002487, cash_persons = 2005.9686000000002, tax = 44.666799999999995),
-        ("streams", "debt_bonds") => (; price_bread = 7.391520588235294, price_wage = 5.652239586422805, money = 937.1806, debt = 693.8528999999997, gov_debt = 1388.016, gini = 0.46048879945446575, cash_persons = 728.2403999999998, tax = 42.15319999999999),
+        ("streams", "debt") => (; price_bread = 7.891248484848483, price_wage = 6.227019843749999, money = 2338.4619, debt = 2194.3682000000003, gov_debt = 1565.0154, gini = 0.48935388587720885, cash_persons = 2004.6055999999999, tax = 44.656399999999984),
+        ("streams", "debt_bonds") => (; price_bread = 7.3915147058823525, price_wage = 5.6522027846432685, money = 937.1854000000001, debt = 693.8571, gov_debt = 1388.0149999999996, gini = 0.4604899404114866, cash_persons = 728.2440000000001, tax = 42.15339999999999),
         ("streams", "sumsy") => (; price_bread = 4.457366666666666, price_wage = 3.296194117647059, money = 2483.6059000000005, debt = 1.7051, gov_debt = 0.0, gini = 0.5122876828682883, cash_persons = 1716.5401000000002, tax = 0.0))
+    # 10 Nov: the debt-money entries re-baselined again for EconoSim 0.3.1 (negative instalments were a bug; the SuMSy entries unchanged)
     # 9 Nov: the four debt-money entries re-baselined for EconoSim 0.3.0 — a repayment destroys the principal only, the interest stays as the bank's own money, so money in circulation (2,089 → 2,350) and prices (bread 6.32 → 8.19) rise; the SuMSy entries are unchanged to the digit
     # 20 Oct: the two debt_bonds Ginis re-baselined — firm-held bonds are now attributed to their owners (a measure, not a behaviour: every other golden value is unchanged)
     configs = Dict("debt" => BEH, "sumsy" => (; BEH..., SUM...),
