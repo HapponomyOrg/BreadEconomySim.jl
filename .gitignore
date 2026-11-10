@@ -143,3 +143,7 @@ results/ladder64_8_rounds.csv
 results/ladder64_8_summary.csv
 results/ladder64_9_rounds.csv
 results/ladder64_9_summary.csv
+results/tests_passed_2026-11-09.1.txt
+.gitignore
+.gitignore
+results/tests_passed_2026-11-10.1.txt
