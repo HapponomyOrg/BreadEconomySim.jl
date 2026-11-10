@@ -740,13 +740,34 @@ function service_debt!(model)
                 continue
             end
             creditor = model[loan.creditor_id]
+            if next_payment(loan) <= p.loan_residue && EconoSim.liability_value(debtor.balance, DEBT) <= 1e-9   # 9 Nov: a rounding residue on a debt entry already at zero — settle it (EconoSim 0.3.0 refuses the booking; before, it lingered)
+                loan.settled = true
+                log_event!(model, :residue_written_off; actor = debtor.id, agent_kind = kind_of(debtor), loan = loan.id, amount = next_payment(loan))
+                continue
+            end
             is_bank(debtor) && monetise_equity!(model, debtor, next_payment(loan) - cash(debtor))
             due_interest = loan.debt.interest_rate * outstanding_principal(loan) + rest_interest(loan)
             if debtor isa Person && cash(debtor) - collection_floor(model) < next_payment(loan) - 1e-9
                 # the protected minimum: a payment that would leave less than the floor is missed instead (arrears)
                 paid_installment, paid_interest, shortfall = 0.0, 0.0, next_payment(loan)
             else
-                _, (paid_installment, paid_interest, shortfall) = process_debt!(loan.debt)
+                outcome = try
+                    process_debt!(loan.debt)
+                catch err                                                      # 9 Nov (EconoSim 0.3.0): a booking that would break a balance minimum is refused whole, with an error —
+                    occursin("balance minimum", sprint(showerror, err)) || rethrow()   # the run goes on: the payment is missed (arrears), and the refusal is logged with the balances behind it
+                    log_event!(model, :debt_service_refused; actor = debtor.id, agent_kind = kind_of(debtor), loan = loan.id, due = next_payment(loan),
+                               cash = cash(debtor), cash_minimum = EconoSim.min_balance(debtor.balance, DEPOSIT, EconoSim.asset),
+                               debt_entry = EconoSim.liability_value(debtor.balance, DEBT), creditor_deposits = deposits_created(creditor),
+                               creditor_deposit_minimum = EconoSim.min_balance(creditor.balance, DEPOSIT, EconoSim.liability),
+                               creditor_debt_asset = EconoSim.asset_value(creditor.balance, DEBT), message = first(sprint(showerror, err), 160))
+                    model.debt_service_refused_this_round += 1
+                    nothing
+                end
+                if outcome === nothing
+                    paid_installment, paid_interest, shortfall = 0.0, 0.0, next_payment(loan)
+                else
+                    _, (paid_installment, paid_interest, shortfall) = outcome
+                end
             end
             paid_installment = Float64(paid_installment); paid_interest = Float64(paid_interest); shortfall = Float64(shortfall)
             creditor.retained_interest += paid_interest
