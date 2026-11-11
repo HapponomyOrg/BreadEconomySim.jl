@@ -71,7 +71,12 @@ F['work'] = fig(chart('Labour sold a villager a month, in units', [('Debt money'
     'Figure 5. Work done. From step 2 on the two villages do almost the same amount of work a head; the people counted as without work in the debt village (about 120) are people who offer more work than the village has, because they need it.')
 F['bread'] = fig(chart('The price of a loaf at month 120', [('Debt money', DEBT, series('bread_price', 'debt')), ('SuMSy', SUMSY, series('bread_price', 'sumsy'))], short, yfmt=lambda v: f'{v:.1f}'),
     'Figure 6. Prices. With wages that are not cut, the debt village holds its price level and the SuMSy village inflates by about four per cent a year.')
-place = {'## 4. The ladder': 'alive', '### What the ladder says': 'debt', '### Step 8. Owners, a stock market, and the land levy': 'poor', '## 5. The same taxes in both villages': 'packages', '## 6. Work, and wanting work': 'work', '## 8. Prices, and a floor under wages': 'bread'}
+lab, dv, sv = ['nobody', 'richest 1 %', 'richest quarter', 'everyone'], [], []
+g11 = pd.read_csv(R('ladder2_512_realistic_2026-11-11.0_summary.csv'))
+for pre in ('8', 'H8', 'S1', 'S3'): dv.append(cell(g11, pre, 'debt', 'gini_wealth')); sv.append(cell(g11, pre, 'sumsy', 'gini_wealth'))
+F['greed'] = fig(chart('Greed at step 8: how unevenly wealth is spread', [('Debt money', DEBT, dv), ('SuMSy', SUMSY, sv)], lab, ymax=1.0, yfmt=lambda v: f'{v:.1f}'),
+    'Figure 7. Who is greedy, and what it does to the spread of wealth. A greedy hundredth or quarter changes little; with everyone greedy the SuMSy village is plainly less equal, and still more equal than the debt village.')
+place = {'## 6. The ladder': 'alive', '### What the ladder says': 'debt', '### Step 8. Owners, a stock market, and the land levy': 'poor', '## 7. The same taxes in both villages': 'packages', '## 8. Work, and wanting work': 'work', '## 10. Prices, and a floor under wages': 'bread', '### Greed': 'greed'}
 md = open(os.path.join(ROOT, 'docs', 'report_v5_en_public.md')).read()
 assert 'This is an AI-generated report' in md, 'disclaimer missing (report_style.md §3)'
 assert 'Previous report:' in md and 'Next report:' in md, 'navigation line missing (report_style.md §3)'

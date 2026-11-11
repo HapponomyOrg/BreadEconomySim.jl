@@ -2,6 +2,14 @@
 
 Read this before writing or rebuilding any version of the report, in any language. Every rule here came from a correction; do not re-learn them.
 
+## 0. Every report stands on its own (Stef, 11 November 2026)
+A report is read by people who have not read the one before it. The earlier versions are kept for the record and for the few who want the history; nobody should need them.
+- Everything a reader needs is in this version: who lives in the village, what a month looks like, how the villagers decide, what each kind of money is, what every step of the ladder adds, and what each test (greed, hoarding, people who do not work, the fiscal packages) consists of. A term is explained where it first appears, whatever earlier versions said about it.
+- A result is stated as a result of this version. "The two villages do the same amount of work" — not "version 4 read this as job creation; it is not".
+- History is allowed where it helps and never where it is needed: a reference to an earlier version must be removable without the passage losing its meaning. Corrections of earlier findings go in one short section near the end ("For readers of earlier versions"), each with the earlier claim, the present finding and the reason; the opening points to it in a sentence and no more.
+- Test before publishing: read the report with every sentence that mentions another version deleted. It must still be complete.
+- Facts about the village (how many firms, the guaranteed income, the fee, the benefit) are taken from `scripts/ladder_definition.jl` at the version reported, never from memory or from an earlier report: the first draft of version 5 had three of them wrong.
+
 ## 1. Register
 - The running text is for a general reader, in the register of the book chapters *Goed geld* and *Slecht geld* (in the project knowledge): a story told about a village, short paragraphs, everyday images, numbers mostly in words.
 - Technical detail — figures, definitions, parameter values, mechanics — goes in frames, never in the running text. A frame is written as
