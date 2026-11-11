@@ -108,7 +108,7 @@ function ablation(; cells = ["8 ", "B ", "V8 "], seeds = 1:4, variants = collect
                 Main.run_ablation_job(job)
             end)
         else
-            append!(rows, [try Main.run_ablation_job(job) catch e; "FAILED: " * sprint(showerror, e) end for job in part])
+            append!(rows, [try Base.invokelatest(Main.run_ablation_job, job) catch e; "FAILED: " * sprint(showerror, e) end for job in part])   # 11 Nov: invokelatest — with one process the function is defined during this call
         end
     end
     workers() == [1] || rmprocs(workers())
