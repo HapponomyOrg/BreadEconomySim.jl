@@ -51,7 +51,7 @@ using Dates, Pkg, Distributed
 
 const ROOT = normpath(joinpath(@__DIR__, ".."))
 
-const MODEL_VERSION = "2026-11-10.1"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
+const MODEL_VERSION = "2026-11-11.0"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
 
 # ---- packages (once per session) ---------------------------------------------------------------------------------------
 const PACKAGES_READY = Ref(false)
@@ -240,18 +240,25 @@ function summarise(rounds::DataFrame, N::Int)
     # poor offer more (step 8, realistic: labour sold a head 2.56 debt against 2.66 SuMSy, offered 1,808 against 1,368 units)
     rounds.employment_head_round = hasproperty(rounds, :labour_sold) ? coalesce.(rounds.labour_sold, 0.0) ./ max.(coalesce.(rounds.persons_alive, 0), 1) : fill(NaN, nrow(rounds))
     rounds.offered_share_round = hasproperty(rounds, :labour_offered_share) ? Float64.(coalesce.(rounds.labour_offered_share, NaN)) : fill(NaN, nrow(rounds))
+    # 10 Nov: the EconoSim 0.3 safety net and the bread given away or thrown away (prices by age)
+    rounds.refused_round = hasproperty(rounds, :debt_service_refused) ? Float64.(coalesce.(rounds.debt_service_refused, 0)) : fill(NaN, nrow(rounds))
+    rounds.donated_round = hasproperty(rounds, :bread_donated) ? Float64.(coalesce.(rounds.bread_donated, NaN)) : fill(NaN, nrow(rounds))
+    rounds.discarded_round = hasproperty(rounds, :bread_discarded) ? Float64.(coalesce.(rounds.bread_discarded, NaN)) : fill(NaN, nrow(rounds))
     last_rows = combine(groupby(sort(rounds, :round), [:rung, :system, :seed]), last)
     maxround = maximum(rounds.round)
     tail = combine(groupby(filter(r -> r.round > maxround - 12, rounds), [:rung, :system, :seed]),
         :gdp_round => mean => :gdp, :gdp_head_round => (x -> (v = filter(isfinite, x); isempty(v) ? missing : mean(v))) => :gdp_per_head, :services_sold => mean => :services, :price_bread => (x -> mean(skipmissing(x))) => :bread_price,
         :unemployed => mean => :unemployed, :tax => mean => :revenue, :government_outlay => mean => :outlay,
-        :employment_head_round => (x -> (v = filter(isfinite, x); isempty(v) ? missing : mean(v))) => :employment_head, :offered_share_round => (x -> (v = filter(isfinite, x); isempty(v) ? missing : mean(v))) => :offered_share)
+        :employment_head_round => (x -> (v = filter(isfinite, x); isempty(v) ? missing : mean(v))) => :employment_head, :offered_share_round => (x -> (v = filter(isfinite, x); isempty(v) ? missing : mean(v))) => :offered_share,
+        :donated_round => (x -> (v = filter(isfinite, x); isempty(v) ? missing : mean(v))) => :donated, :discarded_round => (x -> (v = filter(isfinite, x); isempty(v) ? missing : mean(v))) => :discarded)
     # every run is kept: a run that ended early (a village that lost its last farm or bakery) has no rows in the tail window,
     # and an inner join silently dropped it — survivorship bias (review 3). Left join; the run's last recorded row stands.
     runs = leftjoin(last_rows, tail; on = [:rung, :system, :seed], makeunique = true)
     # 13 Oct (review 7): the price trend of each run — bread at the end against bread at month 12, as a yearly rate
     yr1 = combine(groupby(filter(r -> r.round == min(12, maxround), rounds), [:rung, :system, :seed]), :price_bread => first => :bread_year1)
     runs = leftjoin(runs, yr1; on = [:rung, :system, :seed])
+    tot = combine(groupby(rounds, [:rung, :system, :seed]), :refused_round => (x -> (v = filter(isfinite, x); isempty(v) ? missing : sum(v))) => :refused)   # 10 Nov: refusals over the whole run
+    runs = leftjoin(runs, tot; on = [:rung, :system, :seed])
     runs.bread_price_change_per_year = [(ismissing(a) || ismissing(b) || !(a > 0) || !(b > 0)) ? missing : 100 * ((a / b)^(12 / max(maxround - 12, 1)) - 1) for (a, b) in zip(runs.bread_price, runs.bread_year1)]
     runs.collapsed = runs.round .< maxround
     # the public debt's course in each run: its peak, the month of the peak, and the first month after it with nothing owed
@@ -278,7 +285,7 @@ function summarise(rounds::DataFrame, N::Int)
         :persons_alive => m => :alive_at_end, :persons_alive => minimum => :alive_worst,
         [:persons_alive, :collapsed] => ((a, c) -> count(i -> !c[i] && a[i] >= N * 15 / 16, eachindex(a))) => :runs_whole,   # a collapsed village is never whole (review 5)
         [:persons_alive, :collapsed] => ((a, c) -> (v = a[.!c]; isempty(v) ? missing : mean(v))) => :alive_complete_runs,
-        :unemployed => m => :unemployed, :employment_head => m => :employment_per_head, :offered_share => m => :labour_offered_share, :services => m => :services, :bread_price => m => :bread_price,
+        :unemployed => m => :unemployed, :employment_head => m => :employment_per_head, :offered_share => m => :labour_offered_share, :donated => m => :bread_donated, :discarded => m => :bread_discarded, :refused => m => :debt_service_refused, :services => m => :services, :bread_price => m => :bread_price,
         :government_debt => m => :public_debt, :debt_pct_gdp => m => :public_debt_pct_gdp, :gdp_per_head => m => :gdp_per_head_loaves, :shortfall => m => :shortfall_per_month,
         :debt_peak => m => :public_debt_peak, :debt_peak_month => m => :public_debt_peak_month,
         :owes_nothing => count => :runs_debt_repaid,   # 15 Oct: runs that owe nothing at the end (a run that never borrowed counted as unpaid before)

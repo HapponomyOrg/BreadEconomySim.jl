@@ -41,6 +41,14 @@ Read this before writing or rebuilding any version of the report, in any languag
 - The conclusions lead with the price rules and the fiscal frontier (review 2, §6), and carry the distributional cost of responsive prices.
 - The fiscal asymmetries between the villages (benefit only under debt money, account fees only under SuMSy) are disclosed in §2 and at step 2.
 
+## 5b. Structure (version 5, 11 November 2026)
+1 A village, twice · 2 Two kinds of money · 3 A month more like ours (the realism rules, and a frame on the two ladders and how a rule earned its place) · 4 The ladder (steps 0, 1–2, 3–7, 8, 9, 11, the productive village as a side step; "What the ladder says") · 5 The same taxes in both villages · 6 Work, and wanting work · 7 Who gets the profit · 8 Prices, and a floor under wages · 9 Land · 10 Yesterday's bread · 11 When the land belongs to everyone · 12 What this shows, and what it cannot · 13 The ladder's answer, for policy makers · Glossary.
+- Figures are from the *realistic* ladder unless a frame says "standard ladder"; both are named in the reading frame.
+- Step 10 (the public reserve) is dropped and its number left empty; step 9 is the cooperative village (cell `B`).
+- Corrections of earlier versions are told as corrections in the running text (§6: unemployment is a gap in need; §7: the SuMSy village is less equal than reported, and why; §8: it inflates).
+- A result that rests on a handful of paired runs says so ("in four paired runs"); the ten-run rule of §4 holds for everything else.
+- Build: `python3 scripts/build_report_v5_html.py` → `docs/html/bread_economy_report_v5_en.html`; it needs the four `2026-11-10.1` summaries in `results/`.
+
 ## 6. Errata on earlier versions
 A published version is never rewritten. When a later version corrects a statement a critical reader would trip on, the earlier version gets an **erratum box** under its navigation line — in English in every language block, in that language where the block is translated — listing the corrected statements and linking to the version that corrects them. Version 2 carries one (21 September 2026: the price-level claim, rung 0's 8 %, the two one-in-three results, the greed mechanism, the 0.63 multiplier).
 

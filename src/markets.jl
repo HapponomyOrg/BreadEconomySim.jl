@@ -1016,7 +1016,7 @@ function service_market!(model)
         afford = floor(Int, max(cash(w) - buffer_target(model, w), 0.0) / tp)
         afford >= 1 || continue
         rand(rng) < p.entertainment_propensity || continue
-        w.greed != :none && continue
+        (w.greed != :none && !(p.greedy_ordinary_services && w.greed == :greedy)) && continue   # 11 Nov: the greedy buy services like anyone, and more on top (cash hoarders still buy none)
         if p.services_engel_demand                                                        # 1 Nov (Stef): Engel's law — a baseline want, plus spending shares of income above the meal and of cash above the buffer
             meal = p.breads_per_meal * expected_price(model, :bread)
             spend = p.services_income_share * max(w.income_last_round - meal, 0.0) + p.services_wealth_share * max(cash(w) - buffer_target(model, w), 0.0)
@@ -1057,7 +1057,10 @@ function greed_spending!(model)
     services = enterprises(model, :services)
     for w in stable_shuffle(rng, [w for w in persons(model) if w.greed == :greedy])
         loaves = 0; services_bought = 0
-        for _ in 1:(p.greedy_max_breads_per_round + p.greedy_max_services_per_round)
+        # 11 Nov: under the time budget the greedy's extra services are bounded by the leisure hours they have left, like everyone's —
+        # the cap of `greedy_max_services_per_round` dates from when a unit was a theatre ticket (an ordinary villager now buys about 25 hours)
+        service_cap = (p.greedy_ordinary_services && p.services_time_budget) ? max(floor(Int, p.services_time_share * leisure_hours(model, w)) - floor(Int, w.market[:service].got), 0) : p.greedy_max_services_per_round
+        for _ in 1:(p.greedy_max_breads_per_round + max(p.greedy_max_services_per_round, service_cap))
             surplus = cash(w) - buffer_target(model, w)
             surplus > 0 || break
             if rand(rng) < p.greed_hoarding
@@ -1070,7 +1073,7 @@ function greed_spending!(model)
             if tiered && isempty(stocked); foreach(b -> b.tier_unmet = true, enterprises(model, :bakery)); end
             can_bread = bread_units(w) < greedy_bread_cap(p) && surplus >= tier_price && !isempty(stocked)
             open = [t for t in services if t.market[:service].offered - t.market[:service].sold >= 1 - 1e-9 && !(p.no_self_service && t.id in w.worked_for)]
-            can_service = p.entertainment && services_bought < p.greedy_max_services_per_round && !isempty(open) && surplus >= expected_price(model, :service)
+            can_service = p.entertainment && services_bought < service_cap && !isempty(open) && surplus >= expected_price(model, :service)
             (can_bread || can_service) || (p.greed_hoarding > 0 ? continue : break)
             pick_bread = can_bread && (!can_service || rand(rng) < 0.5)
             if pick_bread

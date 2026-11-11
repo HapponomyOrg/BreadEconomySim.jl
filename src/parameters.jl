@@ -607,6 +607,7 @@ Base.@kwdef struct SimulationParameters
     # price. Sold out: it raises its price (distress pricing) and does not cut. Neither: it cuts first and prices by what remains.
     distress_cost_cutting::Bool = true                # on by default: realistic behaviour (Stef, 14 Oct); a switch for the controls
     greedy_max_services_per_round::Int = 10             # replaces the 3-service ceiling
+    greedy_ordinary_services::Bool = false              # 11 Nov: the greedy take part in the ordinary services market and their extra services are bounded by leisure hours (on in the ladder's base)
     # Bread rationing (13 September 2026): stage one, everyone up to the ration; stage two, leftovers to the greedy
     bread_rationing::Bool = false
     ration_breads_per_person::Int = 4                 # lowered to what the shelves can give everyone, never below a meal
