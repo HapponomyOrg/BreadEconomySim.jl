@@ -1,0 +1,61 @@
+variant,rung,system,seed,alive,liquidations,hungry_months,bread_y10,unemployed_y10,deaths,deaths_with_cash,missed_bread_with_cash,share_on_order
+preorders_at_risk_growth_50,8 + shareholders & share market,debt,1,214,22,4,284.67014013157933,83,298,3,92,0.8808384723873787
+preorders_at_risk_growth_50,8 + shareholders & share market,debt,2,82,43,2,1646.1019803278696,27,430,1,20,0.7615111771013775
+preorders_at_risk_growth_50,8 + shareholders & share market,debt,3,179,24,6,386.8539204379564,67,333,0,117,0.863524337646334
+preorders_at_risk_growth_50,8 + shareholders & share market,debt,4,334,18,1,78.59305645161301,137,178,2,144,0.8906251717051836
+preorders_at_risk_growth_50,8 + shareholders & share market,debt,5,115,35,2,694.9593282352936,39,397,1,69,0.8511242216641156
+preorders_at_risk_growth_50,8 + shareholders & share market,debt,6,110,40,8,563.5763148648653,39,402,0,80,0.8524705132291999
+preorders_at_risk_growth_50,8 + shareholders & share market,debt,7,64,63,3,2106.093620833333,17,448,0,12,0.7954975473020323
+preorders_at_risk_growth_50,8 + shareholders & share market,debt,8,91,52,3,1523.124657971014,31,421,0,15,0.7669517910398846
+preorders_at_risk_growth_50,8 + shareholders & share market,debt,9,107,47,4,1981.8726066666682,28,405,1,11,0.7746931247217452
+preorders_at_risk_growth_50,8 + shareholders & share market,debt,10,177,21,3,314.942826356589,65,335,0,82,0.8504388295962193
+preorders_at_risk_growth_50,8 + shareholders & share market,sumsy,1,352,58,5,34.541772613458576,75,160,110,4089,0.7770568070519099
+preorders_at_risk_growth_50,8 + shareholders & share market,sumsy,2,388,1,5,24.328983673469438,102,124,83,5674,0.8385425812115891
+preorders_at_risk_growth_50,8 + shareholders & share market,sumsy,3,355,1,6,26.505684561403463,95,157,113,5893,0.8584004618089266
+preorders_at_risk_growth_50,8 + shareholders & share market,sumsy,4,362,25,8,28.379618655462234,75,150,101,4607,0.8208321317148625
+preorders_at_risk_growth_50,8 + shareholders & share market,sumsy,5,355,31,5,43.107062049336065,105,157,84,4927,0.8175388967468176
+preorders_at_risk_growth_50,8 + shareholders & share market,sumsy,6,374,46,6,44.51738531951649,117,138,80,4638,0.8052367847128467
+preorders_at_risk_growth_50,8 + shareholders & share market,sumsy,7,386,34,3,42.68813743500854,109,126,75,4671,0.8160117517443995
+preorders_at_risk_growth_50,8 + shareholders & share market,sumsy,8,355,41,7,30.48887656529516,93,157,86,4624,0.801996823826508
+preorders_at_risk_growth_50,8 + shareholders & share market,sumsy,9,355,33,6,44.73108372513554,103,157,102,5307,0.8279437633086009
+preorders_at_risk_growth_50,8 + shareholders & share market,sumsy,10,356,46,6,37.7829781849913,92,156,69,1636,0.7287634664887025
+preorders_at_risk_growth_50,B best SuMSy village: co-ops + reserve,debt,1,169,29,4,355.3486008064513,64,343,3,108,0.8688505342256663
+preorders_at_risk_growth_50,B best SuMSy village: co-ops + reserve,debt,2,91,45,3,1139.065682608696,28,421,0,23,0.7373388766714288
+preorders_at_risk_growth_50,B best SuMSy village: co-ops + reserve,debt,3,203,22,4,329.32461333333384,87,309,0,90,0.8725759086879432
+preorders_at_risk_growth_50,B best SuMSy village: co-ops + reserve,debt,4,126,36,4,504.4136706521745,41,386,2,98,0.8683344704722917
+preorders_at_risk_growth_50,B best SuMSy village: co-ops + reserve,debt,5,143,30,4,459.5272435185182,47,369,0,91,0.8574316757086964
+preorders_at_risk_growth_50,B best SuMSy village: co-ops + reserve,debt,6,170,27,3,353.16163412698404,59,342,1,90,0.8585415356469042
+preorders_at_risk_growth_50,B best SuMSy village: co-ops + reserve,debt,7,111,44,3,1187.6691488372087,30,401,0,15,0.750489967335511
+preorders_at_risk_growth_50,B best SuMSy village: co-ops + reserve,debt,8,69,47,3,2170.051728301886,19,443,0,17,0.7919176954732511
+preorders_at_risk_growth_50,B best SuMSy village: co-ops + reserve,debt,9,76,41,3,1905.546181818183,21,436,0,10,0.7950767155622998
+preorders_at_risk_growth_50,B best SuMSy village: co-ops + reserve,debt,10,191,29,3,199.86104011976062,60,321,2,119,0.8593591664882609
+preorders_at_risk_growth_50,B best SuMSy village: co-ops + reserve,sumsy,1,370,77,3,37.34634415999991,80,142,88,4205,0.7862805434584191
+preorders_at_risk_growth_50,B best SuMSy village: co-ops + reserve,sumsy,2,383,21,8,34.62459422776926,75,129,89,5094,0.8044767825064295
+preorders_at_risk_growth_50,B best SuMSy village: co-ops + reserve,sumsy,3,361,1,6,36.1283067889908,82,151,104,7475,0.9030898167314586
+preorders_at_risk_growth_50,B best SuMSy village: co-ops + reserve,sumsy,4,354,87,7,37.14476039279851,74,158,90,4355,0.8265721275231879
+preorders_at_risk_growth_50,B best SuMSy village: co-ops + reserve,sumsy,5,365,63,3,40.24479297124608,93,147,82,4649,0.8222164848641322
+preorders_at_risk_growth_50,B best SuMSy village: co-ops + reserve,sumsy,6,367,41,3,33.31384166666673,89,145,94,5383,0.8416060823264386
+preorders_at_risk_growth_50,B best SuMSy village: co-ops + reserve,sumsy,7,345,68,3,46.85340583190403,61,167,91,3964,0.8171446849344279
+preorders_at_risk_growth_50,B best SuMSy village: co-ops + reserve,sumsy,8,373,35,7,34.20446356589153,67,139,77,5338,0.8228976032108645
+preorders_at_risk_growth_50,B best SuMSy village: co-ops + reserve,sumsy,9,347,41,5,46.62517137546468,93,165,71,5096,0.8304650500763437
+preorders_at_risk_growth_50,B best SuMSy village: co-ops + reserve,sumsy,10,314,89,8,41.32664734917728,75,198,58,1584,0.733478638688263
+preorders_at_risk_growth_50,"V8 productive village, standard of living",debt,1,508,19,0,1.8443086466165524,111,4,0,25,0.8067324100813862
+preorders_at_risk_growth_50,"V8 productive village, standard of living",debt,2,509,19,1,1.2711046875000105,135,3,0,79,0.8957749453691745
+preorders_at_risk_growth_50,"V8 productive village, standard of living",debt,3,507,17,1,1.2465453201970387,87,5,0,93,0.8911181097222676
+preorders_at_risk_growth_50,"V8 productive village, standard of living",debt,4,508,17,0,1.2984917077986062,124,4,0,57,0.8799525465596256
+preorders_at_risk_growth_50,"V8 productive village, standard of living",debt,5,497,22,1,1.376772346640706,115,15,0,155,0.896753460777851
+preorders_at_risk_growth_50,"V8 productive village, standard of living",debt,6,508,8,0,2.644294195519353,226,4,0,27,0.8383344459279038
+preorders_at_risk_growth_50,"V8 productive village, standard of living",debt,7,506,16,0,2.395101127049174,224,6,0,24,0.8337498758648085
+preorders_at_risk_growth_50,"V8 productive village, standard of living",debt,8,508,16,0,1.350347081712063,132,4,0,75,0.9088787334747838
+preorders_at_risk_growth_50,"V8 productive village, standard of living",debt,9,505,9,0,2.06437212943632,205,7,0,83,0.837897678960794
+preorders_at_risk_growth_50,"V8 productive village, standard of living",debt,10,508,17,0,1.2261023715415094,139,4,0,31,0.8708190377079302
+preorders_at_risk_growth_50,"V8 productive village, standard of living",sumsy,1,512,50,0,0.8128903581267325,0,0,0,0,0.9233611787456255
+preorders_at_risk_growth_50,"V8 productive village, standard of living",sumsy,2,512,47,0,0.9138750000000051,7,0,0,0,0.9228522888302578
+preorders_at_risk_growth_50,"V8 productive village, standard of living",sumsy,3,512,51,0,0.8414102587800347,0,0,0,0,0.9224698272153433
+preorders_at_risk_growth_50,"V8 productive village, standard of living",sumsy,4,512,45,0,0.8926334575955273,33,0,0,0,0.9217213018538662
+preorders_at_risk_growth_50,"V8 productive village, standard of living",sumsy,5,512,54,0,0.8728233301975642,50,0,0,0,0.9232497162759754
+preorders_at_risk_growth_50,"V8 productive village, standard of living",sumsy,6,512,51,0,0.9201274436090182,37,0,0,0,0.9234405942531525
+preorders_at_risk_growth_50,"V8 productive village, standard of living",sumsy,7,512,54,0,0.9867348314606764,0,0,0,0,0.9218559314078293
+preorders_at_risk_growth_50,"V8 productive village, standard of living",sumsy,8,512,47,0,0.8721875810936088,55,0,0,0,0.9209947992022837
+preorders_at_risk_growth_50,"V8 productive village, standard of living",sumsy,9,512,44,0,0.8563618215271447,0,0,0,0,0.92230252968508
+preorders_at_risk_growth_50,"V8 productive village, standard of living",sumsy,10,512,48,0,0.7878098901098909,47,0,0,0,0.9222685623518181

@@ -296,7 +296,7 @@ function distress_cost_cutting!(model)
         r = e.market[g]
         r.offered > 1e-9 || continue
         r.sold >= r.offered - 1e-9 && continue                                     # sold out: the price is the answer
-        sold_target = e.kind == :bakery ? ceil(Int, r.sold / p.breads_per_grain) :
+        sold_target = e.kind == :bakery ? ceil(Int, (p.bread_preorders == :none ? r.sold : r.sold - r.sold_on_order + e.bread_orders) / p.breads_per_grain) :   # 11 Nov: the shelf to what it sold, the new orders in full
                       is_services(e) ? ceil(Int, r.sold / services_per_labour_unit(model)) : ceil(Int, r.sold)
         if sold_target < e.production_target
             log_event!(model, :distress_cut; actor = e.id, agent_kind = e.kind, from = e.production_target, to = sold_target)
@@ -440,12 +440,27 @@ plus its share of the customers turned away, averaged over the window (the month
 a firm that sold out plans `plan_step` more; the stock it carries into next month that will not spoil first is deducted."""
 function own_plan!(model, e::Enterprise, good::Symbol, per_unit::Float64, cap::Int, n_kind::Int = 1)
     p = parameters(model); r = e.market[good]
-    r.offered > 1e-9 || return nothing                                      # nothing offered last month: keep the plan
+    # 11 Nov (bread pre-orders): a bakery plans the two parts of its custom separately. Its orders are certain: baked in full, no
+    # margin. Its shelf is planned as before, from shelf sales alone — every reading of sales, offer, target and expected sales below
+    # is of the shelf part (`pt`, `sold`, `offered`, the shelf's expected sales), so that loaves delivered on order are not counted
+    # again as shelf demand and baked twice. Without pre-orders every one of them is the value it was.
+    on_order = good == :bread && p.bread_preorders != :none
+    planned = on_order ? e.bread_orders_planned : 0.0
+    pt = on_order ? max(e.production_target - planned / per_unit, 0.0) : Float64(e.production_target)
+    sold = r.sold - r.sold_on_order; offered = r.offered - r.sold_on_order
+    on_order && (e.expected_sales = max(e.expected_sales - planned, 0.0))  # the shelf's part; the new orders are added back at the end
+    function with_orders!(target)
+        on_order || return nothing
+        e.production_target = clamp(ceil(Int, target + e.bread_orders / per_unit - 1e-9), 1, cap)
+        e.expected_sales += e.bread_orders; e.bread_orders_planned = e.bread_orders
+        return nothing
+    end
+    r.offered > 1e-9 || (with_orders!(pt); return nothing)                  # nothing offered last month: keep the (shelf) plan
     turned_away = p.own_plan_counts_unmet ? r.unmet_units / max(n_kind, 1) : 0.0   # unmet demand is booked on every seller of the kind; this firm's share
-    observed = r.sold + turned_away
+    observed = sold + turned_away
     if p.plan_window > 1
         h = e.sales_history
-        isempty(h) && append!(h, fill(e.production_target * per_unit, p.plan_window - 1))   # the missing months: its first plan
+        isempty(h) && append!(h, fill(pt * per_unit, p.plan_window - 1))   # the missing months: its first plan
         push!(h, observed); while length(h) > p.plan_window; popfirst!(h); end
         # 21 Oct: the average guards against a dip; a rise is followed at once (the average alone kept firms sold out longer, and
         # every sold-out month raised the price: SuMSy step 8 +7 %/yr against +3.5 % on last month alone)
@@ -453,13 +468,13 @@ function own_plan!(model, e::Enterprise, good::Symbol, per_unit::Float64, cap::I
     else
         expected = observed * (1 + planning_margin_for(model, e))
     end
-    r.sold >= r.offered * (1 - p.unsold_share) - 1e-9 && (expected = max(expected, e.production_target * per_unit * (1 + p.plan_step)))   # sold out: more
+    sold >= offered * (1 - p.unsold_share) - 1e-9 && (expected = max(expected, pt * per_unit * (1 + p.plan_step)))   # sold out: more
     if p.price_on_expected_sales && p.expected_sales_in_plan                # 22 Oct: the plan is expected sales plus the firm's own buffer (4 Nov: the planning half)
         e.buffer_share < 0 && (e.buffer_share = max(p.planning_margin, p.buffer_min))
         base_expected = expected / (1 + p.planning_margin)                  # the margin was applied above; the firm's buffer replaces it
-        if r.sold > e.expected_sales + 1e-9 && e.expected_sales > 0          # sold into the buffer: keep more
+        if sold > e.expected_sales + 1e-9 && e.expected_sales > 0            # sold into the buffer: keep more
             e.buffer_share = min(e.buffer_share * (1 + p.buffer_step), p.buffer_max)
-        elseif e.expected_sales > 0 && r.offered - r.sold >= e.expected_sales * e.buffer_share - 1e-9   # the extra never sold: keep less, never nothing
+        elseif e.expected_sales > 0 && offered - sold >= e.expected_sales * e.buffer_share - 1e-9   # the extra never sold: keep less, never nothing
             e.buffer_share = max(e.buffer_share * (1 - p.buffer_step), p.buffer_min)
         end
         e.expected_sales = base_expected
@@ -469,13 +484,13 @@ function own_plan!(model, e::Enterprise, good::Symbol, per_unit::Float64, cap::I
     end
     # 25 Oct (Stef: a firm that turns customers away should always produce more). Applied after the buffer: the rescale of 22 Oct
     # (÷ (1 + margin)) cancelled the sold-out step under the expected-sales rule. The expected sales the price rule reads are unchanged.
-    sold_out = r.sold >= r.offered * (1 - p.unsold_share) - 1e-9
-    p.respond_to_turned_away && sold_out && (expected = max(expected, e.production_target * per_unit * (1 + p.plan_step)))   # sold out: a step above the target
+    sold_out = sold >= offered * (1 - p.unsold_share) - 1e-9
+    p.respond_to_turned_away && sold_out && (expected = max(expected, pt * per_unit * (1 + p.plan_step)))   # sold out: a step above the target
     if p.respond_to_turned_away && turned_away > 1e-9                                                          # customers turned away: at least what was wanted
-        expected = max(expected, (r.sold + turned_away) * (1 + ((p.price_on_expected_sales && p.expected_sales_in_plan) ? max(e.buffer_share, 0.0) : planning_margin_for(model, e))))
+        expected = max(expected, (sold + turned_away) * (1 + ((p.price_on_expected_sales && p.expected_sales_in_plan) ? max(e.buffer_share, 0.0) : planning_margin_for(model, e))))
     end
     if p.grow_only_with_reserve && cash(e) < reserve_target(model, e)       # 22 Oct: no expansion until the reserve is met
-        expected = min(expected, e.production_target * per_unit)
+        expected = min(expected, pt * per_unit)
     end
     if p.plan_nets_stock                                                    # the stock that will still be good next month
         items = good == :bread ? e.bread : good == :grain ? e.grain : StockItem[]
@@ -487,7 +502,7 @@ function own_plan!(model, e::Enterprise, good::Symbol, per_unit::Float64, cap::I
     if p.plan_window > 1
         target = desired                                                    # the window already smooths: no gradual pace on top
     else
-        current = Float64(e.production_target); gap = desired - current
+        current = pt; gap = desired - current
         if abs(gap) <= max(p.plan_small_change * current, 1.0)
             e.share_trend = 0; target = desired
         else
@@ -496,8 +511,8 @@ function own_plan!(model, e::Enterprise, good::Symbol, per_unit::Float64, cap::I
             target = current + min(abs(e.share_trend), p.plan_adjustment_months) / p.plan_adjustment_months * gap
         end
     end
-    p.plan_adjustment_share < 1 && e.production_target > 0 && (target = e.production_target + p.plan_adjustment_share * (target - e.production_target))   # 3 Nov: partial adjustment — part of the way to the plan each month
-    e.production_target = clamp(ceil(Int, target - 1e-9), 1, cap)
+    p.plan_adjustment_share < 1 && pt > 0 && (target = pt + p.plan_adjustment_share * (target - pt))   # 3 Nov: partial adjustment — part of the way to the plan each month
+    on_order ? with_orders!(target) : (e.production_target = clamp(ceil(Int, target - 1e-9), 1, cap))   # 11 Nov: the shelf plan plus the orders
     return nothing
 end
 
@@ -507,7 +522,9 @@ function plan_targets!(model)
     own = p.own_market_planning && !model.intervention && current_round(model) > 2   # 19 Oct: the firms' own plans, unless the emergency rule is in force
     bakeries = sort(enterprises(model, :bakery); by = b -> b.id)
     farms = sort(enterprises(model, :farm); by = f -> f.id)
-    demand_bread = sum(max(p.breads_per_meal - bread_units(w), 0.0) for w in ps; init = 0.0) * (1 + p.planning_margin)
+    orders_on = p.bread_preorders != :none                                  # 11 Nov: a villager holding an order is the bakery's certain custom, not shelf demand
+    demand_bread = (orders_on ? sum(max(p.breads_per_meal - bread_units(w), 0.0) for w in ps if w.bread_order_bakery == 0; init = 0.0) :
+                                sum(max(p.breads_per_meal - bread_units(w), 0.0) for w in ps; init = 0.0)) * (1 + p.planning_margin)
     # expected gluttony: persons who can pay for a meal plus the extra bread from cash
     if p.plan_for_gluttony
         extra = p.maximum_breads_per_round - p.breads_per_meal
@@ -529,9 +546,10 @@ function plan_targets!(model)
     end
     stock_bread = sum(bread_units(b) for b in bakeries; init = 0.0)
     grain_for_bread = max(ceil(Int, (demand_bread - stock_bread) / p.breads_per_grain), 0)
+    order_grain(b) = orders_on ? ceil(Int, b.bread_orders / p.breads_per_grain - 1e-9) : 0   # 11 Nov: the grain a bakery's orders take, baked in full
     if p.plan_within_capacity && !isempty(bakeries)                                  # 14 Oct: no bakery targets grain its hands cannot bake
         cap_each = ceil(Int, bakery_capacity_loaves(model) / p.breads_per_grain)
-        grain_for_bread = min(grain_for_bread, cap_each * length(bakeries))
+        grain_for_bread = min(grain_for_bread, max(cap_each * length(bakeries) - sum(order_grain(b) for b in bakeries; init = 0), 0))   # 11 Nov: the orders come first
     end
     allot!(units, group) = for (k, e) in enumerate(group)
         e.production_target = units ÷ length(group) + (k <= units % length(group) ? 1 : 0)
@@ -542,8 +560,8 @@ function plan_targets!(model)
         n = length(group)
         for e in group; e.plan_share >= 0 || (e.plan_share = 1 / n); end         # new or restarted firms start at an equal share
         sum(e.plan_share for e in group) > 1e-12 || for e in group; e.plan_share = 1 / n; end   # 16 Oct: the firms that held the shares are gone
-        sold = [e.market[good].sold for e in group]
-        offered = sum(e.market[good].offered for e in group; init = 0.0)
+        sold = [e.market[good].sold - e.market[good].sold_on_order for e in group]   # 11 Nov: shelf sales (orders are planned apart)
+        offered = sum(e.market[good].offered - e.market[good].sold_on_order for e in group; init = 0.0)
         # sales below half of what was offered are no signal (month 1: everyone's cupboard holds a meal): the shares stay as they are
         if sum(sold) > 0 && sum(sold) >= 0.5 * offered
             current = [e.plan_share for e in group] ./ sum(e.plan_share for e in group)
@@ -577,9 +595,10 @@ function plan_targets!(model)
     end
     if own
         cap_each = p.plan_within_capacity ? ceil(Int, bakery_capacity_loaves(model) / p.breads_per_grain) : typemax(Int) ÷ 2
-        for b in bakeries; own_plan!(model, b, :bread, Float64(p.breads_per_grain), cap_each, length(bakeries)); end
+        for b in bakeries; own_plan!(model, b, :bread, Float64(p.breads_per_grain), cap_each, length(bakeries)); end   # the orders are added inside
     else
         isempty(bakeries) || by_sales!(grain_for_bread, bakeries, :bread)
+        orders_on && for b in bakeries; b.production_target += order_grain(b); end   # 11 Nov: the shelf share plus the orders
     end
     if p.plan_within_capacity && !isempty(bakeries)                                # each bakery within its ovens (16 Oct: what is clipped is lost — no planner hands it on)
         cap_each = ceil(Int, bakery_capacity_loaves(model) / p.breads_per_grain)
@@ -631,9 +650,14 @@ function plan_targets!(model)
         for e in model.enterprise_list                                           # under share planning a firm's expected sales are its share of the village's need: its target without the planning margin
             (e.alive && is_producer(e)) || continue
             per = e.kind == :bakery ? Float64(p.breads_per_grain) : e.kind == :farm ? 1.0 : services_per_labour_unit(model)
-            e.expected_sales = e.production_target * per / (1 + p.planning_margin)
+            if orders_on && e.kind == :bakery                                    # 11 Nov: the orders, plus the shelf's part without the margin
+                e.expected_sales = max(e.production_target * per - e.bread_orders, 0.0) / (1 + p.planning_margin) + e.bread_orders
+            else
+                e.expected_sales = e.production_target * per / (1 + p.planning_margin)
+            end
         end
     end
+    orders_on && for b in bakeries; b.bread_orders_planned = b.bread_orders; end   # 11 Nov: the orders this plan includes
     return nothing
 end
 

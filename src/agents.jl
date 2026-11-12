@@ -16,6 +16,7 @@ Base.@kwdef mutable struct MarketRecord
     starved_rounds::Int = 0   # consecutive rounds in which the buyer missed out
     failed_for_cash::Int = 0  # buyers who wanted to buy but could not pay
     max_failed_cash::Float64 = 0.0
+    sold_on_order::Float64 = 0.0   # 11 Nov: bread delivered on pre-order this round (included in `sold`, and in `offered`, so sold ≤ offered still holds)
 end
 
 """
@@ -137,6 +138,10 @@ end
     wealth_tax_arrears::Float64 = 0.0   # wealth tax due but unpaid for want of cash; collected first from later cash
     income_tax_accrued::Float64 = 0.0   # income tax owed but not yet charged (income_tax_period > 1)
     land_levy_arrears::Float64 = 0.0    # land levy due but unpaid
+    bread_order_bakery::Int = 0         # 11 Nov (bread pre-orders): the bakery holding this villager's order for the coming month (0 = none)
+    bread_order_units::Float64 = 0.0    # the loaves ordered
+    bread_order_months_left::Int = 0    # mode B (:after_hunger): months of ordering still to run
+    bread_order_failed::Bool = false    # this month's order was not delivered in full (bakery short or closed): first in the bread queue
 end
 
 """An enterprise: bank, farm, bakery or government. No capacity, no hunger."""
@@ -209,6 +214,9 @@ end
     labour_period::Float64 = 0.0        # wages since the last assessment
     insurance_premiums::Float64 = 0.0   # bank: cumulative
     insurance_payouts::Float64 = 0.0    # bank: cumulative
+    bread_orders::Float64 = 0.0         # 11 Nov (bread pre-orders): bakery: loaves ordered from it for the coming month
+    bread_baked::Float64 = 0.0          # bakery: loaves baked in its most recent month (set in bake!)
+    bread_orders_planned::Float64 = 0.0 # bakery: the orders its production target and expected sales include (the rest is its shelf plan)
 end
 
 const Agent = Union{Person, Enterprise}

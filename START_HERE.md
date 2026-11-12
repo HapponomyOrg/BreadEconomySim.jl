@@ -1,5 +1,7 @@
 # START HERE
 
+**Way of working from 11 November 2026 (Stef).** Claude designs and writes; a dedicated coder on Stef's machine builds and runs. Claude changes no model code. Claude keeps Julia and the working copy to check design questions against the model (measurements, never changes to `src/`), and delivers documents the coder can execute: what to build, where, with which parameters and defaults, how to test it, and what to report. Briefs live in `docs/future_work/coder_brief_*.md`.
+
 *For a new session picking up BreadEconomySim.jl. Rewritten 16 October 2026, updated 19 and 26 October. This page is the current state; `HANDOFF_2026-09-18.md` is the chronological log behind it, newest at the bottom.*
 
 ## 1. What this is

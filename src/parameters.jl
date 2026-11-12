@@ -60,6 +60,16 @@ Base.@kwdef struct SimulationParameters
     # the value lost to ageing booked into the cost floor, and into the plan's margin; both on with `price_by_age`.
     depreciation_in_floor::Bool = false      # 9 Nov: off — the discount lowers revenue and the plan learns from it; charging it to the cost floor as well counted the loss twice and, with the plan, killed a quarter of V8's debt village
     depreciation_in_plan::Bool = true
+    # 11 Nov (Stef; coder brief docs/future_work/coder_brief_bread_preorders_2026-11-11.md): bread pre-orders. Nobody who has the
+    # money for bread should go hungry by the luck of the draw in the bread queue. At the end of a month a villager orders next
+    # month's meal from the cheapest bakery that will take it; the bakery bakes its orders in full and plans its shelf as before,
+    # from shelf sales alone; the order is delivered after baking, before the bread market, at the posted price, paid on delivery.
+    # :none (off, the results of before), :at_risk (mode A: everyone short of next month's meal who can pay orders) or
+    # :after_hunger (mode B: only a villager who has just missed a whole meal, for `bread_preorder_months` months). Needs
+    # `demand_based_targets` (the ±1 ratchet does not plan from sales). Off here and in the ladder's base.
+    bread_preorders::Symbol = :none
+    bread_preorder_months::Int = 3              # mode B: months a villager keeps ordering after a month without a whole meal
+    bread_preorder_growth::Float64 = 0.10       # a bakery takes orders up to (1 + this) × what it baked last month, or up to its plan if more; Inf = no limit
     hunger_wage_discount::Float64 = 0.25
     farm_maximum_rent_fraction_of_grain_price::Float64 = 0.6
     bakery_grain_wage_fraction::Float64 = 0.5

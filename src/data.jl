@@ -317,6 +317,13 @@ function record!(model)
         closures = model.closures,
         production_target_farms = sum(a.production_target for a in enterprises(model, :farm); init = 0),
         production_target_bakeries = sum(a.production_target for a in enterprises(model, :bakery); init = 0),
+        # 11 Nov (bread pre-orders): placed this month for the next (the order book is complete when the row is made), delivered this
+        # month, and the two measurements of the brief, recorded whatever the switch says
+        bread_orders_placed = model.bread_orders_placed_this_round, bread_ordered_units = model.bread_ordered_units_this_round,
+        bread_orders_refused = model.bread_orders_refused_this_round, bread_delivered_on_order = model.bread_delivered_on_order_this_round,
+        bread_orders_failed = model.bread_orders_failed_this_round, bread_orders_unpaid = model.bread_orders_unpaid_this_round,
+        missed_bread_with_cash = model.missed_bread_with_cash_this_round, deaths_with_cash = model.deaths_with_cash_this_round,
+        bread_orders_by_bakery = join(("$(b.id):$(round(b.bread_orders, digits = 2))" for b in sort(enterprises(model, :bakery); by = b -> b.id) if b.bread_orders > 1e-9), ";"),   # each bakery's orders for next month
     )
     push!(model.data, row)
     return nothing

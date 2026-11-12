@@ -880,6 +880,13 @@ function seize_enterprise!(model, loan::Loan)
 end
 
 function close_enterprise!(model, e::Enterprise, reason::Symbol)
+    if e.kind == :bakery && parameters(model).bread_preorders != :none       # 11 Nov: its order-holders are let down — first in the queue
+        for w in model.person_list
+            (w.alive && w.bread_order_bakery == e.id) || continue
+            fail_bread_order!(model, w, :closed); clear_bread_order!(model, w)
+        end
+        e.bread_orders = 0.0
+    end
     e.alive = false
     e.closed_round = current_round(model)
     model.closures += 1
@@ -985,7 +992,7 @@ A cooperative is refounded as a shareholder firm unless `liquidated_coop_stays_c
 with one share at par, if their spare cash reaches the price). Returns false when no group can reach the price.
 """
 function refound!(model, e::Enterprise)
-    e.plan_share = -1.0; e.share_trend = 0; empty!(e.sales_history); empty!(e.unsold_history); e.expected_sales = 0.0; e.buffer_share = -1.0; e.founded = current_round(model)   # 16 Oct: a restarted firm plans afresh (21 Oct: and forgets its sales)
+    e.plan_share = -1.0; e.share_trend = 0; empty!(e.sales_history); empty!(e.unsold_history); e.expected_sales = 0.0; e.bread_orders_planned = 0.0; e.buffer_share = -1.0; e.founded = current_round(model)   # 16 Oct: a restarted firm plans afresh (21 Oct: and forgets its sales)
     p = parameters(model)
     book = max(book_value_net(model, e), 0.0)
     price = round(max(p.liquidation_price_share * book, total_debt(model, e) - cash(e), 0.0), digits = 4)

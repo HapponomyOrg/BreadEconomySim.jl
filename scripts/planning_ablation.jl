@@ -59,6 +59,15 @@ const ABLATION_VARIANTS = Dict(
     :brackets_no_plan => (; price_by_age = true, bread_age_schedule = [1.0, 0.7, 0.0], depreciation_in_plan = false),
     :brackets_no_floor => (; price_by_age = true, bread_age_schedule = [1.0, 0.7, 0.0], depreciation_in_floor = false),
     :brackets_choice_only => (; price_by_age = true, bread_age_schedule = [1.0, 0.7, 0.0], depreciation_in_plan = false, depreciation_in_floor = false),
+    # 11 Nov: bread pre-orders (coder brief docs/future_work/coder_brief_bread_preorders_2026-11-11.md, §8.3), against :base —
+    # mode A (everyone short of next month's meal orders) and mode B (only after a month without a whole meal, for 1, 3 or 12 months),
+    # and mode A with a faster limit on how fast a bakery's orders may grow, and with none
+    :preorders_at_risk => (; bread_preorders = :at_risk),
+    :preorders_after_hunger_1 => (; bread_preorders = :after_hunger, bread_preorder_months = 1),
+    :preorders_after_hunger_3 => (; bread_preorders = :after_hunger, bread_preorder_months = 3),
+    :preorders_after_hunger_12 => (; bread_preorders = :after_hunger, bread_preorder_months = 12),
+    :preorders_at_risk_growth_50 => (; bread_preorders = :at_risk, bread_preorder_growth = 0.5),
+    :preorders_at_risk_no_limit => (; bread_preorders = :at_risk, bread_preorder_growth = Inf),
 )
 
 # 4 Nov: the runs go to worker processes as in `run_all` (same `jobs`, `worker_recycle`, `heap_hint`), each run written under
@@ -70,30 +79,32 @@ const ABLATION_WORKER = quote
         def = ladder(job.villagers, job.months, :invoicing)
         (name, kd, ks) = only(r for r in def.rungs if startswith(r[1], job.cell))
         base, kw = job.system == "debt" ? (def.BARE_DEBT, kd) : (def.BARE_SUMSY, ks)
-        m = run_simulation(SimulationParameters(; seed = job.seed, base..., kw..., ABL_REALISTIC..., ABL_VARIANTS[job.variant]...))
+        m = run_simulation(SimulationParameters(; seed = job.seed, base..., kw..., (get(job, :realistic, true) ? ABL_REALISTIC : (;))..., ABL_VARIANTS[job.variant]...))   # 11 Nov: the standard ladder too
         d = round_data(m); d.rung .= name; d.system .= job.system; d.seed .= job.seed
         mkpath(dirname(job.file)); tmp = job.file * ".tmp"; CSV.write(tmp, d); mv(tmp, job.file; force = true)
         row = (variant = String(job.variant), rung = name, system = job.system, seed = job.seed, alive = d.persons_alive[end],
                liquidations = count(e -> e.kind == :liquidation, m.events), hungry_months = count(i -> d.hungry[i] > 0.3 * d.persons_alive[i], 1:nrow(d)),
-               bread_y10 = d.price_bread[end], unemployed_y10 = d.unemployed[end])
+               bread_y10 = d.price_bread[end], unemployed_y10 = d.unemployed[end],
+               deaths = sum(d.deaths), deaths_with_cash = sum(d.deaths_with_cash), missed_bread_with_cash = sum(d.missed_bread_with_cash),   # 11 Nov
+               share_on_order = sum(d.bread_sold) > 0 ? sum(d.bread_delivered_on_order) / sum(d.bread_sold) : 0.0)
         println("ablation ", job.variant, " ", strip(name)[1:min(end, 12)], " ", job.system, " seed ", job.seed, ": alive ", row.alive, ", liquidations ", row.liquidations, ", hungry months ", row.hungry_months); flush(stdout)
         return row
     end
 end
 
 function ablation(; cells = ["8 ", "B ", "V8 "], seeds = 1:4, variants = collect(keys(ABLATION_VARIANTS)), months = 120, villagers = 512,
-                  jobs::Int = max(Sys.CPU_THREADS - 1, 1), worker_recycle::Int = 20, heap_hint::AbstractString = "4G")
+                  jobs::Int = max(Sys.CPU_THREADS - 1, 1), worker_recycle::Int = 20, heap_hint::AbstractString = "4G", realistic::Bool = true)   # 11 Nov: realistic = false runs the standard ladder (folders …_standard)
     def = ladder_definition(villagers, months, :invoicing)
     todo = NamedTuple[]
     for var in variants, cell in cells
         haskey(ABLATION_VARIANTS, var) || error("no ablation variant $var; known: $(collect(keys(ABLATION_VARIANTS)))")
         (name, kd, ks) = only(r for r in def.rungs if startswith(r[1], cell))
         slug = replace(strip(name), r"[^A-Za-z0-9]+" => "_")
-        folder = joinpath(@__DIR__, "..", "results", "parts", "ablation_$(MODEL_VERSION)_$(var)")
+        folder = joinpath(@__DIR__, "..", "results", "parts", "ablation_$(MODEL_VERSION)_$(var)$(realistic ? "" : "_standard")")
         for (sysn, kw) in (("debt", kd), ("sumsy", ks)), seed in seeds
             isempty(kw) && continue
             file = joinpath(folder, "$(slug)__$(sysn)__$(seed).csv")
-            isfile(file) || push!(todo, (; variant = var, cell, system = sysn, seed, file, months, villagers))
+            isfile(file) || push!(todo, (; variant = var, cell, system = sysn, seed, file, months, villagers, realistic))
         end
     end
     println(length(todo), " ablation runs to do, on ", min(jobs, max(length(todo), 1)), " process(es)"); flush(stdout)
@@ -116,7 +127,7 @@ function ablation(; cells = ["8 ", "B ", "V8 "], seeds = 1:4, variants = collect
     for (j, r) in failed; println("FAILED ", j.variant, " ", j.cell, " ", j.system, " seed ", j.seed, ": ", first(r, 300)); end
     good = [r for r in rows if !(r isa AbstractString)]
     for var in unique(r.variant for r in good)
-        table = joinpath(@__DIR__, "..", "results", "ablation_$(MODEL_VERSION)_$(var)_runs.csv")
+        table = joinpath(@__DIR__, "..", "results", "ablation_$(MODEL_VERSION)_$(var)$(realistic ? "" : "_standard")_runs.csv")
         new = DataFrame([r for r in good if r.variant == var])
         isfile(table) && (new = vcat(CSV.read(table, DataFrame), new; cols = :union))   # a resumed call adds to the table
         CSV.write(table, new)

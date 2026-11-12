@@ -51,7 +51,7 @@ using Dates, Pkg, Distributed
 
 const ROOT = normpath(joinpath(@__DIR__, ".."))
 
-const MODEL_VERSION = "2026-11-11.0"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
+const MODEL_VERSION = "2026-11-11.1"   # the date the version was made, then .0, .1, … for each version made that day (Stef, 16 Oct); part of the key: runs made with an earlier version are never reused
 
 # ---- packages (once per session) ---------------------------------------------------------------------------------------
 const PACKAGES_READY = Ref(false)
@@ -244,6 +244,11 @@ function summarise(rounds::DataFrame, N::Int)
     rounds.refused_round = hasproperty(rounds, :debt_service_refused) ? Float64.(coalesce.(rounds.debt_service_refused, 0)) : fill(NaN, nrow(rounds))
     rounds.donated_round = hasproperty(rounds, :bread_donated) ? Float64.(coalesce.(rounds.bread_donated, NaN)) : fill(NaN, nrow(rounds))
     rounds.discarded_round = hasproperty(rounds, :bread_discarded) ? Float64.(coalesce.(rounds.bread_discarded, NaN)) : fill(NaN, nrow(rounds))
+    # 11 Nov (bread pre-orders): villagers who ate no bread with five meals' worth of money, deaths with it, and the bread sold on order
+    # (older folders do not have the columns: NaN, and the summary says missing)
+    rounds.missed_cash_round = hasproperty(rounds, :missed_bread_with_cash) ? Float64.(coalesce.(rounds.missed_bread_with_cash, NaN)) : fill(NaN, nrow(rounds))
+    rounds.deaths_cash_round = hasproperty(rounds, :deaths_with_cash) ? Float64.(coalesce.(rounds.deaths_with_cash, NaN)) : fill(NaN, nrow(rounds))
+    rounds.on_order_round = hasproperty(rounds, :bread_delivered_on_order) ? Float64.(coalesce.(rounds.bread_delivered_on_order, NaN)) : fill(NaN, nrow(rounds))
     last_rows = combine(groupby(sort(rounds, :round), [:rung, :system, :seed]), last)
     maxround = maximum(rounds.round)
     tail = combine(groupby(filter(r -> r.round > maxround - 12, rounds), [:rung, :system, :seed]),
@@ -257,7 +262,10 @@ function summarise(rounds::DataFrame, N::Int)
     # 13 Oct (review 7): the price trend of each run — bread at the end against bread at month 12, as a yearly rate
     yr1 = combine(groupby(filter(r -> r.round == min(12, maxround), rounds), [:rung, :system, :seed]), :price_bread => first => :bread_year1)
     runs = leftjoin(runs, yr1; on = [:rung, :system, :seed])
-    tot = combine(groupby(rounds, [:rung, :system, :seed]), :refused_round => (x -> (v = filter(isfinite, x); isempty(v) ? missing : sum(v))) => :refused)   # 10 Nov: refusals over the whole run
+    finite_sum(x) = (v = filter(isfinite, x); isempty(v) ? missing : sum(v))
+    tot = combine(groupby(rounds, [:rung, :system, :seed]), :refused_round => finite_sum => :refused,   # 10 Nov: refusals over the whole run
+        :missed_cash_round => finite_sum => :missed_bread_with_cash, :deaths_cash_round => finite_sum => :deaths_with_cash,   # 11 Nov: over the whole run
+        [:on_order_round, :bread_sold] => ((o, s) -> (k = findall(isfinite, o); t = sum(coalesce.(s[k], 0.0); init = 0.0); (isempty(k) || t <= 0) ? missing : sum(o[k]) / t)) => :share_on_order)
     runs = leftjoin(runs, tot; on = [:rung, :system, :seed])
     runs.bread_price_change_per_year = [(ismissing(a) || ismissing(b) || !(a > 0) || !(b > 0)) ? missing : 100 * ((a / b)^(12 / max(maxround - 12, 1)) - 1) for (a, b) in zip(runs.bread_price, runs.bread_year1)]
     runs.collapsed = runs.round .< maxround
@@ -302,6 +310,7 @@ function summarise(rounds::DataFrame, N::Int)
         :land_households_share => m => :land_held_by_households, :gini_wealth_attributed => (x -> (v = collect(skipmissing(x)); (isempty(v) || any(g -> !(0 <= g <= 1), v)) ? missing : mean(v))) => :gini_wealth_firms_attributed,
         :liquidations => m => :liquidations, :refoundings => m => :refoundings, :bank_bailouts => m => :bank_bailouts,
         :bread_price_change_per_year => m => :bread_price_change_per_year,   # 13 Oct (review 7): the price trend, in the summary
+        :missed_bread_with_cash => m => :missed_bread_with_cash, :deaths_with_cash => m => :deaths_with_cash, :share_on_order => m => :bread_share_on_order,   # 11 Nov: means over the runs of the run totals
         :identity => (x -> maximum(abs.(x))) => :worst_identity_gap)
 end
 

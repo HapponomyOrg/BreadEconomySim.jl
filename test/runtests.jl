@@ -2467,4 +2467,209 @@ end
     end
 end
 
+# ---------------------------------------------------------------------------------------------------
+# 11 November 2026: bread pre-orders (coder brief docs/future_work/coder_brief_bread_preorders_2026-11-11.md, §8.1).
+# Hand-built villages: posted prices, no gluttony and no stocking, so that who buys what is decided by the rule under test.
+# ---------------------------------------------------------------------------------------------------
+
+@testset "bread pre-orders (11 Nov 2026)" begin
+    PO = (; BEH..., posted_consumer_prices = true, gluttony_probability = 0.0, stocking_marginality = Tuple{Int, Float64}[])
+    villages = [("debt", (;)), ("sumsy", SUM)]
+    pom(; kw...) = create_bread_economy(SimulationParameters(; PIN..., PO..., seed = 1, kw...))
+    set_cash!(w, x) = (B.book_asset!(w.balance, B.DEPOSIT, x - B.cash(w)); nothing)
+    set_bread!(a, n) = (empty!(a.bread); n > 0 && push!(a.bread, B.StockItem(Float64(n), 0)); nothing)
+    give_order!(m, w, b, units) = (w.bread_order_bakery = b.id; w.bread_order_units = units; b.bread_orders += units; push!(m.bread_order_book, w.id); nothing)
+    bakeries(m) = sort(B.enterprises(m, :bakery); by = b -> b.id)
+
+    @testset "1. off is off" begin
+        @test SimulationParameters().bread_preorders == :none
+        for (sys, kw) in villages
+            m = run(; seed = 2, maximum_rounds = 24, BEH..., kw...)
+            d = round_data(m)
+            @test all(iszero, d.bread_orders_placed) && all(iszero, d.bread_ordered_units) && all(iszero, d.bread_orders_refused)
+            @test all(iszero, d.bread_delivered_on_order) && all(iszero, d.bread_orders_failed) && all(iszero, d.bread_orders_unpaid)
+            @test all(isempty, d.bread_orders_by_bakery)
+            @test !any(e -> e.kind in (:bread_order, :bread_order_failed, :bread_order_unpaid), m.events)
+            @test !any(e -> e.kind == :bread_sale && haskey(e, :on_order), m.events)
+        end
+        @test_throws ArgumentError create_bread_economy(SimulationParameters(; PIN..., BEH..., bread_preorders = :sometimes))
+        @test_throws ArgumentError create_bread_economy(SimulationParameters(; PIN..., bread_preorders = :at_risk))   # the ±1 ratchet cannot bake orders
+        @test_throws ArgumentError create_bread_economy(SimulationParameters(; PIN..., BEH..., bread_preorders = :after_hunger, bread_preorder_months = 0))
+    end
+
+    @testset "2. mode A orders for a villager short of a meal who can pay ($sys)" for (sys, kw) in villages
+        m = pom(; kw..., bread_preorders = :at_risk)
+        for b in bakeries(m); b.bread_baked = 1000.0; end
+        ws = B.persons(m)
+        for w in ws; set_bread!(w, 2); set_cash!(w, 100.0); end
+        w1, w2, w3, w4 = ws[1], ws[2], ws[3], ws[4]
+        set_bread!(w1, 0)                                   # no bread, money: orders a meal
+        set_bread!(w3, 0); set_cash!(w3, 0.0)               # no bread, no money: no order
+        set_bread!(w4, 1)                                   # one loaf at home: orders the other
+        B.place_bread_orders!(m)
+        cheapest = argmin(b -> B.member_ask(m, b, w1, :bread), bakeries(m))
+        @test w1.bread_order_bakery == cheapest.id && w1.bread_order_units == 2.0
+        @test w2.bread_order_bakery == 0 && w3.bread_order_bakery == 0      # a meal at home; no money
+        @test w4.bread_order_units == 1.0
+        @test m.bread_orders_placed_this_round == 2 && m.bread_ordered_units_this_round == 3.0 && m.bread_orders_refused_this_round == 0
+        @test sort(m.bread_order_book) == sort([w1.id, w4.id]) && sum(b.bread_orders for b in bakeries(m)) == 3.0
+        @test B.cash(w1) == 100.0                                            # no money moves on ordering
+    end
+
+    @testset "3. delivery comes before the queue ($sys)" for (sys, kw) in villages
+        for with_order in (true, false)
+            m = pom(; kw..., bread_preorders = :at_risk)
+            ws = B.persons(m); n = length(ws); b = bakeries(m)[1]
+            for w in ws; set_bread!(w, 0); set_cash!(w, 100.0); end
+            for x in bakeries(m); set_bread!(x, 0); end
+            holder = B.stable_shuffle(copy(B.stream(m, :bread)), B.persons(m))[end]   # last in this month's queue
+            set_bread!(b, 2 * (n - 10) + (with_order ? 2 : 0))                       # bread for all but the last ten
+            with_order && give_order!(m, holder, b, 2.0)
+            B.deliver_bread_orders!(m); B.bread_market!(m)
+            @test B.bread_units(holder) == (with_order ? 2.0 : 0.0)
+            @test count(w -> B.bread_units(w) >= 2, ws) == n - 10 + (with_order ? 1 : 0)
+            with_order && @test b.market[:bread].sold_on_order == 2.0 && m.bread_delivered_on_order_this_round == 2.0 && b.market[:bread].sold == 2.0 * (n - 9)
+            @test b.market[:bread].sold <= b.market[:bread].offered + 1e-9           # sold ≤ offered still holds
+        end
+    end
+
+    @testset "4. mode B: a month without a whole meal starts bread_preorder_months months of orders" begin
+        for (months, misses, expected) in ((3, [2], [2, 3, 4]), (3, [2, 6], [2, 3, 4, 6, 7, 8]), (3, [2, 3], [2, 3, 4, 5]),
+                                           (1, [2], [2]), (3, Int[], Int[]))
+            m = pom(; bread_preorders = :after_hunger, bread_preorder_months = months)
+            for b in bakeries(m); b.bread_baked = 1000.0; end
+            ws = B.persons(m); w = ws[1]
+            for x in ws; set_cash!(x, 100.0); end
+            ordered = Int[]
+            for month in 1:10
+                for x in ws; set_bread!(x, 0); x.ate_this_round = :whole; end
+                w.ate_this_round = month in misses ? :none : :whole
+                B.place_bread_orders!(m)
+                w.bread_order_bakery != 0 && push!(ordered, month)
+                @test all(x -> x.bread_order_bakery == 0, ws[2:end])            # no missed meal, no order
+                for x in ws; B.clear_bread_order!(m, x); end; empty!(m.bread_order_book)
+            end
+            @test ordered == expected
+        end
+        m = pom(; bread_preorders = :after_hunger, bread_preorder_months = 2)
+        for b in bakeries(m); b.bread_baked = 1000.0; end
+        w = B.persons(m)[1]; set_cash!(w, 100.0); set_bread!(w, 0); w.ate_this_round = :half   # half a meal is a warning too
+        B.place_bread_orders!(m)
+        @test w.bread_order_bakery != 0 && w.bread_order_months_left == 2
+    end
+
+    @testset "5. the cheapest bakery first, the next when it is full" begin
+        function five_short(growth)
+            m = pom(; bread_preorders = :at_risk, bread_preorder_growth = growth, number_of_bakeries = 3)
+            b1, b2, b3 = bakeries(m)
+            b1.ask[:bread] = 1.0; b2.ask[:bread] = 1.5; b3.ask[:bread] = 2.0
+            b1.bread_baked = 4.0; b1.production_target = 2          # baked 4 loaves, plans no more
+            b2.bread_baked = 4.0; b2.production_target = 2
+            b3.bread_baked = 0.0; b3.production_target = 1          # baked nothing: takes orders up to its plan, 2 loaves
+            ws = B.persons(m)
+            for w in ws; set_bread!(w, 2); set_cash!(w, 100.0); end
+            for w in ws[1:6]; set_bread!(w, 0); end                 # six villagers short of a meal
+            B.place_bread_orders!(m)
+            return m, (b1, b2, b3), ws[1:6]
+        end
+        m, (b1, b2, b3), short = five_short(0.0)
+        @test (b1.bread_orders, b2.bread_orders, b3.bread_orders) == (4.0, 4.0, 2.0)
+        @test m.bread_orders_placed_this_round == 5 && m.bread_orders_refused_this_round == 1
+        @test count(w -> w.bread_order_bakery == 0, short) == 1                  # refused by all: shops in the open market
+        m, (b1, b2, b3), _ = five_short(Inf)
+        @test (b1.bread_orders, b2.bread_orders, b3.bread_orders) == (12.0, 0.0, 0.0)   # no limit: all to the cheapest
+        @test m.bread_orders_refused_this_round == 0
+    end
+
+    @testset "6. a short bakery delivers in the order placed; the rest go first in the queue" begin
+        m = pom(; bread_preorders = :at_risk)
+        b1, b2 = bakeries(m)[1:2]
+        for x in bakeries(m); set_bread!(x, 0); end
+        ws = B.persons(m)
+        for w in ws; set_bread!(w, 0); set_cash!(w, 100.0); end
+        h1, h2, h3 = ws[1], ws[2], ws[3]
+        set_bread!(b1, 3)                                           # it baked 3 loaves against orders for 6
+        give_order!(m, h1, b1, 2.0); give_order!(m, h2, b1, 2.0); give_order!(m, h3, b1, 2.0)
+        set_bread!(b2, 3)                                           # another bakery's shelf
+        B.deliver_bread_orders!(m)
+        @test (B.bread_units(h1), B.bread_units(h2), B.bread_units(h3)) == (2.0, 1.0, 0.0)   # in the order placed; served in part, kept
+        @test !h1.bread_order_failed && h2.bread_order_failed && h3.bread_order_failed
+        @test m.bread_orders_failed_this_round == 2 && b1.bread_orders == 0.0 && isempty(m.bread_order_book)
+        B.bread_market!(m)
+        @test B.bread_units(h2) == 2.0 && B.bread_units(h3) == 2.0                  # first in the queue, from the other shelf
+        @test count(w -> B.bread_units(w) > 0, ws[4:end]) == 0
+        @test !h2.bread_order_failed && !h3.bread_order_failed                       # the priority lasts one market
+    end
+
+    @testset "7. a bakery wound up between order and delivery" begin
+        m = pom(; bread_preorders = :at_risk)
+        b1, b2 = bakeries(m)[1:2]
+        for x in bakeries(m); set_bread!(x, 0); end
+        ws = B.persons(m)
+        for w in ws; set_bread!(w, 0); set_cash!(w, 100.0); end
+        h = ws[1]; give_order!(m, h, b1, 2.0)
+        B.close_enterprise!(m, b1, :test)
+        @test h.bread_order_failed && h.bread_order_bakery == 0 && m.bread_orders_failed_this_round == 1 && b1.bread_orders == 0.0
+        set_bread!(b2, 2)
+        B.deliver_bread_orders!(m); B.bread_market!(m)
+        @test B.bread_units(h) == 2.0 && count(w -> B.bread_units(w) > 0, ws) == 1
+    end
+
+    @testset "8. no money at delivery: the order lapses" begin
+        m = pom(; bread_preorders = :at_risk, credit_for_bread = false)
+        b1 = bakeries(m)[1]; set_bread!(b1, 2)
+        h = B.persons(m)[1]; set_bread!(h, 0); set_cash!(h, 0.0); give_order!(m, h, b1, 2.0)
+        cash_bakery = B.cash(b1)
+        B.deliver_bread_orders!(m)
+        @test B.bread_units(h) == 0.0 && B.bread_units(b1) == 2.0 && B.cash(b1) == cash_bakery && B.cash(h) == 0.0
+        @test m.bread_orders_unpaid_this_round == 1 && m.bread_orders_failed_this_round == 0
+        @test !h.bread_order_failed && h.bread_order_bakery == 0 && b1.bread_orders == 0.0
+    end
+
+    @testset "9. no double baking" begin
+        # own plan (realistic ladder): 20 loaves on order and 3 of 4 off the shelf, month after month
+        m = pom(; bread_preorders = :at_risk, own_market_planning = true)
+        b = bakeries(m)[1]; set_bread!(b, 0)
+        targets = Int[]
+        for month in 1:12
+            r = b.market[:bread]
+            r.offered = 24.0; r.sold = 23.0; r.sold_on_order = 20.0; r.unmet_units = 0.0
+            b.bread_orders = 20.0
+            B.own_plan!(m, b, :bread, 2.0, 10^6, 1)
+            push!(targets, b.production_target)
+        end
+        @test all(==(targets[end]), targets[3:end])                 # level sales, level target
+        @test targets[end] <= 13                                    # 10 grain of orders plus a shelf plan from 3 loaves, not from 23
+        @test b.bread_orders_planned == 20.0 && b.expected_sales >= 20.0
+        # the market-share rule (standard ladder): every villager holds an order, so the shelf plans nothing on top
+        m = pom(; bread_preorders = :at_risk)
+        bks = bakeries(m); ws = B.persons(m)
+        for x in bks; set_bread!(x, 0); end
+        for (k, w) in enumerate(ws); set_bread!(w, 0); give_order!(m, w, bks[1 + (k - 1) % length(bks)], 2.0); end
+        totals = Int[]
+        for month in 1:6
+            B.plan_targets!(m); push!(totals, sum(x.production_target for x in bks))
+        end
+        @test all(==(totals[1]), totals)
+        @test totals[1] == sum(ceil(Int, x.bread_orders / 2) for x in bks)
+    end
+
+    @testset "10–11. accounting and symmetry: ten years, both villages, both modes ($sys, $mode)" for (sys, kw) in villages, mode in (:at_risk, :after_hunger)
+        m = run(; seed = 1, maximum_rounds = 120, BEH..., kw..., bread_preorders = mode)
+        d = round_data(m)
+        @test nrow(d) == 120
+        @test maximum(abs.(d.identity_gap)) < 1e-6                                   # money balances every month
+        ev = m.events
+        bk = [a for a in B.agents_by_id(m) if a isa B.Enterprise && a.kind == :bakery]
+        baked = sum(e.bread for e in ev if e.kind == :bake; init = 0.0)
+        sold = sum(e.size for e in ev if e.kind == :bread_sale; init = 0.0)
+        given = sum(e.units for e in ev if e.kind == :donation; init = 0.0)
+        lost = sum(e.units for e in ev if e.kind == :spoilage && get(e, :good, :none) == :bread && m[e.actor] isa B.Enterprise; init = 0.0)
+        @test isapprox(baked, sold + given + lost + sum(B.bread_units(x) for x in bk); atol = 1e-6)   # no loaf created, lost or sold twice
+        @test isapprox(sum(d.bread_delivered_on_order), sum(e.size for e in ev if e.kind == :bread_sale && haskey(e, :on_order); init = 0.0); atol = 1e-9)
+        @test sum(d.bread_orders_placed) > 0 && sum(d.bread_delivered_on_order) > 0  # the same rule runs in both villages
+        @test all(d.bread_delivered_on_order .<= d.bread_sold .+ 1e-9)
+    end
+end
+
 end

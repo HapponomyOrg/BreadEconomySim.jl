@@ -716,6 +716,7 @@ function bake!(model)
         if bread > 0
             take_stock!(b.grain, grain); push!(b.bread, StockItem(bread, 0))
         end
+        b.bread_baked = Float64(bread)                                     # 11 Nov: the limit on next month's pre-orders
         log_event!(model, :bake; bakery = b.id, bread = bread, labour = b.hired_labour, grain_in_stock = grain_units(b))
     end
     return nothing
@@ -911,16 +912,21 @@ function bread_market!(model)
     rng = stream(model, :bread); p = parameters(model)
     premium_market!(model)
     for b in enterprises(model, :bakery)
-        b.market[:bread].offered = sellable_bread(b)
+        # 11 Nov: the loaves delivered on pre-order this month count as offered (and sold), so that sold ≤ offered still holds for the
+        # price rule, the plan and the distress cut; the shelf is what is left in stock (offered − sold_on_order)
+        b.market[:bread].offered = sellable_bread(b) + b.market[:bread].sold_on_order
     end
     meal = Float64(p.breads_per_meal)
     if p.bread_rationing
         alive_n = max(length(persons(model)), 1)
-        model.ration_this_round = max(p.breads_per_meal, min(p.ration_breads_per_person, floor(Int, sum(b.market[:bread].offered for b in enterprises(model, :bakery); init = 0.0) / alive_n)))
+        model.ration_this_round = max(p.breads_per_meal, min(p.ration_breads_per_person, floor(Int, sum(sellable_bread(b) for b in enterprises(model, :bakery); init = 0.0) / alive_n)))   # 11 Nov: the shelf (equal to `offered` without pre-orders)
     end
     opening = Dict(b.id => b.ask[:bread] for b in enterprises(model, :bakery))   # 20 Oct: the asks the month opened with
     for round_ in 1:max(p.market_rounds, 1)                                # 19 Oct: rounds within the month
     buyers = round_ == 1 ? stable_shuffle(rng, persons(model)) : stable_shuffle(rng, [w for w in persons(model) if bread_units(w) < meal - 1e-9 && cash(w) > 1e-6])
+    # 11 Nov (bread pre-orders): a villager whose order the bakery could not deliver in full goes first, in the shuffled order; a stable
+    # partition, so that with no failed order the queue is exactly the shuffled one
+    round_ == 1 && any(w -> w.bread_order_failed, buyers) && (buyers = vcat(filter(w -> w.bread_order_failed, buyers), filter(w -> !w.bread_order_failed, buyers)))
     round_ > 1 && isempty(buyers) && break
     for buyer in buyers
         if bread_units(buyer) >= meal - 1e-9
@@ -965,6 +971,160 @@ function bread_market!(model)
     next_market_round!(model, enterprises(model, :bakery), :bread) || break
     end
     restore_opening_asks!(model, opening, :bread)
+    p.bread_preorders == :none || foreach(w -> w.bread_order_failed = false, model.person_list)   # 11 Nov: the priority lasts one market
+    return nothing
+end
+
+# ---- bread pre-orders (11 November 2026; coder brief docs/future_work/coder_brief_bread_preorders_2026-11-11.md) -----------
+# A villager orders next month's meal at the end of a month (`place_bread_orders!`, after eating, before the bakeries plan); the
+# bakery bakes its orders in full and delivers them after baking, before the bread market (`deliver_bread_orders!`), at its
+# posted price, paid on delivery. An order the bakery cannot deliver in full puts the villager first in the bread queue.
+
+const BREAD_PREORDER_MODES = (:none, :at_risk, :after_hunger)
+
+function validate_bread_preorders(p::SimulationParameters)
+    p.bread_preorders in BREAD_PREORDER_MODES || throw(ArgumentError("bread_preorders must be one of $(BREAD_PREORDER_MODES), not $(repr(p.bread_preorders))"))
+    p.bread_preorders == :none && return nothing
+    p.demand_based_targets || throw(ArgumentError("bread_preorders needs demand_based_targets = true: the ±1 ratchet does not plan from sales, so it cannot bake the orders"))
+    p.bread_preorder_months >= 1 || throw(ArgumentError("bread_preorder_months must be at least 1"))
+    p.bread_preorder_growth >= 0 || throw(ArgumentError("bread_preorder_growth must be at least 0 (Inf = no limit)"))
+    return nothing
+end
+
+"""The price an order is placed and delivered at: the bakery's posted price for fresh bread — what the bread market charges
+(`negotiate` with posted prices: the ask, at least the cost floor). A cooperative member's rebate comes later, as in the market."""
+order_price(model, b::Enterprise) = round(max(b.ask[:bread], seller_reservation(model, b, :bread)), digits = 4)
+
+"""The loaves a bakery baked this month (age 0): only these are delivered on order."""
+fresh_bread_units(b::Enterprise) = sum(i.units for i in b.bread if i.age == 0; init = 0.0)
+
+"""Move up to `units` fresh loaves (age 0) from a bakery to a villager; returns the loaves moved."""
+function take_fresh_bread!(b::Enterprise, w::Person, units::Float64)
+    moved = 0.0
+    for i in b.bread
+        i.age == 0 || continue
+        t = min(i.units, units - moved); i.units -= t; moved += t
+        moved >= units - 1e-9 && break
+    end
+    filter!(i -> i.units > 1e-9, b.bread)
+    if moved > 0
+        k = findfirst(j -> j.age == 0, w.bread); k === nothing ? push!(w.bread, StockItem(moved, 0)) : (w.bread[k].units += moved)
+    end
+    return moved
+end
+
+"""The most a bakery takes in orders for next month: (1 + `bread_preorder_growth`) × what it baked this month, or its own plan if
+that is more (a new or restarted bakery is not shut out)."""
+bread_order_limit(model, b::Enterprise) = (g = parameters(model).bread_preorder_growth; isinf(g) ? Inf : max((1 + g) * b.bread_baked, b.production_target * parameters(model).breads_per_grain))
+
+function clear_bread_order!(model, w::Person)
+    if w.bread_order_bakery != 0
+        b = model[w.bread_order_bakery]
+        b isa Enterprise && (b.bread_orders = max(b.bread_orders - w.bread_order_units, 0.0))
+    end
+    w.bread_order_bakery = 0; w.bread_order_units = 0.0
+    return nothing
+end
+
+"""An order the bakery could not deliver in full (it was short, or wound up): the villager goes first in this month's bread queue."""
+function fail_bread_order!(model, w::Person, reason::Symbol, delivered::Float64 = 0.0)
+    w.bread_order_failed = true
+    model.bread_orders_failed_this_round += 1
+    log_event!(model, :bread_order_failed; actor = w.id, bakery = w.bread_order_bakery, units = w.bread_order_units, size = delivered, reason = reason)
+    return nothing
+end
+
+"""
+    place_bread_orders!(model)
+
+End of the month, after eating and ageing and before the bakeries plan. In a shuffled order (stream `:bread_orders`), every
+villager short of next month's meal (at least one loaf) who can pay for it at the bakery's posted price from the cash they hold
+orders it from the cheapest bakery (by `member_ask`, as the market sorts) that still takes orders (`bread_order_limit`), else the
+next; refused by all, they shop in the open market. Mode :after_hunger first runs the villager's clock: a month without a whole meal
+starts `bread_preorder_months` months of ordering. No money moves.
+"""
+function place_bread_orders!(model)
+    p = parameters(model)
+    p.bread_preorders == :none && return nothing
+    rng = stream(model, :bread_orders)
+    meal = Float64(p.breads_per_meal)
+    bakeries = enterprises(model, :bakery)
+    for w in stable_shuffle(rng, persons(model))
+        if p.bread_preorders == :after_hunger
+            if w.ate_this_round != :whole
+                w.bread_order_months_left = p.bread_preorder_months
+            elseif w.bread_order_months_left > 0
+                w.bread_order_months_left -= 1
+            end
+            w.bread_order_months_left > 0 || continue
+        end
+        w.bread_order_bakery == 0 || continue                               # an order still held (none should be at month end)
+        need = meal - bread_units(w)
+        need >= 1 - 1e-9 || continue
+        had_means = false; placed = false
+        for b in sort(bakeries; by = b -> member_ask(model, b, w, :bread))
+            cash(w) >= gross_price(model, w, round(need * order_price(model, b), digits = 4)) - 1e-6 || continue   # no credit for an order
+            had_means = true
+            b.bread_orders + need <= bread_order_limit(model, b) + 1e-9 || continue
+            w.bread_order_bakery = b.id; w.bread_order_units = need
+            b.bread_orders += need
+            push!(model.bread_order_book, w.id)
+            model.bread_orders_placed_this_round += 1; model.bread_ordered_units_this_round += need
+            log_event!(model, :bread_order; actor = w.id, bakery = b.id, units = need)
+            placed = true; break
+        end
+        !placed && had_means && (model.bread_orders_refused_this_round += 1)
+    end
+    return nothing
+end
+
+"""
+    deliver_bread_orders!(model)
+
+After baking, before the gifts and the bread market. Bakery by bakery (in id order), order-holders in the order their orders were
+placed: the ordered loaves, fresh, at the bakery's posted price — the buyer's ceiling does not apply — paid as in the market (cash,
+or credit for bread where allowed). A bakery short of fresh loaves delivers until they run out; a villager not served in full (short,
+or the bakery wound up) goes first in the queue. A villager who cannot pay loses the order, without priority.
+"""
+function deliver_bread_orders!(model)
+    p = parameters(model)
+    p.bread_preorders == :none && return nothing
+    book = copy(model.bread_order_book); empty!(model.bread_order_book)
+    holders = [model[id] for id in book]
+    holders = [w for w in holders if w.alive && w.bread_order_bakery != 0]
+    for bid in sort(unique(w.bread_order_bakery for w in holders))
+        b = model[bid]
+        for w in holders
+            w.bread_order_bakery == bid || continue
+            ordered = w.bread_order_units
+            if !b.alive
+                fail_bread_order!(model, w, :closed); clear_bread_order!(model, w); continue
+            end
+            units = min(ordered, fresh_bread_units(b))
+            if units < 1 - 1e-9                                             # nothing (or less than a loaf) left to deliver
+                fail_bread_order!(model, w, :short); clear_bread_order!(model, w); continue
+            end
+            price = order_price(model, b)
+            cost = round(price * units, digits = 4)
+            gross = gross_price(model, w, cost)
+            can_pay = cash(w) >= gross - 1e-6 || (p.credit_for_bread && credit_eligible(model, w, gross - cash(w)))
+            if !can_pay
+                model.bread_orders_unpaid_this_round += 1
+                log_event!(model, :bread_order_unpaid; actor = w.id, bakery = b.id, units = ordered)
+                clear_bread_order!(model, w); continue
+            end
+            pay_consumption!(model, w, b, cost, :bread)
+            take_fresh_bread!(b, w, units)
+            record_patronage!(model, b, w, units)
+            b.market[:bread].sold += units; b.market[:bread].sold_on_order += units; w.market[:bread].got = units
+            record_transaction!(model, :bread, price, units)
+            model.bread_delivered_on_order_this_round += units
+            log_event!(model, :bread_sale; bakery = b.id, buyer = w.id, size = units, price = price, on_order = true)
+            units < ordered - 1e-9 && fail_bread_order!(model, w, :short, units)
+            clear_bread_order!(model, w)
+        end
+    end
+    for b in enterprises(model, :bakery); b.bread_orders = 0.0; end           # every order is now delivered, failed or lapsed
     return nothing
 end
 

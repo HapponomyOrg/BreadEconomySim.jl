@@ -1,0 +1,61 @@
+variant,rung,system,seed,alive,liquidations,hungry_months,bread_y10,unemployed_y10,deaths,deaths_with_cash,missed_bread_with_cash,share_on_order
+base,8 + shareholders & share market,debt,1,510,36,0,5.267209048067866,121,2,0,18,0.0
+base,8 + shareholders & share market,debt,2,507,38,0,5.542529113924016,123,5,0,49,0.0
+base,8 + shareholders & share market,debt,3,509,24,1,5.802989678899126,129,3,0,59,0.0
+base,8 + shareholders & share market,debt,4,511,33,3,6.142142424242436,93,1,0,81,0.0
+base,8 + shareholders & share market,debt,5,510,36,1,5.433454431599217,134,2,0,13,0.0
+base,8 + shareholders & share market,debt,6,504,29,1,6.658287062256865,96,8,0,82,0.0
+base,8 + shareholders & share market,debt,7,508,34,1,5.918275644699169,123,4,0,90,0.0
+base,8 + shareholders & share market,debt,8,511,30,1,5.425704899135428,129,1,0,19,0.0
+base,8 + shareholders & share market,debt,9,501,29,1,5.23314023437504,122,11,0,57,0.0
+base,8 + shareholders & share market,debt,10,511,26,0,5.627339312267602,131,1,0,74,0.0
+base,8 + shareholders & share market,sumsy,1,512,59,0,6.004390875232702,0,0,0,125,0.0
+base,8 + shareholders & share market,sumsy,2,512,55,0,6.500124811320801,0,0,0,86,0.0
+base,8 + shareholders & share market,sumsy,3,512,57,0,9.09601150278295,0,0,0,225,0.0
+base,8 + shareholders & share market,sumsy,4,512,55,0,8.527746572769987,0,0,0,156,0.0
+base,8 + shareholders & share market,sumsy,5,512,59,0,6.153017847286133,0,0,0,87,0.0
+base,8 + shareholders & share market,sumsy,6,512,63,0,7.516649158878572,0,0,0,181,0.0
+base,8 + shareholders & share market,sumsy,7,512,55,0,11.558554198473203,0,0,0,128,0.0
+base,8 + shareholders & share market,sumsy,8,512,63,0,5.606284536082481,0,0,0,96,0.0
+base,8 + shareholders & share market,sumsy,9,512,58,0,7.652075348837177,0,0,0,157,0.0
+base,8 + shareholders & share market,sumsy,10,512,52,0,6.458133271718977,0,0,0,120,0.0
+base,B best SuMSy village: co-ops + reserve,debt,1,510,21,0,4.663493590951951,114,2,0,8,0.0
+base,B best SuMSy village: co-ops + reserve,debt,2,509,29,0,5.14356630963973,115,3,0,31,0.0
+base,B best SuMSy village: co-ops + reserve,debt,3,509,33,0,5.600264627151031,96,3,0,30,0.0
+base,B best SuMSy village: co-ops + reserve,debt,4,512,31,0,5.791191358024711,144,0,0,16,0.0
+base,B best SuMSy village: co-ops + reserve,debt,5,509,30,0,5.371265192850383,120,3,0,12,0.0
+base,B best SuMSy village: co-ops + reserve,debt,6,509,31,1,9.20616767371598,137,3,0,71,0.0
+base,B best SuMSy village: co-ops + reserve,debt,7,501,39,1,6.110942519685008,122,11,0,62,0.0
+base,B best SuMSy village: co-ops + reserve,debt,8,509,27,0,6.764887999999956,130,3,0,13,0.0
+base,B best SuMSy village: co-ops + reserve,debt,9,510,36,0,5.321470674486773,130,2,0,17,0.0
+base,B best SuMSy village: co-ops + reserve,debt,10,504,37,2,5.702407003891048,108,8,0,31,0.0
+base,B best SuMSy village: co-ops + reserve,sumsy,1,512,58,0,6.338514606741511,0,0,0,226,0.0
+base,B best SuMSy village: co-ops + reserve,sumsy,2,512,55,0,8.379475711574925,0,0,0,80,0.0
+base,B best SuMSy village: co-ops + reserve,sumsy,3,512,52,0,8.733443703703756,0,0,0,137,0.0
+base,B best SuMSy village: co-ops + reserve,sumsy,4,512,56,0,9.568125515947427,0,0,0,166,0.0
+base,B best SuMSy village: co-ops + reserve,sumsy,5,512,55,0,6.033236312849229,0,0,0,186,0.0
+base,B best SuMSy village: co-ops + reserve,sumsy,6,512,55,0,9.117446212121223,0,0,0,167,0.0
+base,B best SuMSy village: co-ops + reserve,sumsy,7,512,57,0,7.9881232209737165,0,0,0,161,0.0
+base,B best SuMSy village: co-ops + reserve,sumsy,8,512,59,0,6.434606728972013,0,0,0,86,0.0
+base,B best SuMSy village: co-ops + reserve,sumsy,9,512,59,0,7.921711142587266,0,0,0,134,0.0
+base,B best SuMSy village: co-ops + reserve,sumsy,10,512,53,0,7.646346830652878,0,0,0,108,0.0
+base,"V8 productive village, standard of living",debt,1,508,21,2,0.7370325977933813,170,4,0,138,0.0
+base,"V8 productive village, standard of living",debt,2,489,19,4,0.9657194059405878,100,23,11,637,0.0
+base,"V8 productive village, standard of living",debt,3,512,24,3,0.6601654260528936,224,0,0,316,0.0
+base,"V8 productive village, standard of living",debt,4,507,24,2,0.6539220226843092,115,5,0,195,0.0
+base,"V8 productive village, standard of living",debt,5,509,21,3,0.609052334630351,132,3,0,261,0.0
+base,"V8 productive village, standard of living",debt,6,511,28,3,0.7946383252818005,176,1,0,428,0.0
+base,"V8 productive village, standard of living",debt,7,508,16,2,0.7836565464895643,114,4,0,213,0.0
+base,"V8 productive village, standard of living",debt,8,509,18,2,0.7582394990366108,142,3,0,229,0.0
+base,"V8 productive village, standard of living",debt,9,507,21,7,0.7616429400386839,226,5,0,725,0.0
+base,"V8 productive village, standard of living",debt,10,510,28,3,0.777855409219191,198,2,0,302,0.0
+base,"V8 productive village, standard of living",sumsy,1,512,56,2,0.7947731684981693,18,0,0,263,0.0
+base,"V8 productive village, standard of living",sumsy,2,512,54,2,0.775834839924663,0,0,0,248,0.0
+base,"V8 productive village, standard of living",sumsy,3,512,54,2,0.899841589648788,17,0,0,262,0.0
+base,"V8 productive village, standard of living",sumsy,4,512,61,1,0.8489329629629525,34,0,0,242,0.0
+base,"V8 productive village, standard of living",sumsy,5,512,60,2,0.8708494855004612,26,0,0,236,0.0
+base,"V8 productive village, standard of living",sumsy,6,512,63,1,0.8105303655107767,37,0,0,242,0.0
+base,"V8 productive village, standard of living",sumsy,7,512,59,2,0.8202238270469089,1,0,0,269,0.0
+base,"V8 productive village, standard of living",sumsy,8,512,51,2,0.7657000926784064,20,0,0,249,0.0
+base,"V8 productive village, standard of living",sumsy,9,512,56,2,0.8097757129714739,23,0,0,269,0.0
+base,"V8 productive village, standard of living",sumsy,10,512,58,2,0.8007774104683258,31,0,0,264,0.0

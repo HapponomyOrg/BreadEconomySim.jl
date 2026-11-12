@@ -41,7 +41,7 @@ const ROUND_BEHAVIORS = Function[]
 # on, a reordered check — shifts every later draw everywhere, so the same seed no longer gives the same experiment
 # in the parts that did not change. Separate streams confine such a change to its own subsystem. Each stream is
 # seeded from the run seed and its own name, so adding a stream never re-seeds the others.
-const RANDOM_STREAMS = (:negotiation, :land, :labour, :grain, :bread, :services, :greed, :credit, :estates, :shares, :cooperatives, :entry, :nonworking, :gold)
+const RANDOM_STREAMS = (:negotiation, :land, :labour, :grain, :bread, :services, :greed, :credit, :estates, :shares, :cooperatives, :entry, :nonworking, :gold, :bread_orders)   # 11 Nov: :bread_orders, the pre-order queue (drawn only with bread_preorders on)
 
 """The random generator of a subsystem; the model's single generator when `random_streams` is off."""
 stream(model, name::Symbol) = parameters(model).random_streams ? model.streams[name] : model.single_stream
@@ -63,6 +63,7 @@ end
 
 function create_bread_economy(parameters::SimulationParameters = SimulationParameters())
     validate_cooperatives(parameters)
+    validate_bread_preorders(parameters)
     model = with_logger(() -> create_econo_model(Agent, copy(ROUND_BEHAVIORS)), QuietAgentTypeLogger(current_logger()))
     Random.seed!(abmrng(model), parameters.seed)
     props = abmproperties(model)
@@ -127,6 +128,11 @@ function create_bread_economy(parameters::SimulationParameters = SimulationParam
     props[:refound_last] = OrderedDict{Symbol, Int}()
     props[:ground_rent_handout_this_round] = 0.0; props[:payroll_overdraft_this_round] = 0.0; props[:bread_donated_this_round] = 0.0; props[:debt_service_refused_this_round] = 0; props[:bread_discarded_this_round] = 0.0; props[:supply_contracts] = Dict{Tuple{Int, Int}, Tuple{Float64, Int}}(); props[:credit_line_loans] = Dict{Tuple{Int, Symbol}, Vector{Int}}(); props[:expansion_credit_this_round] = 0.0; props[:intervention] = false; props[:intervention_months] = 0; props[:fed_months] = 0; props[:labour_shortfall_this_round] = 0.0; props[:public_land_total] = parameters.public_land ? land_units_per_landowner(parameters) * parameters.number_of_landowners : 0; props[:ground_rent_this_round] = 0.0; props[:basic_income_this_round] = 0.0; props[:levy_dividend_this_round] = 0.0
     props[:premium_loaves_this_round] = 0.0; props[:premium_revenue_this_round] = 0.0; props[:premium_labour_this_round] = 0.0
+    # 11 Nov (bread pre-orders): the villagers holding an order, in the order the orders were placed, and the month's counters
+    props[:bread_order_book] = Int[]
+    props[:bread_orders_placed_this_round] = 0; props[:bread_ordered_units_this_round] = 0.0; props[:bread_orders_refused_this_round] = 0
+    props[:bread_delivered_on_order_this_round] = 0.0; props[:bread_orders_failed_this_round] = 0; props[:bread_orders_unpaid_this_round] = 0
+    props[:missed_bread_with_cash_this_round] = 0; props[:deaths_with_cash_this_round] = 0   # measured whatever the switch says
     props[:gold_price] = parameters.gold_initial_price_in_breads * parameters.initial_prices[:bread] * parameters.initial_price_multiplier
     props[:gold_valuation] = props[:gold_price]; props[:gold_sales_log] = Tuple{Int, Float64}[]; props[:gold_sold_this_round] = 0.0
     props[:land_last_trade_price] = props[:land_price_current]        # the valuation price: the median voluntary sale of the last 12 months
@@ -476,7 +482,7 @@ function begin_round!(model)
         a.land_let = 0
         for g in GOODS
             r = a.market[g]
-            r.offered = 0.0; r.sold = 0.0; r.unmet_demand = false; r.unmet_units = 0.0; r.wanted = 0.0; r.got = 0.0; r.failed_for_cash = 0; r.max_failed_cash = 0.0
+            r.offered = 0.0; r.sold = 0.0; r.unmet_demand = false; r.unmet_units = 0.0; r.wanted = 0.0; r.got = 0.0; r.failed_for_cash = 0; r.max_failed_cash = 0.0; r.sold_on_order = 0.0
         end
         if a isa Person
             a.effective_capacity = a.last_meal == :half ? a.capacity * p.half_meal_capacity_fraction : a.capacity
@@ -548,5 +554,8 @@ function begin_round!(model)
     for e in model.enterprise_list; empty!(e.patronage_this_round); end
     model.gi_this_round = 0.0; model.demurrage_this_round = 0.0; model.demurrage_tax_this_round = 0.0
     model.account_fees_this_round = 0.0; model.peer_lent_this_round = 0.0
+    model.bread_orders_placed_this_round = 0; model.bread_ordered_units_this_round = 0.0; model.bread_orders_refused_this_round = 0   # 11 Nov (bread pre-orders)
+    model.bread_delivered_on_order_this_round = 0.0; model.bread_orders_failed_this_round = 0; model.bread_orders_unpaid_this_round = 0
+    model.missed_bread_with_cash_this_round = 0; model.deaths_with_cash_this_round = 0
     return nothing
 end

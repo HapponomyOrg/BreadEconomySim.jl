@@ -56,6 +56,7 @@ append!(ROUND_BEHAVIORS, Function[
     government_hiring!,
     pay_unemployment_fees!,
     pay_basic_income!,                  # 14 Oct: a basic income under debt money
+    deliver_bread_orders!,              # 11 Nov: pre-ordered bread, after baking and the month's benefits, before the gifts and the queue
     donate_bread!, bread_market!,
     staff_services_with_volunteers!,   # 4 Oct: after the labour markets, before the shows
     service_market!,
@@ -84,6 +85,7 @@ append!(ROUND_BEHAVIORS, Function[
     manage_government_reserve!,
     eat!,
     age_stock!,
+    place_bread_orders!,                # 11 Nov: next month's orders, known before the bakeries plan (record_and_adapt!)
     record_and_adapt!,
 ])
 

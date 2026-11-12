@@ -2,6 +2,10 @@
 function eat!(model)
     p = parameters(model)
     meal = Float64(p.breads_per_meal)
+    # 11 Nov (bread pre-orders, measured whatever the switch says): a villager who eats no bread while holding at least five meals'
+    # worth of money at this month's bread price did not go hungry for want of money
+    pb = average_price(model, :bread); pb = (isfinite(pb) && pb > 0) ? pb : expected_price(model, :bread)
+    five_meals = 5 * meal * pb
     for a in persons(model)
         have = bread_units(a)
         if have >= meal - 1e-9
@@ -22,7 +26,12 @@ function eat!(model)
         a.last_meal = m
         a.labour_income > 0 && (a.last_wage_income = a.labour_income)
         log_event!(model, :meal; actor = a.id, meal = m, hunger = a.hunger, capacity = a.capacity)
-        a.hunger >= p.rounds_without_food_until_death && die!(model, a)
+        with_cash = m == :none && cash(a) >= five_meals - 1e-9
+        with_cash && (model.missed_bread_with_cash_this_round += 1)
+        if a.hunger >= p.rounds_without_food_until_death
+            with_cash && (model.deaths_with_cash_this_round += 1)
+            die!(model, a)
+        end
     end
     return nothing
 end
@@ -30,6 +39,7 @@ end
 function die!(model, a::Person)
     a.alive = false
     a.death_round = current_round(model)
+    clear_bread_order!(model, a); a.bread_order_failed = false            # 11 Nov: a dead villager's order is gone
     log_event!(model, :death; actor = a.id, cash = cash(a), debt = debt_of(a), land = a.land)
     settle_estate!(model, a)
     return nothing
